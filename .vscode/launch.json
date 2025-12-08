@@ -32,6 +32,22 @@
       "cwd": "${workspaceFolder}/auth-service",
       "showLog": true,
       "output": "${workspaceFolder}/auth-service/bin/auth_debug.exe"
+    },
+      {
+      "name": "Citizen Docs Service",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/citizen-docs/cmd/main.go",
+      "args": [],
+      "env": {
+        "ENV": "development",
+        "APP_ENV": "dev"
+      },
+      "buildFlags": "-tags=dev",
+      "cwd": "${workspaceFolder}/citizen-docs",
+      "showLog": true,
+      "output": "${workspaceFolder}/citizen-docs/bin/citizen-docs_debug.exe"
     }
   ]
 }
