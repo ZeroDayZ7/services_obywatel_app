@@ -1,4 +1,4 @@
-# http-server
+# gateway
 
 HTTP server built with Go and Fiber.
 
