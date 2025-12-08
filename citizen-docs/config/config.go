@@ -25,13 +25,6 @@ type ServerConfig struct {
 	WriteTimeout  time.Duration
 }
 
-type RedisConfig struct {
-	Host     string
-	Port     string
-	Password string
-	DB       int
-}
-
 type DBConfig struct {
 	DSN             string
 	MaxOpenConns    int
@@ -46,7 +39,6 @@ type RateLimitConfig struct {
 
 type Config struct {
 	Server     ServerConfig
-	Redis      RedisConfig
 	Database   DBConfig
 	RateLimit  RateLimitConfig
 	CORSAllow  string
@@ -127,12 +119,6 @@ func LoadConfigGlobal() error {
 			IdleTimeout:   time.Duration(viper.GetInt("IDLE_TIMEOUT_SEC")) * time.Second,
 			ReadTimeout:   time.Duration(viper.GetInt("READ_TIMEOUT_SEC")) * time.Second,
 			WriteTimeout:  time.Duration(viper.GetInt("WRITE_TIMEOUT_SEC")) * time.Second,
-		},
-		Redis: RedisConfig{
-			Host:     viper.GetString("REDIS_HOST"),
-			Port:     viper.GetString("REDIS_PORT"),
-			Password: viper.GetString("REDIS_PASSWORD"),
-			DB:       viper.GetInt("REDIS_DB"),
 		},
 		Database: DBConfig{
 			DSN:             viper.GetString("DATABASE_DSN"),

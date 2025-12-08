@@ -34,9 +34,6 @@ func NewFiberApp() *fiber.App {
 	app.Use(compress.New(CompressConfig()))
 	app.Use(middleware.RequestLoggerMiddleware())
 	app.Use(JWTMiddlewareWithExclusions())
-	// ============================
-	// Fiber session przy użyciu RedisClient
-	// ============================
 
 	return app
 }
