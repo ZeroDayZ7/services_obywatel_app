@@ -25,11 +25,11 @@ type ServerConfig struct {
 	WriteTimeout  time.Duration
 }
 
-type DBConfig struct {
-	DSN             string
-	MaxOpenConns    int
-	MaxIdleConns    int
-	ConnMaxLifetime time.Duration
+type RedisConfig struct {
+	Host     string
+	Port     string
+	Password string
+	DB       int
 }
 
 type RateLimitConfig struct {
@@ -37,20 +37,20 @@ type RateLimitConfig struct {
 	Window time.Duration
 }
 
-type Config struct {
-	Server    ServerConfig
-	Database  DBConfig
-	RateLimit RateLimitConfig
-	CORSAllow string
-	Shutdown  time.Duration
-	JWT       JWTConfig
-}
-
 type JWTConfig struct {
 	AccessSecret  string
 	RefreshSecret string
 	AccessTTL     time.Duration
 	RefreshTTL    time.Duration
+}
+
+type Config struct {
+	Server    ServerConfig
+	Redis     RedisConfig
+	RateLimit RateLimitConfig
+	CORSAllow string
+	Shutdown  time.Duration
+	JWT       JWTConfig
 }
 
 var AppConfig Config
@@ -61,26 +61,35 @@ func LoadConfigGlobal() error {
 
 	viper.SetConfigFile(".env")
 	viper.AutomaticEnv()
+
+	// Server defaults
 	viper.SetDefault("APP_NAME", "http-server")
-	viper.SetDefault("PORT", "8080")
+	viper.SetDefault("PORT", "8081")
 	viper.SetDefault("BODY_LIMIT_MB", 2)
-	viper.SetDefault("APP_VERSION", "0.1.0")
+	viper.SetDefault("APP_VERSION", "2.1.1")
 	viper.SetDefault("ENV", "development")
 	viper.SetDefault("SERVER_HEADER", "ZeroDayZ7")
 	viper.SetDefault("PREFORK", false)
 	viper.SetDefault("CASE_SENSITIVE", true)
-	viper.SetDefault("STRICT_ROUTING", true)
+	viper.SetDefault("STRICT_ROUTING", false)
 	viper.SetDefault("IDLE_TIMEOUT_SEC", 30)
 	viper.SetDefault("READ_TIMEOUT_SEC", 15)
 	viper.SetDefault("WRITE_TIMEOUT_SEC", 15)
-	viper.SetDefault("DB_MAX_OPEN_CONNS", 50)
-	viper.SetDefault("DB_MAX_IDLE_CONNS", 10)
-	viper.SetDefault("DB_CONN_MAX_LIFETIME_MIN", 30)
+
+	// Redis defaults
+	viper.SetDefault("REDIS_HOST", "127.0.0.1")
+	viper.SetDefault("REDIS_PORT", "6379")
+	viper.SetDefault("REDIS_PASSWORD", "")
+	viper.SetDefault("REDIS_DB", 0)
+
+	// Rate limiting
 	viper.SetDefault("RATE_LIMIT_MAX", 100)
 	viper.SetDefault("RATE_LIMIT_WINDOW_SEC", 60)
-	viper.SetDefault("CORS_ALLOW_ORIGINS", "*")
+
+	// Shutdown
 	viper.SetDefault("SHUTDOWN_TIMEOUT_SEC", 5)
 
+	// JWT
 	viper.SetDefault("JWT_ACCESS_SECRET", "super_access_secret_123")
 	viper.SetDefault("JWT_REFRESH_SECRET", "super_refresh_secret_123")
 	viper.SetDefault("JWT_ACCESS_TTL_MIN", 15)
@@ -108,11 +117,11 @@ func LoadConfigGlobal() error {
 			ReadTimeout:   time.Duration(viper.GetInt("READ_TIMEOUT_SEC")) * time.Second,
 			WriteTimeout:  time.Duration(viper.GetInt("WRITE_TIMEOUT_SEC")) * time.Second,
 		},
-		Database: DBConfig{
-			DSN:             viper.GetString("MYSQL_DSN"),
-			MaxOpenConns:    viper.GetInt("DB_MAX_OPEN_CONNS"),
-			MaxIdleConns:    viper.GetInt("DB_MAX_IDLE_CONNS"),
-			ConnMaxLifetime: time.Duration(viper.GetInt("DB_CONN_MAX_LIFETIME_MIN")) * time.Minute,
+		Redis: RedisConfig{
+			Host:     viper.GetString("REDIS_HOST"),
+			Port:     viper.GetString("REDIS_PORT"),
+			Password: viper.GetString("REDIS_PASSWORD"),
+			DB:       viper.GetInt("REDIS_DB"),
 		},
 		RateLimit: RateLimitConfig{
 			Max:    viper.GetInt("RATE_LIMIT_MAX"),
@@ -123,11 +132,9 @@ func LoadConfigGlobal() error {
 		JWT: JWTConfig{
 			AccessSecret:  viper.GetString("JWT_ACCESS_SECRET"),
 			RefreshSecret: viper.GetString("JWT_REFRESH_SECRET"),
-			AccessTTL:     time.Duration(viper.GetInt("JWT_ACCESS_TTL_MIN")) * time.Minute,
-			RefreshTTL:    time.Duration(viper.GetInt("JWT_REFRESH_TTL_DAYS")) * 24 * time.Hour,
 		},
 	}
 
-	log.Info("Configuration loaded")
+	log.Info("Gateway - Configuration loaded")
 	return nil
 }

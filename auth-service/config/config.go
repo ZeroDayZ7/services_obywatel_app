@@ -25,6 +25,13 @@ type ServerConfig struct {
 	WriteTimeout  time.Duration
 }
 
+type RedisConfig struct {
+	Host     string
+	Port     string
+	Password string
+	DB       int
+}
+
 type DBConfig struct {
 	DSN             string
 	MaxOpenConns    int
@@ -39,6 +46,7 @@ type RateLimitConfig struct {
 
 type Config struct {
 	Server    ServerConfig
+	Redis     RedisConfig
 	Database  DBConfig
 	RateLimit RateLimitConfig
 	CORSAllow string
@@ -75,10 +83,21 @@ func LoadConfigGlobal() error {
 	viper.SetDefault("DB_MAX_OPEN_CONNS", 50)
 	viper.SetDefault("DB_MAX_IDLE_CONNS", 10)
 	viper.SetDefault("DB_CONN_MAX_LIFETIME_MIN", 30)
+
+	// Redis defaults
+	viper.SetDefault("REDIS_HOST", "127.0.0.1")
+	viper.SetDefault("REDIS_PORT", "6379")
+	viper.SetDefault("REDIS_PASSWORD", "")
+	viper.SetDefault("REDIS_DB", 0)
+
+	// Rate limiting
 	viper.SetDefault("RATE_LIMIT_MAX", 100)
 	viper.SetDefault("RATE_LIMIT_WINDOW_SEC", 60)
+
+	// Shutdown
 	viper.SetDefault("SHUTDOWN_TIMEOUT_SEC", 5)
 
+	// JWT
 	viper.SetDefault("JWT_ACCESS_SECRET", "super_access_secret_123")
 	viper.SetDefault("JWT_REFRESH_SECRET", "super_refresh_secret_123")
 	viper.SetDefault("JWT_ACCESS_TTL_MIN", 15)
@@ -104,6 +123,12 @@ func LoadConfigGlobal() error {
 			IdleTimeout:   time.Duration(viper.GetInt("IDLE_TIMEOUT_SEC")) * time.Second,
 			ReadTimeout:   time.Duration(viper.GetInt("READ_TIMEOUT_SEC")) * time.Second,
 			WriteTimeout:  time.Duration(viper.GetInt("WRITE_TIMEOUT_SEC")) * time.Second,
+		},
+		Redis: RedisConfig{
+			Host:     viper.GetString("REDIS_HOST"),
+			Port:     viper.GetString("REDIS_PORT"),
+			Password: viper.GetString("REDIS_PASSWORD"),
+			DB:       viper.GetInt("REDIS_DB"),
 		},
 		Database: DBConfig{
 			DSN:             viper.GetString("DATABASE_DSN"),

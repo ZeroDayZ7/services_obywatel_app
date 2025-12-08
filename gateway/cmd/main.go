@@ -29,7 +29,7 @@ func main() {
 
 	address := "0.0.0.0:" + config.AppConfig.Server.Port
 	logger.GetLogger().Info(
-		"Server listening",
+		"Gateway-Server listening",
 		zap.String("address", address),
 	)
 	if err := app.Listen(address); err != nil {
