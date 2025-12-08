@@ -2,20 +2,22 @@ package di
 
 import (
 	"github.com/zerodayz7/http-server/internal/repository"
+	"github.com/zerodayz7/http-server/internal/service"
 	"gorm.io/gorm"
 )
 
 // Container przechowuje wszystkie zależności mikroserwisu
 type Container struct {
-	DB               *gorm.DB
-	UserDocumentRepo *repository.UserDocumentRepository
-	// dodaj inne serwisy i handlery tutaj
+	DB              *gorm.DB
+	UserDocumentSvc *service.UserDocumentService
 }
 
-// NewContainer tworzy kontener z wszystkimi zależnościami
 func NewContainer(db *gorm.DB) *Container {
+	repo := repository.NewUserDocumentRepository(db)
+	svc := service.NewUserDocumentService(repo)
+
 	return &Container{
-		DB:               db,
-		UserDocumentRepo: repository.NewUserDocumentRepository(db),
+		DB:              db,
+		UserDocumentSvc: svc,
 	}
 }

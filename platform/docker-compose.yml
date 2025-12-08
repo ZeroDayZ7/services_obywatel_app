@@ -24,6 +24,20 @@ services:
     networks:
       - app-network
 
+  postgres_citizen_docs:
+    image: postgres:18.1-alpine
+    container_name: citizen-docs-database
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: ${CITIZEN_DOCS_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${CITIZEN_DOCS_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${CITIZEN_DOCS_POSTGRES_DB}
+    volumes:
+      - pg_citizen_docs_data:/var/lib/postgresql/data
+    networks:
+      - app-network
+
   redis:
     image: redis:8.4-alpine
     container_name: auth-redis
@@ -38,6 +52,7 @@ services:
 volumes:
   pg_data:
   redis_data:
+  pg_citizen_docs_data:
 
 networks:
   app-network:

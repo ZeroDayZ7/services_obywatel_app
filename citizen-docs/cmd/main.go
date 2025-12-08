@@ -31,7 +31,8 @@ func main() {
 	app := config.NewFiberApp()
 
 	// Routes
-	router.SetupDocsRoutes(app, container.UserDocumentRepo)
+	// POPRAWNIE:
+	router.SetupDocsRoutes(app, container.UserDocumentSvc)
 
 	// Graceful shutdown
 	server.SetupGracefulShutdown(app, closeDB, config.AppConfig.Shutdown)

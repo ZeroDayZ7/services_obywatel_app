@@ -16,8 +16,17 @@ var PublicPaths = []string{
 	"/health",
 }
 
+var SkipJWT = false
+
 // JWTMiddlewareWithExclusions — middleware JWT z obsługą wyjątków (publicznych tras)
 func JWTMiddlewareWithExclusions() fiber.Handler {
+	if SkipJWT {
+		// w testach omijamy JWT
+		return func(c *fiber.Ctx) error {
+			return c.Next()
+		}
+	}
+
 	jwtHandler := jwtware.New(NewJWTConfig())
 	return func(c *fiber.Ctx) error {
 		if slices.Contains(PublicPaths, c.Path()) {

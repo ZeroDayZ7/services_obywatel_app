@@ -104,3 +104,27 @@ func (l *Logger) InfoMap(msg string, m map[string]any) {
 		l.Logger.WithOptions(zap.AddCallerSkip(1)).Info(fmt.Sprintf("  %s: %v", k, v))
 	}
 }
+
+func (l *Logger) DebugMap(msg string, fields map[string]string) {
+	zapFields := make([]zap.Field, 0, len(fields))
+	for k, v := range fields {
+		zapFields = append(zapFields, zap.String(k, v))
+	}
+	l.Logger.WithOptions(zap.AddCallerSkip(1)).Debug(msg, zapFields...)
+}
+
+func (l *Logger) WarnMap(msg string, fields map[string]string) {
+	zapFields := make([]zap.Field, 0, len(fields))
+	for k, v := range fields {
+		zapFields = append(zapFields, zap.String(k, v))
+	}
+	l.Logger.WithOptions(zap.AddCallerSkip(1)).Warn(msg, zapFields...)
+}
+
+func (l *Logger) ErrorMap(msg string, fields map[string]string) {
+	zapFields := make([]zap.Field, 0, len(fields))
+	for k, v := range fields {
+		zapFields = append(zapFields, zap.String(k, v))
+	}
+	l.Logger.WithOptions(zap.AddCallerSkip(1)).Error(msg, zapFields...)
+}

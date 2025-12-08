@@ -7,11 +7,15 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/helmet"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/gofiber/fiber/v2/middleware/requestid"
+	"github.com/zerodayz7/http-server/internal/di"
 	"github.com/zerodayz7/http-server/internal/middleware"
 )
 
 func NewFiberApp() *fiber.App {
-	_ = NewRedisClient()
+
+	rdb := NewRedisClient()
+	container := di.NewContainer(rdb)
+
 	app := fiber.New(fiber.Config{
 		ProxyHeader:             fiber.HeaderXForwardedFor,
 		EnableTrustedProxyCheck: true,
@@ -34,6 +38,7 @@ func NewFiberApp() *fiber.App {
 	app.Use(compress.New(CompressConfig()))
 	app.Use(middleware.RequestLoggerMiddleware())
 	app.Use(JWTMiddlewareWithExclusions())
+	app.Use(middleware.AuthRedisMiddleware(container.RedisClient, AppConfig.JWT.AccessSecret))
 
 	return app
 }
