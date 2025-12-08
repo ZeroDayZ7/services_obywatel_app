@@ -12,32 +12,33 @@ import (
 )
 
 func main() {
+	// Init logger
 	_, _ = logger.InitLogger(os.Getenv("ENV"))
 
-	// Config
+	// Load global config
 	if err := config.LoadConfigGlobal(); err != nil {
 		logger.GetLogger().Fatal("Config load failed", zap.Error(err))
 	}
 
-	// DB
+	// Initialize DB
 	db, closeDB := config.MustInitDB()
 	defer closeDB()
 
-	// Dependency Injection
+	// Dependency Injection container
 	container := di.NewContainer(db)
 
-	// Fiber
+	// Fiber app
 	app := config.NewFiberApp()
 
 	// Routes
-	router.SetupRoutes(app)
+	router.SetupDocsRoutes(app, container.UserDocumentRepo)
 
 	// Graceful shutdown
 	server.SetupGracefulShutdown(app, closeDB, config.AppConfig.Shutdown)
 
 	address := "0.0.0.0:" + config.AppConfig.Server.Port
 	logger.GetLogger().Info(
-		"Auth-Server listening",
+		"Citizen-Docs Microservice listening",
 		zap.String("address", address),
 	)
 	if err := app.Listen(address); err != nil {
