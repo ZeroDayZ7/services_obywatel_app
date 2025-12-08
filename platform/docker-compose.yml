@@ -1,0 +1,44 @@
+services:
+  pgadmin:
+    image: dpage/pgadmin4:9.10
+    container_name: pgadmin-obywatel_app
+    ports:
+      - "5050:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+    networks:
+      - app-network
+
+  postgres:
+    image: postgres:18.1-alpine
+    container_name: auth-database
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    networks:
+      - app-network
+
+  redis:
+    image: redis:8.4-alpine
+    container_name: auth-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    networks:
+      - app-network
+
+volumes:
+  pg_data:
+  redis_data:
+
+networks:
+  app-network:
+    driver: bridge

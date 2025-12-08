@@ -1,0 +1,4 @@
+# Ignore actual environment files
+.env
+.env.*           # ignore all env variants like .env.dev, .env.local, etc.
+.env.dev

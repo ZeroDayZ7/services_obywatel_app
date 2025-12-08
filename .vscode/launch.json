@@ -1,0 +1,37 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Gateway Service",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/gateway/cmd/main.go",
+      "args": [],
+      "env": {
+        "ENV": "development",
+        "APP_ENV": "dev"
+      },
+      "buildFlags": "-tags=dev",
+      "cwd": "${workspaceFolder}/gateway",
+      "showLog": true,
+      "output": "${workspaceFolder}/gateway/bin/gateway_debug.exe"
+    },
+    {
+      "name": "Auth Service",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/auth-service/cmd/main.go",
+      "args": [],
+      "env": {
+        "ENV": "development",
+        "APP_ENV": "dev"
+      },
+      "buildFlags": "-tags=dev",
+      "cwd": "${workspaceFolder}/auth-service",
+      "showLog": true,
+      "output": "${workspaceFolder}/auth-service/bin/auth_debug.exe"
+    }
+  ]
+}

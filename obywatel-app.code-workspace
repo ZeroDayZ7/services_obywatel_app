@@ -1,0 +1,32 @@
+{
+  "folders": [
+    { "path": "../../obywatel_app" },
+    { "path": "." },
+  ],
+  "settings": {
+    "go.formatTool": "gofmt",
+    "editor.formatOnSave": false,
+
+    "files.exclude": {
+      "**/.env.example": true,
+      "**/.env.dev.example": true,
+      "**/.gitattributes": true,
+      "**/logs": true,
+      "**/bin": true,
+      "**/LICENSE": true,
+      "**/go.sum": true,
+      "**/README.md": true,
+    },
+
+    "search.exclude": {
+      "**/.env.example": true,
+      "**/.env.dev.example": true,
+      "**/.gitattributes": true,
+      "**/logs": true,
+      "**/bin": true,
+      "**/LICENSE": true,
+      "**/go.sum": true,
+      "**/README.md": true,
+    }
+  }
+}
