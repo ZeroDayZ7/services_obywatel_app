@@ -3,18 +3,16 @@ package middleware
 import (
 	"context"
 	"errors"
-	"fmt"
-	"strings"
 
 	"slices"
 
 	"github.com/gofiber/fiber/v2"
+	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/redis/go-redis/v9"
 	"github.com/zerodayz7/http-server/internal/shared/logger"
-	"github.com/zerodayz7/http-server/internal/shared/security"
 )
 
-// PublicPathsRedis - ścieżki, które NIE wymagają autoryzacji JWT/Redis
+// PublicPathsRedis - ścieżki, które NIE wymagają weryfikacji Redis
 var PublicPathsRedis = []string{
 	"/auth/login",
 	"/auth/register",
@@ -23,80 +21,61 @@ var PublicPathsRedis = []string{
 	"/health",
 }
 
-// AuthRedisMiddleware - middleware do weryfikacji JWT i sesji w Redis
-func AuthRedisMiddleware(rdb *redis.Client, accessSecret string) fiber.Handler {
+// AuthRedisMiddleware - middleware do weryfikacji sesji w Redis
+func AuthRedisMiddleware(rdb *redis.Client) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		log := logger.GetLogger()
 		path := c.Path()
 
 		// 1. Sprawdź, czy ścieżka jest publiczna
 		if slices.Contains(PublicPathsRedis, path) {
-			log.DebugMap("Public path, skipping JWT/Redis check", map[string]string{
-				"path": path,
-			})
+			log.DebugMap("Public path, skipping Redis check", map[string]string{"path": path})
 			return c.Next()
 		}
 
-		// 2. Pobierz token z nagłówka Authorization
-		authHeader := c.Get("Authorization")
-		if authHeader == "" {
-			log.WarnMap("Missing Authorization header", map[string]string{
-				"path": path,
-			})
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "missing authorization header"})
+		// 2. Pobierz JWT z ctx ustawionego przez JWT middleware
+		jwtPayload := c.Locals("user")
+		if jwtPayload == nil {
+			log.WarnMap("JWT payload missing", map[string]string{"path": path})
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "missing token"})
 		}
 
-		parts := strings.SplitN(authHeader, " ", 2)
-		if len(parts) != 2 || strings.ToLower(parts[0]) != "bearer" {
-			log.WarnMap("Invalid Authorization header format", map[string]string{
-				"header": authHeader,
-				"path":   path,
-			})
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid authorization header"})
-		}
-		tokenStr := parts[1]
-
-		// 3. Rozszyfruj JWT
-		payload, err := security.ParseJWT(tokenStr, accessSecret)
-		if err != nil {
-			log.WarnMap("JWT invalid", map[string]string{
-				"error": err.Error(),
-				"path":  path,
-			})
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid token"})
+		// 3. Rzutowanie na *jwt.Token
+		jwtToken, ok := jwtPayload.(*jwt.Token)
+		if !ok {
+			log.WarnMap("JWT payload has invalid type", map[string]string{"path": path})
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid token payload"})
 		}
 
-		// 4. Pobierz sessionID z payload
-		sessionID, ok := payload["sid"].(string)
+		// 4. Wyciągnięcie claims jako MapClaims
+		claims, ok := jwtToken.Claims.(jwt.MapClaims)
+		if !ok {
+			log.WarnMap("JWT claims invalid type", map[string]string{"path": path})
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid token claims"})
+		}
+
+		// 5. Wyciągnij sessionID z claims
+		sessionID, ok := claims["sid"].(string)
 		if !ok || sessionID == "" {
-			log.WarnMap("Missing session_id in token", map[string]string{
-				"payload": fmt.Sprintf("%v", payload),
-				"path":    path,
-			})
+			log.WarnMap("Missing session_id in JWT claims", map[string]string{"path": path})
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "missing session_id in token"})
 		}
 
-		// 5. Pobierz userID z Redis po sessionID
+		// 6. Pobierz userID z Redis po sessionID
 		ctx := context.Background()
 		userID, err := rdb.Get(ctx, "session:"+sessionID).Result()
 		if err != nil {
 			if errors.Is(err, redis.Nil) {
-				log.WarnMap("Session not found or expired", map[string]string{
-					"sessionID": sessionID,
-					"path":      path,
-				})
+				log.WarnMap("Session not found or expired", map[string]string{"sessionID": sessionID, "path": path})
 				return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid or expired session"})
 			}
 			log.ErrorObj("Redis error", err.Error())
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal server error"})
 		}
 
-		// 6. Zapisz userID w ctx dla downstream
+		// 7. Zapisz userID w ctx dla downstream (np. proxy)
 		c.Locals("userID", userID)
-		log.DebugMap("User session verified", map[string]string{
-			"userID": userID,
-			"path":   path,
-		})
+		log.DebugMap("User session verified", map[string]string{"userID": userID, "path": path})
 
 		return c.Next()
 	}

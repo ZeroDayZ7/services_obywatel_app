@@ -30,17 +30,21 @@ func (h *UserDocumentHandler) CreateDocument(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(doc)
 }
 
-// GET /documents/user/:id
-func (h *UserDocumentHandler) GetDocumentsByUserID(c *fiber.Ctx) error {
-	userIDParam := c.Params("id")
-	userID, err := strconv.ParseUint(userIDParam, 10, 64)
+// GET /documents/me
+func (h *UserDocumentHandler) GetDocumentsMe(c *fiber.Ctx) error {
+	userIDHeader := c.Get("X-User-ID")
+	if userIDHeader == "" {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "missing X-User-ID"})
+	}
+
+	userID, err := strconv.ParseUint(userIDHeader, 10, 32)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid user id"})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid user ID"})
 	}
 
 	docs, err := h.service.GetDocumentsByUserID(uint(userID))
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to fetch documents"})
 	}
 
 	return c.JSON(docs)

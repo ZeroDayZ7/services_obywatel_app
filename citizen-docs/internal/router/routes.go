@@ -15,7 +15,7 @@ func SetupDocsRoutes(app *fiber.App, userDocService *service.UserDocumentService
 	docs := app.Group("/documents")
 
 	docs.Post("/", h.CreateDocument)
-	docs.Get("/user/:id", h.GetDocumentsByUserID)
+	docs.Get("/me", h.GetDocumentsMe)
 	// Możesz dodać pozostałe operacje np. Get/:id, Put/:id, Delete/:id
 	// docs.Get("/:id", h.GetDocument)
 	// docs.Put("/:id", h.UpdateDocument)

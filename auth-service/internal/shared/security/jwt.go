@@ -32,7 +32,8 @@ func GenerateAccessToken(userID string) (string, error) {
 		}
 	}
 
-	err := rdb.Set(ctx, sessionID, userID, config.AppConfig.SessionTTL).Err()
+	err := rdb.Set(ctx, "session:"+sessionID, userID, config.AppConfig.SessionTTL).Err()
+
 	if err != nil {
 		return "", err
 	}

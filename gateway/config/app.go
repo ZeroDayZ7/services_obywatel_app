@@ -38,7 +38,7 @@ func NewFiberApp() *fiber.App {
 	app.Use(compress.New(CompressConfig()))
 	app.Use(middleware.RequestLoggerMiddleware())
 	app.Use(JWTMiddlewareWithExclusions())
-	app.Use(middleware.AuthRedisMiddleware(container.RedisClient, AppConfig.JWT.AccessSecret))
+	app.Use(middleware.AuthRedisMiddleware(container.RedisClient))
 
 	return app
 }
