@@ -7,8 +7,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/zerodayz7/platform/services/citizen-docs/internal/shared/logger"
-	"go.uber.org/zap"
+	"github.com/zerodayz7/platform/pkg/shared"
 )
 
 func SetupGracefulShutdown(app *fiber.App, closeDB func(), timeout time.Duration) {
@@ -17,17 +16,18 @@ func SetupGracefulShutdown(app *fiber.App, closeDB func(), timeout time.Duration
 
 	go func() {
 		<-shutdown
-		logger.GetLogger().Info("Shutting down server gracefully...")
+		log := shared.GetLogger()
+		log.Info("Shutting down server gracefully...")
 
 		if err := app.Shutdown(); err != nil {
-			logger.GetLogger().Error("Server shutdown failed", zap.Error(err))
+			log.Error("Server shutdown failed: " + err.Error())
 		}
 
 		if closeDB != nil {
 			closeDB()
 		}
 
-		logger.GetLogger().Info("Server stopped")
+		log.Info("Server stopped")
 		os.Exit(0)
 	}()
 }

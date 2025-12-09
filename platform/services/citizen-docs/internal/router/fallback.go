@@ -1,10 +1,8 @@
 package router
 
 import (
-	"github.com/zerodayz7/platform/services/citizen-docs/internal/shared/logger"
-
 	"github.com/gofiber/fiber/v2"
-	"go.uber.org/zap"
+	"github.com/zerodayz7/platform/pkg/shared"
 )
 
 func SetupFallbackHandlers(app *fiber.App) {
@@ -13,7 +11,10 @@ func SetupFallbackHandlers(app *fiber.App) {
 	})
 
 	app.Use(func(c *fiber.Ctx) error {
-		logger.GetLogger().Warn("404 - not found", zap.String("path", c.Path()), zap.String("method", c.Method()))
+		shared.GetLogger().WarnMap("404 - not found", map[string]any{
+			"path":   c.Path(),
+			"method": c.Method(),
+		})
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "Not found",
 		})

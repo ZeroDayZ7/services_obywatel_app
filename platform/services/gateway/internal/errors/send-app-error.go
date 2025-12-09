@@ -1,13 +1,15 @@
 package errors
 
 import (
+	"maps"
+
 	"github.com/gofiber/fiber/v2"
-	"github.com/zerodayz7/platform/services/gateway/internal/shared/logger"
-	"go.uber.org/zap"
+	"github.com/zerodayz7/platform/pkg/shared"
 )
 
 func SendAppError(c *fiber.Ctx, err *AppError) error {
-	log := logger.GetLogger()
+	log := shared.GetLogger()
+
 	statusMap := map[ErrorType]int{
 		Validation:   fiber.StatusBadRequest,
 		Unauthorized: fiber.StatusUnauthorized,
@@ -21,18 +23,17 @@ func SendAppError(c *fiber.Ctx, err *AppError) error {
 		status = fiber.StatusInternalServerError
 	}
 
-	fields := []zap.Field{
-		zap.String("code", err.Code),
-		zap.String("type", string(err.Type)),
+	// Logowanie
+	logFields := map[string]any{
+		"code": err.Code,
+		"type": string(err.Type),
 	}
-	for k, v := range err.Meta {
-		fields = append(fields, zap.Any(k, v))
-	}
+	maps.Copy(logFields, err.Meta)
 	if err.Err != nil {
-		fields = append(fields, zap.String("error", err.Err.Error()))
-		log.Error("AppError occurred", fields...)
+		logFields["error"] = err.Err.Error()
+		log.ErrorMap("AppError occurred", logFields)
 	} else {
-		log.Warn("AppError occurred", fields...)
+		log.WarnMap("AppError occurred", logFields)
 	}
 
 	response := fiber.Map{

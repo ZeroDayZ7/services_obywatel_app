@@ -4,13 +4,12 @@ import (
 	stdErrors "errors"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/zerodayz7/platform/pkg/shared"
 	apperrors "github.com/zerodayz7/platform/services/citizen-docs/internal/errors"
-	"github.com/zerodayz7/platform/services/citizen-docs/internal/shared/logger"
-	"go.uber.org/zap"
 )
 
 func ErrorHandler() fiber.ErrorHandler {
-	log := logger.GetLogger()
+	log := shared.GetLogger()
 	return func(c *fiber.Ctx, err error) error {
 		var appErr *apperrors.AppError
 		if stdErrors.As(err, &appErr) {
@@ -19,22 +18,23 @@ func ErrorHandler() fiber.ErrorHandler {
 				status = fiber.StatusInternalServerError
 			}
 
-			logFields := []zap.Field{zap.String("code", appErr.Code)}
+			logMap := map[string]any{
+				"code": appErr.Code,
+			}
 			if appErr.Meta != nil {
-				logFields = append(logFields, zap.Any("meta", appErr.Meta))
+				logMap["meta"] = appErr.Meta
 			}
 			if appErr.Err != nil {
-				logFields = append(logFields, zap.String("error", appErr.Err.Error()))
-				log.Error("AppError occurred", logFields...)
+				logMap["error"] = appErr.Err.Error()
+				log.ErrorMap("AppError occurred", logMap)
 			} else {
-				log.Warn("AppError occurred", logFields...)
+				log.WarnMap("AppError occurred", logMap)
 			}
 
 			response := fiber.Map{
 				"code":    appErr.Code,
 				"message": appErr.Message,
 			}
-
 			if len(appErr.Meta) > 0 {
 				response["meta"] = appErr.Meta
 			}
@@ -43,11 +43,15 @@ func ErrorHandler() fiber.ErrorHandler {
 		}
 
 		if e, ok := err.(*fiber.Error); ok {
-			log.Error("HTTP error", zap.Error(err))
+			log.ErrorMap("HTTP error", map[string]any{
+				"error": e.Error(),
+			})
 			return c.Status(e.Code).JSON(fiber.Map{"error": e.Message})
 		}
 
-		log.Error("Server error", zap.Error(err))
+		log.ErrorMap("Server error", map[string]any{
+			"error": err.Error(),
+		})
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Internal server error",
 		})

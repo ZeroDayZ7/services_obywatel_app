@@ -1,6 +1,6 @@
 package errors
 
-import "../../../../../gateway/internal/errors/github.com/gofiber/fiber/v2"
+import "github.com/gofiber/fiber/v2"
 
 func AttachRequestMeta(c *fiber.Ctx, err *AppError, keysToInclude ...string) {
 	if err.Meta == nil {

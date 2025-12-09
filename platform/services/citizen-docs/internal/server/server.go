@@ -3,7 +3,7 @@ package server
 
 import (
 	"github.com/gofiber/fiber/v2"
-	"github.com/zerodayz7/platform/services/citizen-docs/config"
+	"github.com/zerodayz7/platform/services/auth-service/config"
 )
 
 func New(cfg config.Config) *fiber.App {

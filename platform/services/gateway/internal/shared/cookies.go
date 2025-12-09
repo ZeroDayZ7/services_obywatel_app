@@ -1,7 +1,7 @@
 // internal/shared/cookies.go
 package shared
 
-import "../../../../../gateway/internal/shared/github.com/gofiber/fiber/v2"
+import "github.com/gofiber/fiber/v2"
 
 // SetSessionCookie ustawia ciasteczko sesji
 func SetSessionCookie(c *fiber.Ctx, sessionID string) {
