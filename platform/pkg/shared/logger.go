@@ -70,7 +70,6 @@ func GetLogger() *Logger {
 // convertStructToFields zamienia struct lub map na []zap.Field
 func convertStructToFields(obj any) []zap.Field {
 	fields := []zap.Field{}
-
 	if obj == nil {
 		return fields
 	}
@@ -78,26 +77,20 @@ func convertStructToFields(obj any) []zap.Field {
 	val := reflect.ValueOf(obj)
 	typ := reflect.TypeOf(obj)
 
-	// jeśli to map[string]any
-	if val.Kind() == reflect.Map {
+	switch val.Kind() {
+	case reflect.Map:
 		for _, key := range val.MapKeys() {
 			fields = append(fields, zap.Any(key.String(), val.MapIndex(key).Interface()))
 		}
-		return fields
-	}
-
-	// jeśli to struct
-	if val.Kind() == reflect.Struct {
+	case reflect.Struct:
 		for i := 0; i < val.NumField(); i++ {
 			field := typ.Field(i)
-			value := val.Field(i).Interface()
-			fields = append(fields, zap.Any(field.Name, value))
+			fields = append(fields, zap.Any(field.Name, val.Field(i).Interface()))
 		}
-		return fields
+	default:
+		fields = append(fields, zap.Any("value", obj))
 	}
 
-	// dla wszystkiego innego pakujemy jako "value"
-	fields = append(fields, zap.Any("value", obj))
 	return fields
 }
 
@@ -141,21 +134,23 @@ func (l *Logger) ErrorMap(msg string, m map[string]any) {
 
 // --- Logowanie obiektów ---
 func (l *Logger) InfoObj(msg string, obj any) {
-	l.Logger.WithOptions(zap.AddCallerSkip(1)).Info(msg, zap.Any("data", obj))
+	fields := convertStructToFields(obj)
+	l.Logger.WithOptions(zap.AddCallerSkip(1)).Info(msg, fields...)
 }
 
 func (l *Logger) DebugObj(msg string, obj any) {
-	l.Logger.WithOptions(zap.AddCallerSkip(1)).Debug(msg, zap.Any("data", obj))
+	fields := convertStructToFields(obj)
+	l.Logger.WithOptions(zap.AddCallerSkip(1)).Debug(msg, fields...)
 }
 
-// nowa wersja WarnObj
 func (l *Logger) WarnObj(msg string, obj any) {
 	fields := convertStructToFields(obj)
 	l.Logger.WithOptions(zap.AddCallerSkip(1)).Warn(msg, fields...)
 }
 
 func (l *Logger) ErrorObj(msg string, obj any) {
-	l.Logger.WithOptions(zap.AddCallerSkip(1)).Error(msg, zap.Any("data", obj))
+	fields := convertStructToFields(obj)
+	l.Logger.WithOptions(zap.AddCallerSkip(1)).Error(msg, fields...)
 }
 
 // --- Helper konwertujący mapy na zap.Fields ---

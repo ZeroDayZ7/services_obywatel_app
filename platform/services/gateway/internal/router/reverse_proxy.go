@@ -59,19 +59,22 @@ func ReverseProxySecure(target string) fiber.Handler {
 			return err
 		}
 
-		// Kopiujemy TYLKO krytyczne nagłówki
+		// Kopiujemy tylko krytyczne nagłówki
 		if ct := c.Get("Content-Type"); ct != "" {
 			req.Header.Set("Content-Type", ct)
 		}
 		req.Header.Set("Accept", c.Get("Accept", "*/*"))
 
-		// Dodajemy dane z gateway
+		// Dodajemy X-User-Id i X-Session-Id z gateway
 		if uid := c.Locals("userID"); uid != nil {
 			req.Header.Set("X-User-Id", uid.(string))
 		}
 		if sid := c.Locals("sessionID"); sid != nil {
 			req.Header.Set("X-Session-Id", sid.(string))
 		}
+
+		// USUWAMY Authorization, zawsze (backend go nie potrzebuje)
+		req.Header.Del("Authorization")
 
 		// Wysłanie requesta
 		client := &http.Client{}
@@ -81,7 +84,7 @@ func ReverseProxySecure(target string) fiber.Handler {
 		}
 		defer resp.Body.Close()
 
-		// Kopiujemy tylko sensowne response nagłówki
+		// Kopiujemy sensowne response nagłówki
 		for _, h := range []string{"Content-Type"} {
 			if v := resp.Header.Get(h); v != "" {
 				c.Set(h, v)

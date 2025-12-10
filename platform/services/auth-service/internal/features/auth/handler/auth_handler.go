@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/zerodayz7/platform/pkg/errors"
 	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/shared"
@@ -113,7 +112,7 @@ func (h *AuthHandler) RefreshToken(c *fiber.Ctx) error {
 		"access_token":  accessToken,
 		"expires_at":    time.Now().Add(config.AppConfig.JWT.AccessTTL),
 		"user_id":       userID,
-		"refresh_token": rt.Token, // bierzemy token z bazy
+		"refresh_token": rt.Token,
 		"2fa_required":  false,
 	}
 
@@ -121,36 +120,62 @@ func (h *AuthHandler) RefreshToken(c *fiber.Ctx) error {
 }
 
 // LOGOUT
-// handler/auth_handler.go
 func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 	log := shared.GetLogger()
 
+	// 1. Pobierz body (refresh token)
 	body := c.Locals("validatedBody").(validator.RefreshTokenRequest)
+	if body.RefreshToken == "" {
+		log.Warn("Missing refresh token in request body")
+		return fiber.NewError(fiber.StatusBadRequest, "Missing refresh token")
+	}
 
-	// 1. Odczyt SID z JWT
-	jwtToken := c.Locals("user").(*jwt.Token)
-	claims := jwtToken.Claims.(jwt.MapClaims)
+	// 2. Pobierz X-User-Id i X-Session-Id z headerów
+	userID := c.Get("X-User-Id")
+	sessionID := c.Get("X-Session-Id")
+	if userID == "" || sessionID == "" {
+		log.Warn("Missing X-User-Id or X-Session-Id headers")
+		return fiber.NewError(fiber.StatusBadRequest, "Missing required headers")
+	}
 
-	sessionID, _ := claims["sid"].(string)
-
-	// 2. Usuń refresh token z DB
+	// 3. Usuń refresh token z DB
 	if err := h.authService.RevokeRefreshToken(body.RefreshToken); err != nil {
 		log.ErrorObj("Failed to revoke refresh token", err)
 		return errors.SendAppError(c, errors.ErrInternal)
 	}
+	log.InfoObj("Refresh token revoked", userID)
 
-	// 3. Usuń sesję z Redis
-	if sessionID != "" {
-		if err := h.cache.DeleteSession(c.Context(), sessionID); err != nil {
-			log.ErrorObj("Failed to delete session from Redis", err)
-		} else {
-			log.InfoObj("Session deleted from Redis", map[string]any{"session_id": sessionID})
-		}
+	// 4. Pobierz userID z Redis po sessionID
+	storedUserID, err := h.cache.GetUserIDBySession(c.Context(), sessionID)
+	if err != nil {
+		log.ErrorObj("Failed to get session from Redis", err)
+		return errors.SendAppError(c, errors.ErrInternal)
 	}
 
-	return c.JSON(fiber.Map{
+	// 5. Sprawdź zgodność userID z Redis
+	if storedUserID != userID {
+		log.WarnObj("Session user mismatch", []string{sessionID, userID, storedUserID})
+		return fiber.NewError(fiber.StatusForbidden, "Invalid session")
+	}
+
+	// 6. Usuń sesję z Redis
+	if err := h.cache.DeleteSession(c.Context(), sessionID); err != nil {
+		log.ErrorObj("Failed to delete session from Redis", err)
+	} else {
+		log.InfoObj("Session deleted from Redis", sessionID)
+	}
+
+	// Tworzymy odpowiedź
+	response := fiber.Map{
 		"message": "Logged out successfully",
-	})
+	}
+
+	// Dodawanie kolejnych pól w razie potrzeby
+	// response["user_id"] = userID
+	// response["events"] = []string{"refresh_token_revoked", "session_deleted"}
+
+	// Zwracamy odpowiedź
+	return c.JSON(response)
 }
 
 // REGISTER
