@@ -11,6 +11,7 @@ import (
 	"github.com/zerodayz7/platform/services/auth-service/internal/features/users/model"
 	userRepo "github.com/zerodayz7/platform/services/auth-service/internal/features/users/repository"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/auth-service/internal/shared/security"
 )
@@ -25,6 +26,29 @@ func NewAuthService(repo userRepo.UserRepository, refreshRepo authRepo.RefreshTo
 		repo:        repo,
 		refreshRepo: refreshRepo,
 	}
+}
+
+// CreateAccessToken generuje access token i zwraca sessionID
+func (s *AuthService) CreateAccessToken(userID uint) (accessToken string, sessionID string, err error) {
+	sessionID = shared.GenerateUuid() // lub ksuid
+	claims := jwt.MapClaims{
+		"uid": userID,
+		"sid": sessionID,
+	}
+
+	accessToken, err = security.GenerateJWT(claims, config.AppConfig.JWT.AccessSecret, config.AppConfig.JWT.AccessTTL)
+	if err != nil {
+		return "", "", err
+	}
+
+	// NIE zapisujemy w Redis tutaj – handler to zrobi
+	return accessToken, sessionID, nil
+}
+
+// Opcjonalnie – wygodne metody dla Redis (możesz używać w handlerze)
+func (s *AuthService) CreateSession(userID uint) (string, error) {
+	sessionID := shared.GenerateUuid()
+	return sessionID, nil
 }
 
 func (s *AuthService) CreateRefreshToken(userID uint) (*authModel.RefreshToken, error) {

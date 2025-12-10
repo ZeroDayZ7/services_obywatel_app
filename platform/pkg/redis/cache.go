@@ -12,9 +12,29 @@ type Cache struct {
 }
 
 func NewCache(client *Client, prefix string, defaultTTL time.Duration) *Cache {
-	return &Cache{client: client, prefix: prefix, ttl: defaultTTL}
+	return &Cache{
+		client: client,
+		prefix: prefix,
+		ttl:    defaultTTL,
+	}
 }
-func (c *Cache) key(k string) string { return c.prefix + k }
+
+func (c *Cache) key(k string) string {
+	return c.prefix + k
+}
+
+// SessionCache
+func (c *Cache) SetSession(ctx context.Context, sessionID string, userID string, ttl time.Duration) error {
+	return c.Set(ctx, sessionID, userID, ttl)
+}
+
+func (c *Cache) GetUserIDBySession(ctx context.Context, sessionID string) (string, error) {
+	return c.Get(ctx, sessionID)
+}
+
+func (c *Cache) DeleteSession(ctx context.Context, sessionID string) error {
+	return c.Del(ctx, sessionID)
+}
 
 func (c *Cache) Set(ctx context.Context, key string, value any, ttl ...time.Duration) error {
 	d := c.ttl

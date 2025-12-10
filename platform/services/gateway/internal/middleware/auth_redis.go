@@ -75,7 +75,12 @@ func AuthRedisMiddleware(rdb *redis.Client) fiber.Handler {
 
 		// 7. Zapisz userID w ctx dla downstream (np. proxy)
 		c.Locals("userID", userID)
-		log.DebugMap("User session verified", map[string]any{"userID": userID, "path": path})
+		c.Locals("sessionID", sessionID)
+		log.DebugMap("User session verified", map[string]any{
+			"userID":    userID,
+			"sessionID": sessionID,
+			"path":      path,
+		})
 
 		return c.Next()
 	}

@@ -5,12 +5,12 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/zerodayz7/platform/pkg/errors"
 	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/auth-service/config"
 	"github.com/zerodayz7/platform/services/auth-service/internal/features/auth/service"
-	"github.com/zerodayz7/platform/services/auth-service/internal/shared/security"
 	"github.com/zerodayz7/platform/services/auth-service/internal/validator"
 )
 
@@ -31,17 +31,15 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	log := shared.GetLogger()
 	body := c.Locals("validatedBody").(validator.LoginRequest)
 
-	log.InfoObj("Login attempt", map[string]any{"email": body.Email})
-
 	user, err := h.authService.GetUserByEmail(body.Email)
 	if err != nil {
-		log.WarnObj("User not found", map[string]any{"email": body.Email})
+		log.WarnObj("User not found", body)
 		return errors.SendAppError(c, errors.ErrInvalidCredentials)
 	}
 
 	valid, err := h.authService.VerifyPassword(user, body.Password)
 	if err != nil || !valid {
-		log.WarnObj("Invalid password", map[string]any{"userID": user.ID})
+		log.WarnObj("Invalid password", user)
 		return errors.SendAppError(c, errors.ErrInvalidCredentials)
 	}
 
@@ -50,13 +48,18 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{"2fa_required": true})
 	}
 
-	accessToken, err := security.GenerateAccessToken(
-		fmt.Sprint(user.ID),
-		h.cache,
-		config.AppConfig.JWT.AccessSecret,
-	)
+	userID := fmt.Sprint(user.ID)
+
+	// generujemy access token i sessionID
+	accessToken, sessionID, err := h.authService.CreateAccessToken(user.ID)
 	if err != nil {
 		log.ErrorObj("Failed to generate access token", err)
+		return errors.SendAppError(c, errors.ErrInternal)
+	}
+
+	// zapis w Redis
+	if err := h.cache.SetSession(c.Context(), sessionID, userID, config.AppConfig.SessionTTL); err != nil {
+		log.ErrorObj("Failed to save session in Redis", err)
 		return errors.SendAppError(c, errors.ErrInternal)
 	}
 
@@ -70,57 +73,80 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		"2fa_required":  false,
 		"access_token":  accessToken,
 		"refresh_token": refreshToken.Token,
+		"user_id":       userID,
 		"expires_at":    refreshToken.ExpiresAt,
 	}
 
-	// logowanie odpowiedzi
 	log.InfoMap("Login response", response)
-
 	return c.JSON(response)
 }
 
 // REFRESH TOKEN
 func (h *AuthHandler) RefreshToken(c *fiber.Ctx) error {
 	body := c.Locals("validatedBody").(validator.RefreshTokenRequest)
-	accessTTL := config.AppConfig.JWT.AccessTTL
 	log := shared.GetLogger()
 
+	// pobranie refresh tokena z bazy
 	rt, err := h.authService.GetRefreshToken(body.RefreshToken)
 	if err != nil || rt.Revoked || rt.ExpiresAt.Before(time.Now()) {
-		log.WarnObj("Invalid refresh token", map[string]any{"token": body.RefreshToken})
+		log.WarnObj("Invalid refresh token", body)
 		return errors.SendAppError(c, errors.ErrInvalidToken)
 	}
 
-	accessToken, err := security.GenerateAccessToken(
-		fmt.Sprint(rt.UserID),
-		h.cache,                           // używamy cache z handlera
-		config.AppConfig.JWT.AccessSecret, // sekret JWT
-	)
+	userID := fmt.Sprint(rt.UserID)
+
+	// generujemy nowy access token + sessionID
+	accessToken, sessionID, err := h.authService.CreateAccessToken(rt.UserID)
 	if err != nil {
 		log.ErrorObj("Failed to generate access token", err)
 		return errors.SendAppError(c, errors.ErrInternal)
 	}
 
-	return c.JSON(fiber.Map{
-		"access_token": accessToken,
-		"expires_at":   time.Now().Add(accessTTL),
-	})
+	// zapis sessionID w Redis
+	if err := h.cache.SetSession(c.Context(), sessionID, userID, config.AppConfig.SessionTTL); err != nil {
+		log.ErrorObj("Failed to save session in Redis", err)
+		return errors.SendAppError(c, errors.ErrInternal)
+	}
+
+	// tworzymy odpowiedź
+	response := fiber.Map{
+		"access_token":  accessToken,
+		"expires_at":    time.Now().Add(config.AppConfig.JWT.AccessTTL),
+		"user_id":       userID,
+		"refresh_token": rt.Token, // bierzemy token z bazy
+		"2fa_required":  false,
+	}
+
+	return c.JSON(response)
 }
 
 // LOGOUT
+// handler/auth_handler.go
 func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 	log := shared.GetLogger()
+
 	body := c.Locals("validatedBody").(validator.RefreshTokenRequest)
 
-	log.InfoObj("Logout attempt", map[string]any{"refresh_token": body.RefreshToken})
+	// 1. Odczyt SID z JWT
+	jwtToken := c.Locals("user").(*jwt.Token)
+	claims := jwtToken.Claims.(jwt.MapClaims)
 
-	err := h.authService.RevokeRefreshToken(body.RefreshToken)
-	if err != nil {
+	sessionID, _ := claims["sid"].(string)
+
+	// 2. Usuń refresh token z DB
+	if err := h.authService.RevokeRefreshToken(body.RefreshToken); err != nil {
 		log.ErrorObj("Failed to revoke refresh token", err)
 		return errors.SendAppError(c, errors.ErrInternal)
 	}
 
-	log.InfoObj("Logout successful", map[string]any{"refresh_token": body.RefreshToken})
+	// 3. Usuń sesję z Redis
+	if sessionID != "" {
+		if err := h.cache.DeleteSession(c.Context(), sessionID); err != nil {
+			log.ErrorObj("Failed to delete session from Redis", err)
+		} else {
+			log.InfoObj("Session deleted from Redis", map[string]any{"session_id": sessionID})
+		}
+	}
 
 	return c.JSON(fiber.Map{
 		"message": "Logged out successfully",

@@ -2,6 +2,7 @@ package shared
 
 import (
 	"os"
+	"reflect"
 	"sync"
 
 	"go.uber.org/zap"
@@ -66,6 +67,40 @@ func GetLogger() *Logger {
 	return instance
 }
 
+// convertStructToFields zamienia struct lub map na []zap.Field
+func convertStructToFields(obj any) []zap.Field {
+	fields := []zap.Field{}
+
+	if obj == nil {
+		return fields
+	}
+
+	val := reflect.ValueOf(obj)
+	typ := reflect.TypeOf(obj)
+
+	// jeśli to map[string]any
+	if val.Kind() == reflect.Map {
+		for _, key := range val.MapKeys() {
+			fields = append(fields, zap.Any(key.String(), val.MapIndex(key).Interface()))
+		}
+		return fields
+	}
+
+	// jeśli to struct
+	if val.Kind() == reflect.Struct {
+		for i := 0; i < val.NumField(); i++ {
+			field := typ.Field(i)
+			value := val.Field(i).Interface()
+			fields = append(fields, zap.Any(field.Name, value))
+		}
+		return fields
+	}
+
+	// dla wszystkiego innego pakujemy jako "value"
+	fields = append(fields, zap.Any("value", obj))
+	return fields
+}
+
 // --- Logowanie prostych komunikatów ---
 func (l *Logger) Info(msg string) {
 	l.Logger.WithOptions(zap.AddCallerSkip(1)).Info(msg)
@@ -113,8 +148,10 @@ func (l *Logger) DebugObj(msg string, obj any) {
 	l.Logger.WithOptions(zap.AddCallerSkip(1)).Debug(msg, zap.Any("data", obj))
 }
 
+// nowa wersja WarnObj
 func (l *Logger) WarnObj(msg string, obj any) {
-	l.Logger.WithOptions(zap.AddCallerSkip(1)).Warn(msg, zap.Any("data", obj))
+	fields := convertStructToFields(obj)
+	l.Logger.WithOptions(zap.AddCallerSkip(1)).Warn(msg, fields...)
 }
 
 func (l *Logger) ErrorObj(msg string, obj any) {

@@ -9,5 +9,5 @@
 bin/*
 
 # Ignore logs
-logs/
+**/logs/
 **/combined.txt

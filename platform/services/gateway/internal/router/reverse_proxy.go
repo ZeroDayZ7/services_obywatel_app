@@ -46,7 +46,7 @@ func ReverseProxy(target string) fiber.Handler {
 }
 
 // ReverseProxyWithUserID - przekazuje request do backendu i dodaje X-User-ID z ctx
-func ReverseProxyWithUserID(target string) fiber.Handler {
+func ReverseProxySecure(target string) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		body := c.Body()
 
@@ -59,15 +59,21 @@ func ReverseProxyWithUserID(target string) fiber.Handler {
 			return err
 		}
 
-		c.Request().Header.VisitAll(func(key, value []byte) {
-			req.Header.Set(string(key), string(value))
-		})
+		// Kopiujemy TYLKO krytyczne nagłówki
+		if ct := c.Get("Content-Type"); ct != "" {
+			req.Header.Set("Content-Type", ct)
+		}
+		req.Header.Set("Accept", c.Get("Accept", "*/*"))
 
-		// Dodanie userID z ctx
-		if userID := c.Locals("userID"); userID != nil {
-			req.Header.Set("X-User-ID", userID.(string))
+		// Dodajemy dane z gateway
+		if uid := c.Locals("userID"); uid != nil {
+			req.Header.Set("X-User-Id", uid.(string))
+		}
+		if sid := c.Locals("sessionID"); sid != nil {
+			req.Header.Set("X-Session-Id", sid.(string))
 		}
 
+		// Wysłanie requesta
 		client := &http.Client{}
 		resp, err := client.Do(req)
 		if err != nil {
@@ -75,9 +81,10 @@ func ReverseProxyWithUserID(target string) fiber.Handler {
 		}
 		defer resp.Body.Close()
 
-		for k, v := range resp.Header {
-			for _, vv := range v {
-				c.Set(k, vv)
+		// Kopiujemy tylko sensowne response nagłówki
+		for _, h := range []string{"Content-Type"} {
+			if v := resp.Header.Get(h); v != "" {
+				c.Set(h, v)
 			}
 		}
 

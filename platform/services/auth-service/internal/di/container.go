@@ -33,7 +33,7 @@ func NewContainer(db *gorm.DB, redisClient *redis.Client) *Container {
 	userSvc := userService.NewUserService(userRepo)
 
 	// Cache wrapper do sesji
-	cache := redis.NewCache(redisClient, "session:", config.AppConfig.SessionTTL)
+	cache := redis.NewCache(redisClient, redis.SessionPrefix, config.AppConfig.SessionTTL)
 
 	// handlery
 	return &Container{
