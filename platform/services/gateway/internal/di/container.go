@@ -1,18 +1,15 @@
 package di
 
-import (
-	"github.com/redis/go-redis/v9"
-)
+import "github.com/zerodayz7/platform/pkg/redis"
 
-// Container przechowuje wszystkie zależności mikroserwisu
 type Container struct {
-	RedisClient *redis.Client
-	// inne serwisy np. UserService, Repozytoria...
+	Redis *redis.Client
+	Cache *redis.Cache
 }
 
-// NewContainer tworzy kontener
-func NewContainer(redisClient *redis.Client) *Container {
+func NewContainer(redisClient *redis.Client, cache *redis.Cache) *Container {
 	return &Container{
-		RedisClient: redisClient,
+		Redis: redisClient,
+		Cache: cache,
 	}
 }

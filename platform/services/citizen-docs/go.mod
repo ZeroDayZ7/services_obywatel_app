@@ -1,6 +1,6 @@
 module github.com/zerodayz7/platform/services/citizen-docs
 
-go 1.25.0
+go 1.25.5
 
 require (
 	github.com/go-playground/validator/v10 v10.27.0

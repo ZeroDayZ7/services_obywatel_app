@@ -4,8 +4,8 @@ import (
 	stdErrors "errors"
 
 	"github.com/gofiber/fiber/v2"
+	apperrors "github.com/zerodayz7/platform/pkg/errors"
 	"github.com/zerodayz7/platform/pkg/shared"
-	apperrors "github.com/zerodayz7/platform/services/auth-service/internal/errors"
 )
 
 func ErrorHandler() fiber.ErrorHandler {

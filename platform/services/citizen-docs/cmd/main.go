@@ -29,7 +29,7 @@ func main() {
 	container := di.NewContainer(db)
 
 	// Fiber app
-	app := config.NewFiberApp()
+	app := config.NewDocsApp()
 
 	// Routes
 	router.SetupDocsRoutes(app, container.UserDocumentSvc)

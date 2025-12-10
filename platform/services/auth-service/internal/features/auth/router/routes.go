@@ -1,17 +1,16 @@
 package router
 
 import (
+	"github.com/gofiber/fiber/v2"
+	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/auth-service/internal/features/auth/handler"
 	"github.com/zerodayz7/platform/services/auth-service/internal/middleware"
 	"github.com/zerodayz7/platform/services/auth-service/internal/validator"
-
-	"github.com/gofiber/fiber/v2"
-	"github.com/zerodayz7/platform/services/auth-service/config"
 )
 
 func SetupAuthRoutes(app *fiber.App, h *handler.AuthHandler) {
 	auth := app.Group("/auth")
-	auth.Use(config.NewLimiter("auth"))
+	auth.Use(shared.NewLimiter("auth"))
 
 	auth.Post("/login",
 		middleware.ValidateBody[validator.LoginRequest](),

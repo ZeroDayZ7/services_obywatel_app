@@ -1,0 +1,4060 @@
+
+
+
+
+───────────── app_errors.go ─────────────
+package errors
+
+// ErrorType definiuje typ błędu
+type ErrorType string
+
+const (
+	Unauthorized ErrorType = "UNAUTHORIZED"
+	Validation   ErrorType = "VALIDATION"
+	NotFound     ErrorType = "NOT_FOUND"
+	Internal     ErrorType = "INTERNAL"
+	BadRequest   ErrorType = "BAD_REQUEST"
+)
+
+// Domyślne komunikaty dla typów błędów
+var ErrorMessages = map[ErrorType]string{
+	Unauthorized: "Brak autoryzacji.",
+	Validation:   "Nieprawidłowe dane.",
+	NotFound:     "Zasób nie został znaleziony.",
+	Internal:     "Wewnętrzny błąd serwera.",
+	BadRequest:   "Błędne żądanie.",
+}
+
+// AppError to baza dla wszystkich błędów serwisów
+type AppError struct {
+	Code    string
+	Type    ErrorType
+	Message string
+	Err     error
+	Meta    map[string]any
+}
+
+func (e *AppError) Error() string {
+	if e.Message != "" {
+		return e.Message
+	}
+	return ErrorMessages[e.Type]
+}
+
+// --- Uniwersalne błędy ---
+var (
+	ErrInternal         = &AppError{Code: "SERVER_ERROR", Type: Internal, Message: "Internal server error"}
+	ErrInvalidJSON      = &AppError{Code: "INVALID_JSON", Type: BadRequest, Message: "Invalid JSON in request body"}
+	ErrValidationFailed = &AppError{Code: "VALIDATION_FAILED", Type: Validation, Message: "Request validation failed"}
+	ErrTooManyRequests  = &AppError{Code: "TOO_MANY_REQUESTS", Type: BadRequest, Message: "Too many requests"}
+	ErrUnauthorized     = &AppError{Code: "UNAUTHORIZED", Type: Unauthorized, Message: "Unauthorized access"}
+	ErrInvalidToken     = &AppError{Code: "INVALID_TOKEN", Type: Unauthorized, Message: "Invalid token"}
+)
+
+// --- Błędy specyficzne dla auth ---
+var (
+	ErrInvalid2FACode     = &AppError{Code: "INVALID_2FA", Type: Validation, Message: "Invalid 2FA code"}
+	ErrInvalidRequest     = &AppError{Code: "INVALID_REQUEST", Type: Validation, Message: "Invalid request data"}
+	ErrEmailExists        = &AppError{Code: "EMAIL_EXISTS", Type: Validation, Message: "Email already registered"}
+	ErrUsernameExists     = &AppError{Code: "USERNAME_EXISTS", Type: Validation, Message: "Username already exist"}
+	ErrPasswordTooShort   = &AppError{Code: "PASSWORD_TOO_SHORT", Type: Validation, Message: "Password must be at least 8 characters"}
+	ErrCSRFInvalid        = &AppError{Code: "CSRF_INVALID", Type: Unauthorized, Message: "CSRF token invalid or missing"}
+	ErrInvalidCredentials = &AppError{Code: "INVALID_CREDENTIALS", Type: Unauthorized, Message: "Incorrect login data"}
+	ErrUserNotFound       = &AppError{Code: "USER_NOT_FOUND", Type: Unauthorized, Message: "User not found"}
+)
+
+
+───────────── attach_request_meta.go ─────────────
+package errors
+
+import "github.com/gofiber/fiber/v2"
+
+func AttachRequestMeta(c *fiber.Ctx, err *AppError, keysToInclude ...string) {
+	if err.Meta == nil {
+		err.Meta = make(map[string]any)
+	}
+
+	for _, key := range keysToInclude {
+		switch key {
+		case "requestID":
+			if val := c.Locals("requestid"); val != nil {
+				err.Meta["requestID"] = val
+			}
+		case "ip":
+			err.Meta["ip"] = c.IP()
+		case "method":
+			err.Meta["method"] = c.Method()
+		case "path":
+			err.Meta["path"] = c.Path()
+		default:
+
+			var body map[string]any
+			if parseErr := c.BodyParser(&body); parseErr == nil {
+				if v, ok := body[key]; ok {
+					err.Meta[key] = v
+				}
+			}
+		}
+	}
+}
+
+
+───────────── send_app_error.go ─────────────
+package errors
+
+import (
+	"github.com/gofiber/fiber/v2"
+)
+
+func SendAppError(c *fiber.Ctx, err *AppError) error {
+	statusMap := map[ErrorType]int{
+		Validation:   fiber.StatusBadRequest,
+		Unauthorized: fiber.StatusUnauthorized,
+		NotFound:     fiber.StatusNotFound,
+		Internal:     fiber.StatusInternalServerError,
+		BadRequest:   fiber.StatusBadRequest,
+	}
+
+	status, ok := statusMap[err.Type]
+	if !ok {
+		status = fiber.StatusInternalServerError
+	}
+
+	response := fiber.Map{
+		"code":    err.Code,
+		"message": err.Message,
+	}
+
+	if len(err.Meta) > 0 {
+		response["meta"] = err.Meta
+	}
+
+	return c.Status(status).JSON(response)
+}
+
+
+───────────── error_handler.go ─────────────
+package server
+
+import (
+	stdErrors "errors"
+
+	"github.com/gofiber/fiber/v2"
+	appErrors "github.com/zerodayz7/platform/pkg/errors"
+	"github.com/zerodayz7/platform/pkg/shared"
+)
+
+func ErrorHandler() fiber.ErrorHandler {
+	log := shared.GetLogger()
+	return func(c *fiber.Ctx, err error) error {
+		var appErr *appErrors.AppError
+		if stdErrors.As(err, &appErr) {
+			return appErrors.SendAppError(c, appErr)
+		}
+
+		// Fiber error
+		if e, ok := err.(*fiber.Error); ok {
+			log.ErrorMap("HTTP error", map[string]any{"error": e.Error()})
+			return c.Status(e.Code).JSON(fiber.Map{"error": e.Message})
+		}
+
+		log.ErrorMap("Server error", map[string]any{"error": err.Error()})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Internal server error",
+		})
+	}
+}
+
+
+───────────── shutdown.go ─────────────
+package server
+
+import (
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/gofiber/fiber/v2"
+	"github.com/zerodayz7/platform/pkg/shared"
+)
+
+func SetupGracefulShutdown(app *fiber.App, closeDB func(), timeout time.Duration) {
+	shutdown := make(chan os.Signal, 1)
+	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		<-shutdown
+		log := shared.GetLogger()
+		log.Info("Shutting down server gracefully...")
+
+		if err := app.Shutdown(); err != nil {
+			log.Error("Server shutdown failed: " + err.Error())
+		}
+
+		if closeDB != nil {
+			closeDB()
+		}
+
+		log.Info("Server stopped")
+		os.Exit(0)
+	}()
+}
+
+
+───────────── body_logger.go ─────────────
+package shared
+
+import (
+	"github.com/gofiber/fiber/v2"
+)
+
+// RequestLoggerMiddleware — loguje body i nagłówki w osobnych liniach
+func RequestLoggerMiddleware() fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		log := GetLogger()
+
+		// Tworzymy mapę nagłówków w formacie string -> []string
+		headers := c.GetReqHeaders() // map[string][]string
+
+		// Body dla metod z payload
+		body := map[string]any{}
+		if c.Method() == fiber.MethodPost || c.Method() == fiber.MethodPut || c.Method() == fiber.MethodPatch {
+			_ = c.BodyParser(&body)
+		}
+
+		// Logujemy metodę, path i body
+		log.InfoObj("Incoming request", map[string]any{
+			"method": c.Method(),
+			"path":   c.Path(),
+			"body":   body,
+		})
+
+		// Logujemy nagłówki osobno
+		for k, v := range headers {
+			log.InfoObj("Header", map[string]any{
+				"key":   k,
+				"value": v,
+			})
+		}
+
+		return c.Next()
+	}
+}
+
+
+───────────── http_logger.go ─────────────
+package shared
+
+import (
+	"io"
+	"os"
+
+	"github.com/gofiber/fiber/v2"
+	fiberlogger "github.com/gofiber/fiber/v2/middleware/logger"
+	"gopkg.in/natefinch/lumberjack.v2"
+)
+
+func FiberLoggerMiddleware() fiber.Handler {
+
+	logFile := &lumberjack.Logger{
+		Filename:   "./logs/http.log",
+		MaxSize:    10,   // MB
+		MaxBackups: 5,    // number of backups
+		MaxAge:     7,    // day
+		Compress:   true, // compression
+	}
+
+	multiWriter := io.MultiWriter(os.Stdout, logFile)
+
+	format := "${pid} | ${locals:requestid} | ${status} | ${latency} | ${ip} | ${method} | ${path}\n"
+	timeFormat := "2006-01-02 15:04:05.000"
+
+	loggerConfig := fiberlogger.Config{
+		Output:     multiWriter,
+		TimeFormat: timeFormat,
+		Format:     format,
+		TimeZone:   "Europe/Warsaw",
+		// Callback after each log, such as sending 5xx to Slack
+		Done: func(c *fiber.Ctx, logBytes []byte) {
+			if c.Response().StatusCode() >= 500 {
+				// reporter.SendToSlack(logBytes)
+			}
+		},
+	}
+
+	return fiberlogger.New(loggerConfig)
+}
+
+
+───────────── limiter.go ─────────────
+package shared
+
+import (
+	"time"
+
+	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/limiter"
+
+	"github.com/zerodayz7/platform/pkg/errors"
+)
+
+var Presets = map[string]struct {
+	Max    int
+	Window time.Duration
+}{
+	"global": {Max: 100, Window: 60 * time.Second},
+	"auth":   {Max: 10, Window: 60 * time.Second},
+	"users":  {Max: 5, Window: 60 * time.Second},
+	"health": {Max: 20, Window: 30 * time.Second},
+}
+
+func NewLimiter(group string) fiber.Handler {
+	cfg, ok := Presets[group]
+	if !ok {
+		cfg = Presets["global"]
+	}
+
+	return limiter.New(limiter.Config{
+		Max:        cfg.Max,
+		Expiration: cfg.Window,
+		KeyGenerator: func(c *fiber.Ctx) string {
+			return c.IP()
+		},
+		LimitReached: func(c *fiber.Ctx) error {
+			log := GetLogger()
+			log.WarnMap("Rate limit exceeded", map[string]any{
+				"ip":   c.IP(),
+				"path": c.Path(),
+			})
+			return errors.SendAppError(c, errors.ErrTooManyRequests)
+		},
+	})
+}
+
+
+───────────── logger.go ─────────────
+package shared
+
+import (
+	"os"
+	"sync"
+
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"gopkg.in/natefinch/lumberjack.v2"
+)
+
+type Logger struct {
+	*zap.Logger
+}
+
+var (
+	instance *Logger
+	once     sync.Once
+)
+
+// InitLogger inicjalizuje singleton loggera
+func InitLogger(env string) *Logger {
+	once.Do(func() {
+		consoleEncoderConfig := zapcore.EncoderConfig{
+			MessageKey:  "msg",
+			LevelKey:    "level",
+			TimeKey:     "",
+			NameKey:     "",
+			CallerKey:   "",
+			EncodeLevel: zapcore.CapitalColorLevelEncoder,
+		}
+
+		consoleCore := zapcore.NewCore(
+			zapcore.NewConsoleEncoder(consoleEncoderConfig),
+			zapcore.AddSync(os.Stdout),
+			zapcore.DebugLevel,
+		)
+
+		logFile := &lumberjack.Logger{
+			Filename:   "logs/app.log",
+			MaxSize:    10,
+			MaxBackups: 5,
+			MaxAge:     7,
+			Compress:   true,
+		}
+
+		fileCore := zapcore.NewCore(
+			zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()),
+			zapcore.AddSync(logFile),
+			zapcore.InfoLevel,
+		)
+
+		core := zapcore.NewTee(consoleCore, fileCore)
+
+		zapLogger := zap.New(core)
+		instance = &Logger{zapLogger}
+	})
+	return instance
+}
+
+// GetLogger zwraca singleton
+func GetLogger() *Logger {
+	if instance == nil {
+		InitLogger("development")
+	}
+	return instance
+}
+
+// --- Logowanie prostych komunikatów ---
+func (l *Logger) Info(msg string) {
+	l.Logger.WithOptions(zap.AddCallerSkip(1)).Info(msg)
+}
+
+func (l *Logger) Debug(msg string) {
+	l.Logger.WithOptions(zap.AddCallerSkip(1)).Debug(msg)
+}
+
+func (l *Logger) Warn(msg string) {
+	l.Logger.WithOptions(zap.AddCallerSkip(1)).Warn(msg)
+}
+
+func (l *Logger) Error(msg string) {
+	l.Logger.WithOptions(zap.AddCallerSkip(1)).Error(msg)
+}
+
+// --- Logowanie map ---
+func (l *Logger) InfoMap(msg string, m map[string]any) {
+	fields := toFields(m)
+	l.Logger.WithOptions(zap.AddCallerSkip(1)).Info(msg, fields...)
+}
+
+func (l *Logger) DebugMap(msg string, m map[string]any) {
+	fields := toFields(m)
+	l.Logger.WithOptions(zap.AddCallerSkip(1)).Debug(msg, fields...)
+}
+
+func (l *Logger) WarnMap(msg string, m map[string]any) {
+	fields := toFields(m)
+	l.Logger.WithOptions(zap.AddCallerSkip(1)).Warn(msg, fields...)
+}
+
+func (l *Logger) ErrorMap(msg string, m map[string]any) {
+	fields := toFields(m)
+	l.Logger.WithOptions(zap.AddCallerSkip(1)).Error(msg, fields...)
+}
+
+// --- Logowanie obiektów ---
+func (l *Logger) InfoObj(msg string, obj any) {
+	l.Logger.WithOptions(zap.AddCallerSkip(1)).Info(msg, zap.Any("data", obj))
+}
+
+func (l *Logger) DebugObj(msg string, obj any) {
+	l.Logger.WithOptions(zap.AddCallerSkip(1)).Debug(msg, zap.Any("data", obj))
+}
+
+func (l *Logger) WarnObj(msg string, obj any) {
+	l.Logger.WithOptions(zap.AddCallerSkip(1)).Warn(msg, zap.Any("data", obj))
+}
+
+func (l *Logger) ErrorObj(msg string, obj any) {
+	l.Logger.WithOptions(zap.AddCallerSkip(1)).Error(msg, zap.Any("data", obj))
+}
+
+// --- Helper konwertujący mapy na zap.Fields ---
+func toFields(m map[string]any) []zap.Field {
+	fields := make([]zap.Field, 0, len(m))
+	for k, v := range m {
+		fields = append(fields, zap.Any(k, v))
+	}
+	return fields
+}
+
+
+───────────── redis.go ─────────────
+package shared
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/redis/go-redis/v9"
+)
+
+var RedisClient *redis.Client
+
+func InitRedis(host, port, password string, db int) *redis.Client {
+	if RedisClient != nil {
+		return RedisClient
+	}
+
+	RedisClient = redis.NewClient(&redis.Options{
+		Addr:     fmt.Sprintf("%s:%s", host, port),
+		Password: password,
+		DB:       db,
+	})
+
+	if err := RedisClient.Ping(context.Background()).Err(); err != nil {
+		panic(fmt.Sprintf("failed to connect to Redis: %v", err))
+	}
+
+	return RedisClient
+}
+
+func IsTokenValid(token string) bool {
+	val, err := RedisClient.Get(context.Background(), token).Result()
+	if err != nil {
+		return false
+	}
+	return val == "valid"
+}
+
+
+───────────── uuid.go ─────────────
+package shared
+
+import "github.com/google/uuid"
+
+// GenerateCSRFToken zwraca losowy token CSRF
+func GenerateUuid() string {
+	return uuid.NewString()
+}
+
+
+───────────── main.go ─────────────
+package main
+
+import (
+	"os"
+
+	"github.com/zerodayz7/platform/pkg/shared"
+
+	"github.com/zerodayz7/platform/services/auth-service/config"
+	"github.com/zerodayz7/platform/services/auth-service/internal/di"
+	"github.com/zerodayz7/platform/services/auth-service/internal/router"
+	"github.com/zerodayz7/platform/services/auth-service/internal/server"
+)
+
+func main() {
+	// Inicjalizacja loggera
+	log := shared.InitLogger(os.Getenv("ENV"))
+
+	// Config
+	if err := config.LoadConfigGlobal(); err != nil {
+		log.ErrorObj("Config load failed", err)
+		return
+	}
+
+	// DB
+	db, closeDB := config.MustInitDB()
+	defer closeDB()
+
+	// Dependency Injection
+	container := di.NewContainer(db)
+
+	// Fiber
+	app := config.NewAuthApp()
+
+	// Routes
+	router.SetupRoutes(app, container.AuthHandler, container.UserHandler)
+
+	// Graceful shutdown
+	server.SetupGracefulShutdown(app, closeDB, config.AppConfig.Shutdown)
+
+	address := "0.0.0.0:" + config.AppConfig.Server.Port
+	log.InfoObj("Auth-Server listening", map[string]any{"address": address})
+
+	// Start serwera
+	if err := app.Listen(address); err != nil {
+		log.ErrorObj("Failed to start server", err)
+	}
+}
+
+
+───────────── app.go ─────────────
+package config
+
+import (
+	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/recover"
+	"github.com/gofiber/fiber/v2/middleware/requestid"
+	"github.com/zerodayz7/platform/pkg/shared"
+)
+
+func NewAuthApp() *fiber.App {
+
+	_ = shared.InitRedis(
+		AppConfig.Redis.Host,
+		AppConfig.Redis.Port,
+		AppConfig.Redis.Password,
+		AppConfig.Redis.DB,
+	)
+
+	app := fiber.New(fiber.Config{
+		TrustedProxies:        []string{"127.0.0.1", "::1"},
+		BodyLimit:             AppConfig.Server.BodyLimitMB * 1024 * 1024,
+		ReadTimeout:           AppConfig.Server.ReadTimeout,
+		WriteTimeout:          AppConfig.Server.WriteTimeout,
+		IdleTimeout:           AppConfig.Server.IdleTimeout,
+		DisableStartupMessage: true,
+		EnableIPValidation:    true,
+		ServerHeader:          AppConfig.Server.ServerHeader,
+	})
+
+	// Middleware
+	app.Use(requestid.New())
+	app.Use(recover.New())
+	app.Use(shared.FiberLoggerMiddleware())
+	app.Use(shared.NewLimiter("global"))
+	app.Use(shared.RequestLoggerMiddleware())
+
+	return app
+}
+
+
+───────────── config.go ─────────────
+package config
+
+import (
+	"fmt"
+	"time"
+
+	"github.com/gofiber/fiber/v2/middleware/session"
+	"github.com/spf13/viper"
+	"github.com/zerodayz7/platform/pkg/shared"
+)
+
+type ServerConfig struct {
+	AppName       string
+	Port          string
+	BodyLimitMB   int
+	Env           string
+	AppVersion    string
+	ServerHeader  string
+	Prefork       bool
+	CaseSensitive bool
+	StrictRouting bool
+	IdleTimeout   time.Duration
+	ReadTimeout   time.Duration
+	WriteTimeout  time.Duration
+}
+
+type RedisConfig struct {
+	Host     string
+	Port     string
+	Password string
+	DB       int
+}
+
+type DBConfig struct {
+	DSN             string
+	MaxOpenConns    int
+	MaxIdleConns    int
+	ConnMaxLifetime time.Duration
+}
+
+type RateLimitConfig struct {
+	Max    int
+	Window time.Duration
+}
+
+type Config struct {
+	Server     ServerConfig
+	Redis      RedisConfig
+	Database   DBConfig
+	RateLimit  RateLimitConfig
+	CORSAllow  string
+	Shutdown   time.Duration
+	JWT        JWTConfig
+	SessionTTL time.Duration
+}
+
+type JWTConfig struct {
+	AccessSecret  string
+	RefreshSecret string
+	AccessTTL     time.Duration
+	RefreshTTL    time.Duration
+}
+
+var AppConfig Config
+var Store *session.Store
+
+func LoadConfigGlobal() error {
+	log := shared.GetLogger()
+
+	viper.SetConfigFile(".env")
+	viper.AutomaticEnv()
+	viper.SetDefault("APP_NAME", "http-server")
+	viper.SetDefault("PORT", "8080")
+	viper.SetDefault("APP_VERSION", "0.1.0")
+	viper.SetDefault("ENV", "development")
+	viper.SetDefault("SERVER_HEADER", "ZeroDayZ7")
+	viper.SetDefault("PREFORK", false)
+	viper.SetDefault("CASE_SENSITIVE", true)
+	viper.SetDefault("STRICT_ROUTING", true)
+	viper.SetDefault("IDLE_TIMEOUT_SEC", 30)
+	viper.SetDefault("READ_TIMEOUT_SEC", 15)
+	viper.SetDefault("WRITE_TIMEOUT_SEC", 15)
+	viper.SetDefault("DB_MAX_OPEN_CONNS", 50)
+	viper.SetDefault("DB_MAX_IDLE_CONNS", 10)
+	viper.SetDefault("DB_CONN_MAX_LIFETIME_MIN", 30)
+
+	// Redis defaults
+	viper.SetDefault("REDIS_HOST", "127.0.0.1")
+	viper.SetDefault("REDIS_PORT", "6379")
+	viper.SetDefault("REDIS_PASSWORD", "")
+	viper.SetDefault("REDIS_DB", 0)
+
+	// Rate limiting
+	viper.SetDefault("RATE_LIMIT_MAX", 100)
+	viper.SetDefault("RATE_LIMIT_WINDOW_SEC", 60)
+
+	// Shutdown
+	viper.SetDefault("SHUTDOWN_TIMEOUT_SEC", 5)
+
+	// JWT
+	viper.SetDefault("JWT_ACCESS_SECRET", "super_access_secret_123")
+	viper.SetDefault("JWT_REFRESH_SECRET", "super_refresh_secret_123")
+	viper.SetDefault("JWT_ACCESS_TTL_MIN", 15)
+	viper.SetDefault("JWT_REFRESH_TTL_DAYS", 7)
+
+	// Session TTL (dla Redis sesji)
+	viper.SetDefault("SessionTTL_MIN", 15)
+
+	if err := viper.ReadInConfig(); err != nil {
+		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+			log.ErrorObj("Error loading .env", err)
+			return fmt.Errorf("error loading .env: %v", err)
+		}
+	}
+
+	AppConfig = Config{
+		Server: ServerConfig{
+			AppName:       viper.GetString("APP_NAME"),
+			Port:          viper.GetString("PORT"),
+			AppVersion:    viper.GetString("APP_VERSION"),
+			Env:           viper.GetString("ENV"),
+			ServerHeader:  viper.GetString("SERVER_HEADER"),
+			Prefork:       viper.GetBool("PREFORK"),
+			CaseSensitive: viper.GetBool("CASE_SENSITIVE"),
+			StrictRouting: viper.GetBool("STRICT_ROUTING"),
+			IdleTimeout:   time.Duration(viper.GetInt("IDLE_TIMEOUT_SEC")) * time.Second,
+			ReadTimeout:   time.Duration(viper.GetInt("READ_TIMEOUT_SEC")) * time.Second,
+			WriteTimeout:  time.Duration(viper.GetInt("WRITE_TIMEOUT_SEC")) * time.Second,
+		},
+		Redis: RedisConfig{
+			Host:     viper.GetString("REDIS_HOST"),
+			Port:     viper.GetString("REDIS_PORT"),
+			Password: viper.GetString("REDIS_PASSWORD"),
+			DB:       viper.GetInt("REDIS_DB"),
+		},
+		Database: DBConfig{
+			DSN:             viper.GetString("DATABASE_DSN"),
+			MaxOpenConns:    viper.GetInt("DB_MAX_OPEN_CONNS"),
+			MaxIdleConns:    viper.GetInt("DB_MAX_IDLE_CONNS"),
+			ConnMaxLifetime: time.Duration(viper.GetInt("DB_CONN_MAX_LIFETIME_MIN")) * time.Minute,
+		},
+		RateLimit: RateLimitConfig{
+			Max:    viper.GetInt("RATE_LIMIT_MAX"),
+			Window: time.Duration(viper.GetInt("RATE_LIMIT_WINDOW_SEC")) * time.Second,
+		},
+		Shutdown: time.Duration(viper.GetInt("SHUTDOWN_TIMEOUT_SEC")) * time.Second,
+		JWT: JWTConfig{
+			AccessSecret:  viper.GetString("JWT_ACCESS_SECRET"),
+			RefreshSecret: viper.GetString("JWT_REFRESH_SECRET"),
+			AccessTTL:     time.Duration(viper.GetInt("JWT_ACCESS_TTL_MIN")) * time.Minute,
+			RefreshTTL:    time.Duration(viper.GetInt("JWT_REFRESH_TTL_DAYS")) * 24 * time.Hour,
+		},
+		SessionTTL: time.Duration(viper.GetInt("SessionTTL_MIN")) * time.Minute,
+	}
+
+	log.Info("Auth-Service - Configuration loaded")
+	return nil
+}
+
+
+───────────── db.go ─────────────
+package config
+
+import (
+	"fmt"
+	"time"
+
+	"github.com/zerodayz7/platform/pkg/shared"
+	"github.com/zerodayz7/platform/services/auth-service/internal/features/auth/model"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+)
+
+func MustInitDB() (*gorm.DB, func()) {
+	log := shared.GetLogger()
+	cfg := AppConfig.Database
+
+	db, err := gorm.Open(postgres.Open(cfg.DSN), &gorm.Config{})
+	if err != nil {
+		panic(fmt.Errorf("failed to connect to database: %w", err))
+	}
+
+	sqlDB, err := db.DB()
+	if err != nil {
+		panic(fmt.Errorf("failed to get database instance: %w", err))
+	}
+
+	sqlDB.SetMaxOpenConns(cfg.MaxOpenConns)
+	sqlDB.SetMaxIdleConns(cfg.MaxIdleConns)
+	sqlDB.SetConnMaxLifetime(time.Duration(cfg.ConnMaxLifetime) * time.Minute)
+
+	if err := sqlDB.Ping(); err != nil {
+		panic(fmt.Errorf("database ping failed: %w", err))
+	}
+
+	// Migracje modeli
+	if err := db.AutoMigrate(
+		&model.User{},
+		&model.RefreshToken{},
+	); err != nil {
+		log.ErrorObj("Failed to migrate database", err)
+		panic(err)
+	}
+
+	log.Info("Successfully connected to PostgreSQL")
+	return db, func() { sqlDB.Close() }
+}
+
+
+───────────── container.go ─────────────
+// internal/di/container.go
+package di
+
+import (
+	authHandler "github.com/zerodayz7/platform/services/auth-service/internal/features/auth/handler"
+	userHandler "github.com/zerodayz7/platform/services/auth-service/internal/features/users/handler"
+
+	authService "github.com/zerodayz7/platform/services/auth-service/internal/features/auth/service"
+	userService "github.com/zerodayz7/platform/services/auth-service/internal/features/users/service"
+
+	refRepo "github.com/zerodayz7/platform/services/auth-service/internal/features/auth/repository/mysql"
+	userRepo "github.com/zerodayz7/platform/services/auth-service/internal/features/users/repository/mysql"
+
+	"gorm.io/gorm"
+)
+
+// Container przechowuje wszystkie zależności serwisów i handlerów
+type Container struct {
+	AuthHandler *authHandler.AuthHandler
+	UserHandler *userHandler.UserHandler
+}
+
+// NewContainer tworzy nowy kontener z wszystkimi zależnościami
+func NewContainer(db *gorm.DB) *Container {
+	// repozytorium użytkowników
+	userRepo := userRepo.NewUserRepository(db)
+	refreshRepo := refRepo.NewRefreshTokenRepository(db)
+	// serwisy
+	authSvc := authService.NewAuthService(userRepo, refreshRepo)
+	userSvc := userService.NewUserService(userRepo)
+
+	// handlery
+	return &Container{
+		AuthHandler: authHandler.NewAuthHandler(authSvc),
+		UserHandler: userHandler.NewUserHandler(userSvc),
+	}
+}
+
+
+───────────── auth_handler.go ─────────────
+package handler
+
+import (
+	"fmt"
+	"time"
+
+	"github.com/gofiber/fiber/v2"
+	"github.com/zerodayz7/platform/pkg/errors"
+	"github.com/zerodayz7/platform/pkg/shared"
+	"github.com/zerodayz7/platform/services/auth-service/config"
+	"github.com/zerodayz7/platform/services/auth-service/internal/features/auth/service"
+	"github.com/zerodayz7/platform/services/auth-service/internal/shared/security"
+	"github.com/zerodayz7/platform/services/auth-service/internal/validator"
+)
+
+type AuthHandler struct {
+	authService *service.AuthService
+}
+
+func NewAuthHandler(authService *service.AuthService) *AuthHandler {
+	return &AuthHandler{
+		authService: authService,
+	}
+}
+
+// LOGIN
+func (h *AuthHandler) Login(c *fiber.Ctx) error {
+	log := shared.GetLogger()
+	body := c.Locals("validatedBody").(validator.LoginRequest)
+
+	log.InfoObj("Login attempt", map[string]any{"email": body.Email})
+
+	user, err := h.authService.GetUserByEmail(body.Email)
+	if err != nil {
+		log.WarnObj("User not found", map[string]any{"email": body.Email})
+		return errors.SendAppError(c, errors.ErrInvalidCredentials)
+	}
+
+	valid, err := h.authService.VerifyPassword(user, body.Password)
+	if err != nil || !valid {
+		log.WarnObj("Invalid password", map[string]any{"userID": user.ID})
+		return errors.SendAppError(c, errors.ErrInvalidCredentials)
+	}
+
+	// 2FA
+	if user.TwoFactorEnabled && user.TwoFactorSecret != "" {
+		return c.JSON(fiber.Map{"2fa_required": true})
+	}
+
+	accessToken, err := security.GenerateAccessToken(fmt.Sprint(user.ID))
+	if err != nil {
+		log.ErrorObj("Failed to generate access token", err)
+		return errors.SendAppError(c, errors.ErrInternal)
+	}
+
+	refreshToken, err := h.authService.CreateRefreshToken(user.ID)
+	if err != nil {
+		log.ErrorObj("Failed to create refresh token", err)
+		return errors.SendAppError(c, errors.ErrInternal)
+	}
+
+	response := fiber.Map{
+		"2fa_required":  false,
+		"access_token":  accessToken,
+		"refresh_token": refreshToken.Token,
+		"expires_at":    refreshToken.ExpiresAt,
+	}
+
+	// logowanie odpowiedzi
+	log.InfoMap("Login response", response)
+
+	return c.JSON(response)
+}
+
+// REFRESH TOKEN
+func (h *AuthHandler) RefreshToken(c *fiber.Ctx) error {
+	body := c.Locals("validatedBody").(validator.RefreshTokenRequest)
+	accessTTL := config.AppConfig.JWT.AccessTTL
+	log := shared.GetLogger()
+
+	rt, err := h.authService.GetRefreshToken(body.RefreshToken)
+	if err != nil || rt.Revoked || rt.ExpiresAt.Before(time.Now()) {
+		log.WarnObj("Invalid refresh token", map[string]any{"token": body.RefreshToken})
+		return errors.SendAppError(c, errors.ErrInvalidToken)
+	}
+
+	accessToken, err := security.GenerateAccessToken(fmt.Sprint(rt.UserID))
+	if err != nil {
+		log.ErrorObj("Failed to generate access token", err)
+		return errors.SendAppError(c, errors.ErrInternal)
+	}
+
+	return c.JSON(fiber.Map{
+		"access_token": accessToken,
+		"expires_at":   time.Now().Add(accessTTL),
+	})
+}
+
+// LOGOUT
+func (h *AuthHandler) Logout(c *fiber.Ctx) error {
+	log := shared.GetLogger()
+	body := c.Locals("validatedBody").(validator.RefreshTokenRequest)
+
+	log.InfoObj("Logout attempt", map[string]any{"refresh_token": body.RefreshToken})
+
+	err := h.authService.RevokeRefreshToken(body.RefreshToken)
+	if err != nil {
+		log.ErrorObj("Failed to revoke refresh token", err)
+		return errors.SendAppError(c, errors.ErrInternal)
+	}
+
+	log.InfoObj("Logout successful", map[string]any{"refresh_token": body.RefreshToken})
+
+	return c.JSON(fiber.Map{
+		"message": "Logged out successfully",
+	})
+}
+
+// REGISTER
+func (h *AuthHandler) Register(c *fiber.Ctx) error {
+	body := c.Locals("validatedBody").(validator.RegisterRequest)
+
+	user, err := h.authService.Register(body.Username, body.Email, body.Password)
+	if err != nil {
+		if appErr, ok := err.(*errors.AppError); ok {
+			errors.AttachRequestMeta(c, appErr, "requestID")
+			return appErr
+		}
+		return errors.ErrInternal
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
+		"success": true,
+		"user":    user,
+	})
+}
+
+// OPTIONAL: Verify2FA jeśli używasz 2FA
+func (h *AuthHandler) Verify2FA(c *fiber.Ctx) error {
+	body := c.Locals("validatedBody").(validator.TwoFARequest)
+	userID, ok := c.Locals("userID").(uint)
+	if !ok {
+		return errors.SendAppError(c, errors.ErrUnauthorized)
+	}
+	ok, err := h.authService.Verify2FACodeByID(userID, body.Code)
+	if err != nil || !ok {
+		return errors.SendAppError(c, errors.ErrInvalid2FACode)
+	}
+	return c.JSON(fiber.Map{"message": "2FA verified successfully"})
+}
+
+
+───────────── refresh_token.go ─────────────
+package model
+
+import (
+	"time"
+)
+
+type RefreshToken struct {
+	ID        uint      `gorm:"primaryKey"`
+	UserID    uint      `gorm:"not null;index"`
+	Token     string    `gorm:"size:512;not null;uniqueIndex"`
+	ExpiresAt time.Time `gorm:"not null"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	Revoked   bool `gorm:"default:false"`
+}
+
+
+───────────── users.go ─────────────
+package model
+
+import (
+	"time"
+
+	"gorm.io/gorm"
+)
+
+type User struct {
+	ID               uint           `gorm:"primaryKey;autoIncrement"`
+	Username         string         `gorm:"size:30;not null;unique"`
+	Email            string         `gorm:"size:100;not null;unique"`
+	Password         string         `gorm:"size:128;not null"`
+	TwoFactorEnabled bool           `gorm:"not null;default:false"`
+	TwoFactorSecret  string         `gorm:"size:64"`
+	CreatedAt        time.Time      `gorm:"autoCreateTime"`
+	UpdatedAt        time.Time      `gorm:"autoUpdateTime"`
+	DeletedAt        gorm.DeletedAt `gorm:"index"`
+}
+
+
+───────────── refresh_token_mysql.go ─────────────
+package mysql
+
+import (
+	"time"
+
+	"github.com/zerodayz7/platform/services/auth-service/internal/features/auth/model"
+	"gorm.io/gorm"
+)
+
+type RefreshTokenRepository struct {
+	DB *gorm.DB
+}
+
+func NewRefreshTokenRepository(db *gorm.DB) *RefreshTokenRepository {
+	return &RefreshTokenRepository{DB: db}
+}
+
+func (r *RefreshTokenRepository) Save(userID uint, token string, duration time.Duration) error {
+	rt := model.RefreshToken{
+		UserID:    userID,
+		Token:     token,
+		ExpiresAt: time.Now().Add(duration),
+	}
+	return r.DB.Create(&rt).Error
+}
+
+func (r *RefreshTokenRepository) Get(token string) (*model.RefreshToken, error) {
+	var rt model.RefreshToken
+	err := r.DB.Where("token = ? AND revoked = false AND expires_at > ?", token, time.Now()).First(&rt).Error
+	if err != nil {
+		return nil, err
+	}
+	return &rt, nil
+}
+
+func (r *RefreshTokenRepository) Revoke(token string) error {
+	return r.DB.Model(&model.RefreshToken{}).Where("token = ?", token).Update("revoked", true).Error
+}
+
+// GetByToken zwraca refresh token niezależnie od revokacji lub daty wygaśnięcia
+func (r *RefreshTokenRepository) GetByToken(token string) (*model.RefreshToken, error) {
+	var rt model.RefreshToken
+	err := r.DB.Where("token = ?", token).First(&rt).Error
+	if err != nil {
+		return nil, err
+	}
+	return &rt, nil
+}
+
+// Update zapisuje zmiany w refresh tokenie
+func (r *RefreshTokenRepository) Update(rt *model.RefreshToken) error {
+	return r.DB.Save(rt).Error
+}
+
+
+───────────── refresh_token_repository.go ─────────────
+package repository
+
+import (
+	"time"
+
+	"github.com/zerodayz7/platform/services/auth-service/internal/features/auth/model"
+)
+
+type RefreshTokenRepository interface {
+	Save(userID uint, token string, duration time.Duration) error
+	Get(token string) (*model.RefreshToken, error)
+	Revoke(token string) error
+	GetByToken(token string) (*model.RefreshToken, error)
+	Update(rt *model.RefreshToken) error
+}
+
+
+───────────── routes.go ─────────────
+package router
+
+import (
+	"github.com/gofiber/fiber/v2"
+	"github.com/zerodayz7/platform/pkg/shared"
+	"github.com/zerodayz7/platform/services/auth-service/internal/features/auth/handler"
+	"github.com/zerodayz7/platform/services/auth-service/internal/middleware"
+	"github.com/zerodayz7/platform/services/auth-service/internal/validator"
+)
+
+func SetupAuthRoutes(app *fiber.App, h *handler.AuthHandler) {
+	auth := app.Group("/auth")
+	auth.Use(shared.NewLimiter("auth"))
+
+	auth.Post("/login",
+		middleware.ValidateBody[validator.LoginRequest](),
+		h.Login,
+	)
+
+	auth.Post("/2fa-verify",
+		middleware.ValidateBody[validator.TwoFARequest](),
+		h.Verify2FA)
+
+	auth.Post("/register",
+		middleware.ValidateBody[validator.RegisterRequest](),
+		h.Register,
+	)
+	// ==========================
+	// JWT-specific routes
+	// ==========================
+
+	// Endpoint do odświeżania Access Token
+	auth.Post("/refresh",
+		middleware.ValidateBody[validator.RefreshTokenRequest](),
+		h.RefreshToken,
+	)
+
+	// Opcjonalnie endpoint do wylogowania (unieważnienia Refresh Token)
+	auth.Post("/logout",
+		middleware.ValidateBody[validator.RefreshTokenRequest](),
+		h.Logout,
+	)
+}
+
+
+───────────── auth_service.go ─────────────
+package service
+
+import (
+	"fmt"
+	"time"
+
+	"github.com/zerodayz7/platform/pkg/errors"
+	"github.com/zerodayz7/platform/services/auth-service/config"
+	authModel "github.com/zerodayz7/platform/services/auth-service/internal/features/auth/model"
+	authRepo "github.com/zerodayz7/platform/services/auth-service/internal/features/auth/repository"
+	"github.com/zerodayz7/platform/services/auth-service/internal/features/users/model"
+	userRepo "github.com/zerodayz7/platform/services/auth-service/internal/features/users/repository"
+
+	"github.com/zerodayz7/platform/pkg/shared"
+	"github.com/zerodayz7/platform/services/auth-service/internal/shared/security"
+)
+
+type AuthService struct {
+	repo        userRepo.UserRepository
+	refreshRepo authRepo.RefreshTokenRepository
+}
+
+func NewAuthService(repo userRepo.UserRepository, refreshRepo authRepo.RefreshTokenRepository) *AuthService {
+	return &AuthService{
+		repo:        repo,
+		refreshRepo: refreshRepo,
+	}
+}
+
+func (s *AuthService) CreateRefreshToken(userID uint) (*authModel.RefreshToken, error) {
+	refreshTTL := config.AppConfig.JWT.RefreshTTL
+
+	token, err := security.GenerateRefreshToken()
+	if err != nil {
+		return nil, err
+	}
+
+	rt := &authModel.RefreshToken{
+		UserID:    userID,
+		Token:     token,
+		Revoked:   false,
+		CreatedAt: time.Now(),
+		ExpiresAt: time.Now().Add(refreshTTL),
+	}
+
+	if err := s.refreshRepo.Save(userID, token, refreshTTL); err != nil {
+		return nil, err
+	}
+
+	return rt, nil
+}
+
+func (s *AuthService) GetRefreshToken(token string) (*authModel.RefreshToken, error) {
+	return s.refreshRepo.GetByToken(token)
+}
+
+func (s *AuthService) RevokeRefreshToken(token string) error {
+	rt, err := s.refreshRepo.GetByToken(token)
+	if err != nil {
+		return err
+	}
+	rt.Revoked = true
+	return s.refreshRepo.Update(rt)
+}
+
+func (s *AuthService) IsEmailExists(email string) (bool, error) {
+	log := shared.GetLogger()
+	log.DebugMap("IsEmailExists", map[string]any{"email": email})
+
+	exists, err := s.repo.EmailExists(email)
+	if err != nil {
+		log.ErrorMap("repo.EmailExists failed", map[string]any{"error": err.Error()})
+		return false, err
+	}
+	return exists, nil
+}
+
+func (s *AuthService) IsUsernameExists(username string) (bool, error) {
+	log := shared.GetLogger()
+	log.DebugMap("IsUsernameExists", map[string]any{"username": username})
+
+	exists, err := s.repo.UsernameExists(username)
+	if err != nil {
+		log.ErrorMap("repo.UsernameExists failed", map[string]any{"error": err.Error()})
+		return false, err
+	}
+	return exists, nil
+}
+
+func (s *AuthService) IsEmailOrUsernameExists(email, username string) (bool, bool, error) {
+	existsEmail, existsUsername, err := s.repo.EmailOrUsernameExists(email, username)
+	if err != nil {
+		log := shared.GetLogger()
+		log.ErrorMap("repo.EmailOrUsernameExists failed", map[string]any{"error": err.Error()})
+		return false, false, err
+	}
+	return existsEmail, existsUsername, nil
+}
+
+func (s *AuthService) GetUserByEmail(email string) (*model.User, error) {
+	u, err := s.repo.GetByEmail(email)
+	if err != nil {
+		return nil, err
+	}
+	if u == nil {
+		return nil, errors.ErrUserNotFound
+	}
+	return u, nil
+}
+
+func (s *AuthService) VerifyPassword(user *model.User, password string) (bool, error) {
+	return security.VerifyPassword(password, user.Password)
+}
+
+func (s *AuthService) Verify2FACodeByID(userID uint, code string) (bool, error) {
+	log := shared.GetLogger()
+	log.DebugMap("Verify2FACodeByID", map[string]any{"userID": userID})
+
+	u, err := s.repo.GetByID(userID)
+	if err != nil {
+		log.ErrorMap("GetByID failed", map[string]any{"error": err.Error()})
+		return false, err
+	}
+	if !u.TwoFactorEnabled {
+		log.WarnMap("2FA not enabled", map[string]any{"userID": userID})
+		return false, nil
+	}
+
+	return code == u.TwoFactorSecret, nil
+}
+
+func (s *AuthService) Register(username, email, rawPassword string) (*model.User, error) {
+	log := shared.GetLogger()
+	log.DebugMap("Register attempt", map[string]any{"email": email, "username": username})
+
+	emailExists, usernameExists, err := s.repo.EmailOrUsernameExists(email, username)
+	if err != nil {
+		log.ErrorMap("EmailOrUsernameExists failed", map[string]any{"error": err.Error()})
+		return nil, fmt.Errorf("checking email/username existence: %w", err)
+	}
+
+	if emailExists {
+		log.WarnMap("Email already registered", map[string]any{"email": email})
+		return nil, errors.ErrEmailExists
+	}
+	if usernameExists {
+		log.WarnMap("Username already exists", map[string]any{"username": username})
+		return nil, errors.ErrUsernameExists
+	}
+
+	hash, err := security.HashPassword(rawPassword)
+	if err != nil {
+		log.ErrorMap("Password hashing failed", map[string]any{"error": err.Error()})
+		return nil, fmt.Errorf("hashing password: %w", err)
+	}
+
+	u := &model.User{
+		Username: username,
+		Email:    email,
+		Password: hash,
+	}
+
+	if err := s.repo.CreateUser(u); err != nil {
+		log.ErrorMap("CreateUser failed", map[string]any{"error": err.Error()})
+		return nil, fmt.Errorf("creating user: %w", err)
+	}
+
+	log.InfoMap("User registered successfully", map[string]any{"email": email, "username": username})
+	return u, nil
+}
+
+
+───────────── validator.go ─────────────
+package validator
+
+import (
+	"github.com/zerodayz7/platform/services/auth-service/internal/middleware"
+)
+
+type RegisterRequest struct {
+	Username string `json:"username" validate:"required,alphanum,min=3,max=30"`
+	Email    string `json:"email" validate:"required,email"`
+	Password string `json:"password" validate:"required,passwd"`
+}
+
+type LoginRequest struct {
+	Email    string `json:"email" validate:"required,email"`
+	Password string `json:"password" validate:"required,passwd"`
+}
+
+type TwoFARequest struct {
+	Code string `json:"code" validate:"required,len=6,numeric"`
+}
+
+// ===== JWT Refresh =====
+type RefreshTokenRequest struct {
+	RefreshToken string `json:"refresh_token" validate:"required"`
+}
+
+// ===== Helpers =====
+func ValidateStruct(s any) map[string]string {
+	return middleware.ValidateStruct(s)
+}
+
+
+───────────── user_handler.go ─────────────
+package handler
+
+import "github.com/zerodayz7/platform/services/auth-service/internal/features/users/service"
+
+type UserHandler struct {
+	userService *service.UserService
+}
+
+func NewUserHandler(userService *service.UserService) *UserHandler {
+	return &UserHandler{userService: userService}
+}
+
+
+───────────── user.go ─────────────
+package model
+
+import "time"
+
+type User struct {
+	ID               uint      `gorm:"primaryKey" json:"id"`
+	Username         string    `gorm:"size:100;not null" json:"username"`
+	Email            string    `gorm:"size:255;uniqueIndex;not null" json:"email"`
+	Password         string    `gorm:"size:255;not null" json:"-"`
+	TwoFactorEnabled bool      `gorm:"default:false" json:"two_factor_enabled"`
+	TwoFactorSecret  string    `gorm:"size:255" json:"-"`
+	CreatedAt        time.Time `gorm:"autoCreateTime" json:"created_at"`
+}
+
+
+───────────── mysql.go ─────────────
+package mysql
+
+import (
+	"errors"
+
+	"github.com/zerodayz7/platform/services/auth-service/internal/features/users/model"
+	"github.com/zerodayz7/platform/services/auth-service/internal/features/users/repository"
+	"gorm.io/gorm"
+)
+
+var _ repository.UserRepository = (*MySQLUserRepo)(nil)
+
+type MySQLUserRepo struct {
+	db *gorm.DB
+}
+
+func NewUserRepository(db *gorm.DB) *MySQLUserRepo {
+	return &MySQLUserRepo{db: db}
+}
+
+func (r *MySQLUserRepo) CreateUser(user *model.User) error {
+	return r.db.Create(user).Error
+}
+
+func (r *MySQLUserRepo) GetByID(id uint) (*model.User, error) {
+	var u model.User
+	if err := r.db.First(&u, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &u, nil
+}
+
+func (r *MySQLUserRepo) GetByEmail(email string) (*model.User, error) {
+	var u model.User
+	if err := r.db.Where("email = ?", email).First(&u).Error; err != nil {
+		return nil, err
+	}
+	return &u, nil
+}
+
+func (r *MySQLUserRepo) EmailExists(email string) (bool, error) {
+	var count int64
+	if err := r.db.Model(&model.User{}).Where("email = ?", email).Count(&count).Error; err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+func (r *MySQLUserRepo) UsernameExists(username string) (bool, error) {
+	var count int64
+	if err := r.db.Model(&model.User{}).Where("username = ?", username).Count(&count).Error; err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+func (r *MySQLUserRepo) EmailOrUsernameExists(email, username string) (emailExists, usernameExists bool, err error) {
+	var users []model.User
+	if err := r.db.Where("email = ? OR username = ?", email, username).Find(&users).Error; err != nil {
+		return false, false, err
+	}
+
+	for _, u := range users {
+		if u.Email == email {
+			emailExists = true
+		}
+		if u.Username == username {
+			usernameExists = true
+		}
+	}
+	return
+}
+
+
+───────────── repository.go ─────────────
+package repository
+
+import "github.com/zerodayz7/platform/services/auth-service/internal/features/users/model"
+
+type UserRepository interface {
+	CreateUser(*model.User) error
+	GetByID(uint) (*model.User, error)
+	GetByEmail(string) (*model.User, error)
+	EmailExists(string) (bool, error)
+	UsernameExists(string) (bool, error)
+	EmailOrUsernameExists(email, username string) (bool, bool, error)
+}
+
+
+───────────── routes.go ─────────────
+package router
+
+import (
+	"github.com/gofiber/fiber/v2"
+	// "github.com/gofiber/fiber/v2/middleware/csrf"
+	"github.com/zerodayz7/platform/pkg/shared"
+	"github.com/zerodayz7/platform/services/auth-service/internal/features/users/handler"
+)
+
+func SetupUserRoutes(app *fiber.App, h *handler.UserHandler) {
+	users := app.Group("/users")
+	protected := users.Group("/")
+	protected.Use(shared.NewLimiter("users"))
+
+	// Test sesji – handler pobiera sesję z c.Locals("session")
+
+	// Middleware CSRF dla wybranych endpointów
+	// csrfProtected := protected.Group("/")
+	// csrfProtected.Use(csrf.New(config.NewCSRFConfig(config.SessionStore().Storage)))
+
+	// Test CSRF – handler pobiera token z c.Locals("csrf")
+	// csrfProtected.Post("/test-csrf", h.TestCSRF)
+
+	// Przykładowe routy użytkownika
+	// protected.Get("/me", h.GetProfile)
+	// protected.Post("/update", h.UpdateProfile)
+}
+
+
+───────────── user_service.go ─────────────
+package service
+
+import "github.com/zerodayz7/platform/services/auth-service/internal/features/users/repository"
+
+type UserService struct {
+	repo repository.UserRepository
+}
+
+func NewUserService(repo repository.UserRepository) *UserService {
+	return &UserService{repo: repo}
+}
+
+// Tutaj później dodasz metody do zarządzania użytkownikami
+
+
+───────────── validate.go ─────────────
+package middleware
+
+import (
+	"strings"
+
+	"github.com/go-playground/validator/v10"
+)
+
+var validate = validator.New()
+
+func init() {
+	validate.RegisterValidation("passwd", func(fl validator.FieldLevel) bool {
+		pw := fl.Field().String()
+
+		if len(pw) < 8 {
+			return false
+		}
+
+		var hasUpper, hasLower, hasDigit, hasSpecial bool
+		for _, c := range pw {
+			switch {
+			case 'A' <= c && c <= 'Z':
+				hasUpper = true
+			case 'a' <= c && c <= 'z':
+				hasLower = true
+			case '0' <= c && c <= '9':
+				hasDigit = true
+			case strings.ContainsRune("!@#$%^&*()-_=+[]{}|;:,.<>/?~`", c):
+				hasSpecial = true
+			}
+
+			if hasUpper && hasLower && hasDigit && hasSpecial {
+				break
+			}
+		}
+
+		return hasUpper && hasLower && hasDigit && hasSpecial
+	})
+}
+
+func ValidateStruct(s any) map[string]string {
+	errs := make(map[string]string)
+	if err := validate.Struct(s); err != nil {
+		for _, e := range err.(validator.ValidationErrors) {
+			errs[e.Field()] = e.Tag()
+		}
+	}
+	return errs
+}
+
+// ValidateStruct validates any struct using the global `validator` instance.
+// By default, it returns a map of field names to validation tags (e.g., "required", "passwd").
+// If you prefer human-readable error messages, you can use the commented-out version below,
+// which maps validation tags to descriptive messages for each field.
+// You can choose either approach depending on your use case.
+
+//  var errorMessages = map[string]string{
+// 	"required": "This field is required",
+// 	"min":      "Minimum length not met",
+// 	"alphanum": "Can only contain letters and numbers",
+// 	"email":    "Invalid email address",
+// 	"passwd":   "Password must be at least 8 chars, include uppercase, lowercase, number and special character",
+// }
+
+// func ValidateStruct(s any) map[string]string {
+// 	errs := make(map[string]string)
+// 	if err := validate.Struct(s); err != nil {
+// 		for _, e := range err.(validator.ValidationErrors) {
+// 			msg, ok := errorMessages[e.Tag()]
+// 			if !ok {
+// 				msg = e.Error()
+// 			}
+// 			errs[e.Field()] = msg
+// 		}
+// 	}
+// 	if len(errs) > 0 {
+// 		return errs
+// 	}
+// 	return nil
+// }
+
+
+───────────── validate_body.go ─────────────
+package middleware
+
+import (
+	"github.com/gofiber/fiber/v2"
+	"github.com/zerodayz7/platform/pkg/errors"
+)
+
+func ValidateBody[T any]() fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		var body T
+		if err := c.BodyParser(&body); err != nil {
+			return errors.SendAppError(c, errors.ErrInvalidJSON)
+		}
+
+		if errs := ValidateStruct(body); len(errs) > 0 {
+
+			meta := make(map[string]any)
+			for k, v := range errs {
+				meta[k] = v
+			}
+
+			appErr := errors.ErrValidationFailed
+			appErr.Meta = meta
+			return errors.SendAppError(c, appErr)
+		}
+
+		c.Locals("validatedBody", body)
+		return c.Next()
+	}
+}
+
+
+───────────── validate_params.go ─────────────
+package middleware
+
+import (
+	"github.com/gofiber/fiber/v2"
+)
+
+func ValidateParams[T any]() fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		params := new(T)
+		if err := c.ParamsParser(params); err != nil {
+			return fiber.NewError(fiber.StatusBadRequest, "INVALID_PARAMS")
+		}
+
+		if errs := ValidateStruct(params); len(errs) > 0 {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"code":   "VALIDATION_FAILED",
+				"errors": errs,
+			})
+		}
+
+		c.Locals("validatedParams", params)
+		return c.Next()
+	}
+}
+
+
+───────────── validate_query.go ─────────────
+package middleware
+
+import (
+	"github.com/gofiber/fiber/v2"
+)
+
+func ValidateQuery[T any]() fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		query := new(T)
+		if err := c.QueryParser(query); err != nil {
+			return fiber.NewError(fiber.StatusBadRequest, "INVALID_QUERY")
+		}
+
+		if errs := ValidateStruct(query); len(errs) > 0 {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"code":   "VALIDATION_FAILED",
+				"errors": errs,
+			})
+		}
+
+		c.Locals("validatedQuery", query)
+		return c.Next()
+	}
+}
+
+
+───────────── fallback.go ─────────────
+package router
+
+import (
+	"github.com/gofiber/fiber/v2"
+	"github.com/zerodayz7/platform/pkg/shared"
+)
+
+func SetupFallbackHandlers(app *fiber.App) {
+	app.Get("/favicon.ico", func(c *fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusNoContent)
+	})
+
+	app.Use(func(c *fiber.Ctx) error {
+		shared.GetLogger().WarnMap("404 - not found", map[string]any{
+			"path":   c.Path(),
+			"method": c.Method(),
+		})
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Not found",
+		})
+	})
+}
+
+
+───────────── health_routes.go ─────────────
+package router
+
+import (
+	"time"
+
+	"github.com/gofiber/fiber/v2"
+	"github.com/zerodayz7/platform/pkg/shared"
+)
+
+func SetupHealthRoutes(app *fiber.App) {
+	health := app.Group("/health")
+
+	health.Use(shared.NewLimiter("health"))
+
+	// GET /health
+	health.Get("/", func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{
+			"status": "ok",
+			"time":   time.Now().Format("2006-01-02 15:04:05"),
+		})
+	})
+}
+
+
+───────────── routes.go ─────────────
+package router
+
+import (
+	authRoutes "github.com/zerodayz7/platform/services/auth-service/internal/features/auth/router"
+	userRoutes "github.com/zerodayz7/platform/services/auth-service/internal/features/users/router"
+
+	authHandler "github.com/zerodayz7/platform/services/auth-service/internal/features/auth/handler"
+	userHandler "github.com/zerodayz7/platform/services/auth-service/internal/features/users/handler"
+
+	"github.com/gofiber/fiber/v2"
+)
+
+func SetupRoutes(
+	app *fiber.App,
+	authH *authHandler.AuthHandler,
+	userH *userHandler.UserHandler,
+) {
+	SetupHealthRoutes(app)
+	authRoutes.SetupAuthRoutes(app, authH)
+	userRoutes.SetupUserRoutes(app, userH)
+	SetupFallbackHandlers(app)
+}
+
+
+───────────── errors.go ─────────────
+package server
+
+import (
+	stdErrors "errors"
+
+	"github.com/gofiber/fiber/v2"
+	apperrors "github.com/zerodayz7/platform/pkg/errors"
+	"github.com/zerodayz7/platform/pkg/shared"
+)
+
+func ErrorHandler() fiber.ErrorHandler {
+	log := shared.GetLogger()
+	return func(c *fiber.Ctx, err error) error {
+		var appErr *apperrors.AppError
+		if stdErrors.As(err, &appErr) {
+			status := fiber.StatusBadRequest
+			if appErr.Type == apperrors.Internal {
+				status = fiber.StatusInternalServerError
+			}
+
+			logMap := map[string]any{
+				"code": appErr.Code,
+			}
+			if appErr.Meta != nil {
+				logMap["meta"] = appErr.Meta
+			}
+			if appErr.Err != nil {
+				logMap["error"] = appErr.Err.Error()
+				log.ErrorMap("AppError occurred", logMap)
+			} else {
+				log.WarnMap("AppError occurred", logMap)
+			}
+
+			response := fiber.Map{
+				"code":    appErr.Code,
+				"message": appErr.Message,
+			}
+			if len(appErr.Meta) > 0 {
+				response["meta"] = appErr.Meta
+			}
+
+			return c.Status(status).JSON(response)
+		}
+
+		if e, ok := err.(*fiber.Error); ok {
+			log.ErrorMap("HTTP error", map[string]any{
+				"error": e.Error(),
+			})
+			return c.Status(e.Code).JSON(fiber.Map{"error": e.Message})
+		}
+
+		log.ErrorMap("Server error", map[string]any{
+			"error": err.Error(),
+		})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Internal server error",
+		})
+	}
+}
+
+
+───────────── server.go ─────────────
+// internal/server/server.go
+package server
+
+import (
+	"github.com/gofiber/fiber/v2"
+	"github.com/zerodayz7/platform/services/auth-service/config"
+)
+
+func New(cfg config.Config) *fiber.App {
+	return fiber.New(fiber.Config{
+		AppName:       cfg.Server.AppName,
+		ServerHeader:  cfg.Server.ServerHeader,
+		Prefork:       cfg.Server.Prefork,
+		CaseSensitive: cfg.Server.CaseSensitive,
+		StrictRouting: cfg.Server.StrictRouting,
+		IdleTimeout:   cfg.Server.IdleTimeout,
+		ReadTimeout:   cfg.Server.ReadTimeout,
+		WriteTimeout:  cfg.Server.WriteTimeout,
+		ErrorHandler:  ErrorHandler(),
+	})
+}
+
+
+───────────── shutdown.go ─────────────
+package server
+
+import (
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/gofiber/fiber/v2"
+	"github.com/zerodayz7/platform/pkg/shared"
+)
+
+func SetupGracefulShutdown(app *fiber.App, closeDB func(), timeout time.Duration) {
+	shutdown := make(chan os.Signal, 1)
+	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		<-shutdown
+		log := shared.GetLogger()
+		log.Info("Shutting down server gracefully...")
+
+		if err := app.Shutdown(); err != nil {
+			log.Error("Server shutdown failed: " + err.Error())
+		}
+
+		if closeDB != nil {
+			closeDB()
+		}
+
+		log.Info("Server stopped")
+		os.Exit(0)
+	}()
+}
+
+
+───────────── jwt.go ─────────────
+package security
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/base64"
+	"errors"
+	"time"
+
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/zerodayz7/platform/pkg/shared"
+	"github.com/zerodayz7/platform/services/auth-service/config"
+)
+
+// ------------------- ACCESS TOKEN (JWT) -------------------
+
+func GenerateAccessToken(userID string) (string, error) {
+	rdb := config.NewRedisClient()
+	ctx := context.Background()
+
+	var sessionID string
+
+	for {
+		sessionID = shared.GenerateUuid()
+
+		exists, err := rdb.Exists(ctx, sessionID).Result()
+		if err != nil {
+			return "", err
+		}
+		if exists == 0 {
+			break
+		}
+	}
+
+	err := rdb.Set(ctx, "session:"+sessionID, userID, config.AppConfig.SessionTTL).Err()
+
+	if err != nil {
+		return "", err
+	}
+
+	claims := jwt.MapClaims{
+		"sid": sessionID,
+		"exp": jwt.NewNumericDate(time.Now().Add(config.AppConfig.JWT.AccessTTL)),
+		"iat": jwt.NewNumericDate(time.Now()),
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	signedToken, err := token.SignedString([]byte(config.AppConfig.JWT.AccessSecret))
+	if err != nil {
+		return "", err
+	}
+
+	return signedToken, nil
+}
+
+func ValidateAccessToken(tokenString string) (*jwt.Token, error) {
+	return jwt.Parse(tokenString, func(token *jwt.Token) (any, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, errors.New("unexpected signing method")
+		}
+		return []byte(config.AppConfig.JWT.AccessSecret), nil
+	})
+}
+
+// ------------------- REFRESH TOKEN (LOSOWY) -------------------
+
+func GenerateRandomToken(length int) (string, error) {
+	b := make([]byte, length)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return base64.URLEncoding.WithPadding(base64.NoPadding).EncodeToString(b), nil
+}
+
+func GenerateRefreshToken() (string, error) {
+	return GenerateRandomToken(64)
+}
+
+
+───────────── password.go ─────────────
+package security
+
+import (
+	"crypto/rand"
+	"crypto/subtle"
+	"encoding/base64"
+	"errors"
+	"strings"
+
+	"golang.org/x/crypto/argon2"
+)
+
+const (
+	memory      = 64 * 1024
+	iterations  = 3
+	parallelism = 2
+	saltLength  = 16
+	keyLength   = 32
+)
+
+// HashPassword generates a salted Argon2id hash of the password
+func HashPassword(password string) (string, error) {
+	salt := make([]byte, saltLength)
+	if _, err := rand.Read(salt); err != nil {
+		return "", err
+	}
+
+	hash := argon2.IDKey([]byte(password), salt, iterations, memory, parallelism, keyLength)
+	encodedSalt := base64.RawStdEncoding.EncodeToString(salt)
+	encodedHash := base64.RawStdEncoding.EncodeToString(hash)
+	return encodedSalt + "$" + encodedHash, nil
+}
+
+// VerifyPassword compares password with encoded Argon2id hash
+func VerifyPassword(password, encoded string) (bool, error) {
+	parts := strings.Split(encoded, "$")
+	if len(parts) != 2 {
+		return false, errors.New("incorrect password format in the database")
+	}
+
+	salt, err := base64.RawStdEncoding.DecodeString(parts[0])
+	if err != nil {
+		return false, err
+	}
+	hash, err := base64.RawStdEncoding.DecodeString(parts[1])
+	if err != nil {
+		return false, err
+	}
+
+	computedHash := argon2.IDKey([]byte(password), salt, iterations, memory, parallelism, keyLength)
+	isValid := subtle.ConstantTimeCompare(hash, computedHash) == 1
+	return isValid, nil
+}
+
+
+───────────── validator.go ─────────────
+package validator
+
+import (
+	"github.com/zerodayz7/platform/services/auth-service/internal/middleware"
+)
+
+type RegisterRequest struct {
+	Username string `json:"username" validate:"required,alphanum,min=3,max=30"`
+	Email    string `json:"email" validate:"required,email"`
+	Password string `json:"password" validate:"required,passwd"`
+}
+
+type LoginRequest struct {
+	Email    string `json:"email" validate:"required,email"`
+	Password string `json:"password" validate:"required,passwd"`
+}
+
+type TwoFARequest struct {
+	Code string `json:"code" validate:"required,len=6,numeric"`
+}
+
+// ===== JWT Refresh =====
+type RefreshTokenRequest struct {
+	RefreshToken string `json:"refresh_token" validate:"required"`
+}
+
+// ===== Helpers =====
+func ValidateStruct(s any) map[string]string {
+	return middleware.ValidateStruct(s)
+}
+
+
+───────────── main.go ─────────────
+package main
+
+import (
+	"os"
+
+	"github.com/zerodayz7/platform/pkg/shared"
+
+	"github.com/zerodayz7/platform/services/citizen-docs/config"
+	"github.com/zerodayz7/platform/services/citizen-docs/internal/di"
+	"github.com/zerodayz7/platform/services/citizen-docs/internal/router"
+	"github.com/zerodayz7/platform/services/citizen-docs/internal/server"
+)
+
+func main() {
+	// Inicjalizacja loggera
+	log := shared.InitLogger(os.Getenv("ENV"))
+
+	// Config
+	if err := config.LoadConfigGlobal(); err != nil {
+		log.ErrorObj("Config load failed", err)
+		return
+	}
+
+	// DB
+	db, closeDB := config.MustInitDB()
+	defer closeDB()
+
+	// Dependency Injection
+	container := di.NewContainer(db)
+
+	// Fiber app
+	app := config.NewDocsApp()
+
+	// Routes
+	router.SetupDocsRoutes(app, container.UserDocumentSvc)
+
+	// Graceful shutdown
+	server.SetupGracefulShutdown(app, closeDB, config.AppConfig.Shutdown)
+
+	// Log start
+	address := "0.0.0.0:" + config.AppConfig.Server.Port
+	log.InfoObj("Citizen-Docs Microservice listening", map[string]any{"address": address})
+
+	// Start serwera
+	if err := app.Listen(address); err != nil {
+		log.ErrorObj("Failed to start server", err)
+	}
+}
+
+
+───────────── app.go ─────────────
+package config
+
+import (
+	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/recover"
+	"github.com/gofiber/fiber/v2/middleware/requestid"
+	"github.com/zerodayz7/platform/pkg/shared"
+)
+
+// NewDocsApp tworzy lekką instancję Fiber dla serwisu Docs / Citizen
+func NewDocsApp() *fiber.App {
+	cfg := AppConfig.Server
+
+	app := fiber.New(fiber.Config{
+		ServerHeader:          cfg.ServerHeader,
+		BodyLimit:             cfg.BodyLimitMB * 1024 * 1024,
+		ReadTimeout:           cfg.ReadTimeout,
+		WriteTimeout:          cfg.WriteTimeout,
+		IdleTimeout:           cfg.IdleTimeout,
+		DisableStartupMessage: true,
+		EnableIPValidation:    true,
+		TrustedProxies:        []string{"127.0.0.1", "::1"},
+	})
+
+	// Middleware podstawowe
+	app.Use(requestid.New())
+	app.Use(recover.New())
+	app.Use(shared.FiberLoggerMiddleware())
+	app.Use(shared.NewLimiter("global"))
+	app.Use(shared.RequestLoggerMiddleware())
+
+	return app
+}
+
+
+───────────── config.go ─────────────
+package config
+
+import (
+	"fmt"
+	"time"
+
+	"github.com/gofiber/fiber/v2/middleware/session"
+	"github.com/spf13/viper"
+	"github.com/zerodayz7/platform/pkg/shared"
+)
+
+type ServerConfig struct {
+	AppName       string
+	Port          string
+	BodyLimitMB   int
+	Env           string
+	AppVersion    string
+	ServerHeader  string
+	Prefork       bool
+	CaseSensitive bool
+	StrictRouting bool
+	IdleTimeout   time.Duration
+	ReadTimeout   time.Duration
+	WriteTimeout  time.Duration
+}
+
+type DBConfig struct {
+	DSN             string
+	MaxOpenConns    int
+	MaxIdleConns    int
+	ConnMaxLifetime time.Duration
+}
+
+type RateLimitConfig struct {
+	Max    int
+	Window time.Duration
+}
+
+type Config struct {
+	Server     ServerConfig
+	Database   DBConfig
+	RateLimit  RateLimitConfig
+	CORSAllow  string
+	Shutdown   time.Duration
+	JWT        JWTConfig
+	SessionTTL time.Duration
+}
+
+type JWTConfig struct {
+	AccessSecret  string
+	RefreshSecret string
+	AccessTTL     time.Duration
+	RefreshTTL    time.Duration
+}
+
+var AppConfig Config
+var Store *session.Store
+
+func LoadConfigGlobal() error {
+	log := shared.GetLogger()
+
+	viper.SetConfigFile(".env")
+	viper.AutomaticEnv()
+	viper.SetDefault("APP_NAME", "http-server")
+	viper.SetDefault("PORT", "8080")
+	viper.SetDefault("APP_VERSION", "0.1.0")
+	viper.SetDefault("ENV", "development")
+	viper.SetDefault("SERVER_HEADER", "ZeroDayZ7")
+	viper.SetDefault("PREFORK", false)
+	viper.SetDefault("CASE_SENSITIVE", true)
+	viper.SetDefault("STRICT_ROUTING", true)
+	viper.SetDefault("IDLE_TIMEOUT_SEC", 30)
+	viper.SetDefault("READ_TIMEOUT_SEC", 15)
+	viper.SetDefault("WRITE_TIMEOUT_SEC", 15)
+	viper.SetDefault("DB_MAX_OPEN_CONNS", 50)
+	viper.SetDefault("DB_MAX_IDLE_CONNS", 10)
+	viper.SetDefault("DB_CONN_MAX_LIFETIME_MIN", 30)
+
+	// Redis defaults
+	viper.SetDefault("REDIS_HOST", "127.0.0.1")
+	viper.SetDefault("REDIS_PORT", "6379")
+	viper.SetDefault("REDIS_PASSWORD", "")
+	viper.SetDefault("REDIS_DB", 0)
+
+	// Rate limiting
+	viper.SetDefault("RATE_LIMIT_MAX", 100)
+	viper.SetDefault("RATE_LIMIT_WINDOW_SEC", 60)
+
+	// Shutdown
+	viper.SetDefault("SHUTDOWN_TIMEOUT_SEC", 5)
+
+	// JWT
+	viper.SetDefault("JWT_ACCESS_SECRET", "super_access_secret_123")
+	viper.SetDefault("JWT_REFRESH_SECRET", "super_refresh_secret_123")
+	viper.SetDefault("JWT_ACCESS_TTL_MIN", 15)
+	viper.SetDefault("JWT_REFRESH_TTL_DAYS", 7)
+
+	// Session TTL (dla Redis sesji)
+	viper.SetDefault("SessionTTL_MIN", 15)
+
+	if err := viper.ReadInConfig(); err != nil {
+		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+			log.ErrorObj("Error loading .env", err)
+			return fmt.Errorf("error loading .env: %v", err)
+		}
+	}
+
+	AppConfig = Config{
+		Server: ServerConfig{
+			AppName:       viper.GetString("APP_NAME"),
+			Port:          viper.GetString("PORT"),
+			AppVersion:    viper.GetString("APP_VERSION"),
+			Env:           viper.GetString("ENV"),
+			ServerHeader:  viper.GetString("SERVER_HEADER"),
+			Prefork:       viper.GetBool("PREFORK"),
+			CaseSensitive: viper.GetBool("CASE_SENSITIVE"),
+			StrictRouting: viper.GetBool("STRICT_ROUTING"),
+			IdleTimeout:   time.Duration(viper.GetInt("IDLE_TIMEOUT_SEC")) * time.Second,
+			ReadTimeout:   time.Duration(viper.GetInt("READ_TIMEOUT_SEC")) * time.Second,
+			WriteTimeout:  time.Duration(viper.GetInt("WRITE_TIMEOUT_SEC")) * time.Second,
+		},
+		Database: DBConfig{
+			DSN:             viper.GetString("DATABASE_DSN"),
+			MaxOpenConns:    viper.GetInt("DB_MAX_OPEN_CONNS"),
+			MaxIdleConns:    viper.GetInt("DB_MAX_IDLE_CONNS"),
+			ConnMaxLifetime: time.Duration(viper.GetInt("DB_CONN_MAX_LIFETIME_MIN")) * time.Minute,
+		},
+		RateLimit: RateLimitConfig{
+			Max:    viper.GetInt("RATE_LIMIT_MAX"),
+			Window: time.Duration(viper.GetInt("RATE_LIMIT_WINDOW_SEC")) * time.Second,
+		},
+		Shutdown: time.Duration(viper.GetInt("SHUTDOWN_TIMEOUT_SEC")) * time.Second,
+		JWT: JWTConfig{
+			AccessSecret:  viper.GetString("JWT_ACCESS_SECRET"),
+			RefreshSecret: viper.GetString("JWT_REFRESH_SECRET"),
+			AccessTTL:     time.Duration(viper.GetInt("JWT_ACCESS_TTL_MIN")) * time.Minute,
+			RefreshTTL:    time.Duration(viper.GetInt("JWT_REFRESH_TTL_DAYS")) * 24 * time.Hour,
+		},
+		SessionTTL: time.Duration(viper.GetInt("SessionTTL_MIN")) * time.Minute,
+	}
+
+	log.Info("Citizen-Docs - Configuration loaded")
+	return nil
+}
+
+
+───────────── db.go ─────────────
+package config
+
+import (
+	"fmt"
+
+	"time"
+
+	"github.com/zerodayz7/platform/pkg/shared"
+	"github.com/zerodayz7/platform/services/citizen-docs/internal/model"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+)
+
+func MustInitDB() (*gorm.DB, func()) {
+	log := shared.GetLogger()
+	cfg := AppConfig.Database
+
+	db, err := gorm.Open(postgres.Open(cfg.DSN), &gorm.Config{})
+	if err != nil {
+		panic(fmt.Errorf("failed to connect to database: %w", err))
+	}
+
+	sqlDB, err := db.DB()
+	if err != nil {
+		panic(fmt.Errorf("failed to get database instance: %w", err))
+	}
+
+	sqlDB.SetMaxOpenConns(cfg.MaxOpenConns)
+	sqlDB.SetMaxIdleConns(cfg.MaxIdleConns)
+	sqlDB.SetConnMaxLifetime(time.Duration(cfg.ConnMaxLifetime) * time.Minute)
+
+	if err := sqlDB.Ping(); err != nil {
+		panic(fmt.Errorf("database ping failed: %w", err))
+	}
+
+	// Migracje modeli
+	if err := db.AutoMigrate(
+		&model.UserDocument{},
+	); err != nil {
+		log.ErrorObj("Failed to migrate database", err)
+		panic(err)
+	}
+
+	log.Info("Successfully connected to PostgreSQL")
+	return db, func() { sqlDB.Close() }
+}
+
+
+───────────── container.go ─────────────
+package di
+
+import (
+	"github.com/zerodayz7/platform/services/citizen-docs/internal/repository"
+	"github.com/zerodayz7/platform/services/citizen-docs/internal/service"
+	"gorm.io/gorm"
+)
+
+// Container przechowuje wszystkie zależności mikroserwisu
+type Container struct {
+	DB              *gorm.DB
+	UserDocumentSvc *service.UserDocumentService
+}
+
+func NewContainer(db *gorm.DB) *Container {
+	repo := repository.NewUserDocumentRepository(db)
+	svc := service.NewUserDocumentService(repo)
+
+	return &Container{
+		DB:              db,
+		UserDocumentSvc: svc,
+	}
+}
+
+
+───────────── user_document_handler.go ─────────────
+package handler
+
+import (
+	"strconv"
+
+	"github.com/gofiber/fiber/v2"
+	"github.com/zerodayz7/platform/services/citizen-docs/internal/model"
+	"github.com/zerodayz7/platform/services/citizen-docs/internal/service"
+)
+
+type UserDocumentHandler struct {
+	service *service.UserDocumentService
+}
+
+func NewUserDocumentHandler(s *service.UserDocumentService) *UserDocumentHandler {
+	return &UserDocumentHandler{service: s}
+}
+
+// POST /documents
+func (h *UserDocumentHandler) CreateDocument(c *fiber.Ctx) error {
+	var doc model.UserDocument
+	if err := c.BodyParser(&doc); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	if err := h.service.CreateDocument(&doc); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(doc)
+}
+
+// GET /documents/me
+func (h *UserDocumentHandler) GetDocumentsMe(c *fiber.Ctx) error {
+	userIDHeader := c.Get("X-User-ID")
+	if userIDHeader == "" {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "missing X-User-ID"})
+	}
+
+	userID, err := strconv.ParseUint(userIDHeader, 10, 32)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid user ID"})
+	}
+
+	docs, err := h.service.GetDocumentsByUserID(uint(userID))
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to fetch documents"})
+	}
+
+	return c.JSON(docs)
+}
+
+
+───────────── validate.go ─────────────
+package middleware
+
+import (
+	"strings"
+
+	"github.com/go-playground/validator/v10"
+)
+
+var validate = validator.New()
+
+func init() {
+	validate.RegisterValidation("passwd", func(fl validator.FieldLevel) bool {
+		pw := fl.Field().String()
+
+		if len(pw) < 8 {
+			return false
+		}
+
+		var hasUpper, hasLower, hasDigit, hasSpecial bool
+		for _, c := range pw {
+			switch {
+			case 'A' <= c && c <= 'Z':
+				hasUpper = true
+			case 'a' <= c && c <= 'z':
+				hasLower = true
+			case '0' <= c && c <= '9':
+				hasDigit = true
+			case strings.ContainsRune("!@#$%^&*()-_=+[]{}|;:,.<>/?~`", c):
+				hasSpecial = true
+			}
+
+			if hasUpper && hasLower && hasDigit && hasSpecial {
+				break
+			}
+		}
+
+		return hasUpper && hasLower && hasDigit && hasSpecial
+	})
+}
+
+func ValidateStruct(s any) map[string]string {
+	errs := make(map[string]string)
+	if err := validate.Struct(s); err != nil {
+		for _, e := range err.(validator.ValidationErrors) {
+			errs[e.Field()] = e.Tag()
+		}
+	}
+	return errs
+}
+
+// ValidateStruct validates any struct using the global `validator` instance.
+// By default, it returns a map of field names to validation tags (e.g., "required", "passwd").
+// If you prefer human-readable error messages, you can use the commented-out version below,
+// which maps validation tags to descriptive messages for each field.
+// You can choose either approach depending on your use case.
+
+//  var errorMessages = map[string]string{
+// 	"required": "This field is required",
+// 	"min":      "Minimum length not met",
+// 	"alphanum": "Can only contain letters and numbers",
+// 	"email":    "Invalid email address",
+// 	"passwd":   "Password must be at least 8 chars, include uppercase, lowercase, number and special character",
+// }
+
+// func ValidateStruct(s any) map[string]string {
+// 	errs := make(map[string]string)
+// 	if err := validate.Struct(s); err != nil {
+// 		for _, e := range err.(validator.ValidationErrors) {
+// 			msg, ok := errorMessages[e.Tag()]
+// 			if !ok {
+// 				msg = e.Error()
+// 			}
+// 			errs[e.Field()] = msg
+// 		}
+// 	}
+// 	if len(errs) > 0 {
+// 		return errs
+// 	}
+// 	return nil
+// }
+
+
+───────────── validate_body.go ─────────────
+package middleware
+
+import (
+	"github.com/gofiber/fiber/v2"
+	"github.com/zerodayz7/platform/pkg/errors"
+)
+
+func ValidateBody[T any]() fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		var body T
+		if err := c.BodyParser(&body); err != nil {
+			return errors.SendAppError(c, errors.ErrInvalidJSON)
+		}
+
+		if errs := ValidateStruct(body); len(errs) > 0 {
+
+			meta := make(map[string]any)
+			for k, v := range errs {
+				meta[k] = v
+			}
+
+			appErr := errors.ErrValidationFailed
+			appErr.Meta = meta
+			return errors.SendAppError(c, appErr)
+		}
+
+		c.Locals("validatedBody", body)
+		return c.Next()
+	}
+}
+
+
+───────────── validate_params.go ─────────────
+package middleware
+
+import (
+	"github.com/gofiber/fiber/v2"
+)
+
+func ValidateParams[T any]() fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		params := new(T)
+		if err := c.ParamsParser(params); err != nil {
+			return fiber.NewError(fiber.StatusBadRequest, "INVALID_PARAMS")
+		}
+
+		if errs := ValidateStruct(params); len(errs) > 0 {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"code":   "VALIDATION_FAILED",
+				"errors": errs,
+			})
+		}
+
+		c.Locals("validatedParams", params)
+		return c.Next()
+	}
+}
+
+
+───────────── validate_query.go ─────────────
+package middleware
+
+import (
+	"github.com/gofiber/fiber/v2"
+)
+
+func ValidateQuery[T any]() fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		query := new(T)
+		if err := c.QueryParser(query); err != nil {
+			return fiber.NewError(fiber.StatusBadRequest, "INVALID_QUERY")
+		}
+
+		if errs := ValidateStruct(query); len(errs) > 0 {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"code":   "VALIDATION_FAILED",
+				"errors": errs,
+			})
+		}
+
+		c.Locals("validatedQuery", query)
+		return c.Next()
+	}
+}
+
+
+───────────── user_document.go ─────────────
+package model
+
+import (
+	"time"
+
+	"gorm.io/datatypes"
+	"gorm.io/gorm"
+)
+
+// DocumentType definiuje typ dokumentu
+type DocumentType string
+
+const (
+	DocumentTypePassport      DocumentType = "passport"
+	DocumentTypeIDCard        DocumentType = "id_card"
+	DocumentTypeDriverLicense DocumentType = "driver_license"
+	DocumentTypeOther         DocumentType = "other"
+)
+
+// DocumentStatus definiuje status dokumentu
+type DocumentStatus string
+
+const (
+	DocumentStatusActive   DocumentStatus = "active"
+	DocumentStatusInactive DocumentStatus = "inactive"
+	DocumentStatusExpired  DocumentStatus = "expired"
+	DocumentStatusRevoked  DocumentStatus = "revoked"
+)
+
+// UserDocument przechowuje dokument użytkownika wraz z plikami w Base64
+type UserDocument struct {
+	ID             uint           `gorm:"primaryKey;autoIncrement;type:int" json:"id"`
+	UserID         uint           `gorm:"type:int;index;not null" json:"user_id"`
+	Type           DocumentType   `gorm:"type:document_type;not null;index" json:"type"`
+	DocumentNumber string         `gorm:"type:varchar(100)" json:"document_number"`
+	IssuedAt       *time.Time     `json:"issued_at"`
+	ExpiresAt      *time.Time     `json:"expires_at"`
+	Status         DocumentStatus `gorm:"type:document_status;default:'active'" json:"status"`
+	Data           datatypes.JSON `gorm:"type:jsonb" json:"data"`
+
+	// Pliki dokumentu w Base64
+	FileFront []byte `gorm:"type:bytea" json:"file_front"`
+	FileBack  []byte `gorm:"type:bytea" json:"file_back"`
+
+	CreatedAt time.Time      `json:"created_at"`
+	UpdatedAt time.Time      `json:"updated_at"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+}
+
+
+───────────── interfaces.go ─────────────
+package repository
+
+import "github.com/zerodayz7/platform/services/citizen-docs/internal/model"
+
+type UserDocumentRepo interface {
+	Create(doc *model.UserDocument) error
+	GetByUserID(userID uint) ([]model.UserDocument, error)
+}
+
+
+───────────── user_document_gorm.go ─────────────
+package repository
+
+import (
+	"github.com/zerodayz7/platform/services/citizen-docs/internal/model"
+
+	"gorm.io/gorm"
+)
+
+// UserDocumentRepository handles DB operations for user documents
+type UserDocumentRepository struct {
+	db *gorm.DB
+}
+
+// NewUserDocumentRepository creates a new repository instance
+func NewUserDocumentRepository(db *gorm.DB) *UserDocumentRepository {
+	return &UserDocumentRepository{db: db}
+}
+
+// Create saves a new user document
+func (r *UserDocumentRepository) Create(doc *model.UserDocument) error {
+	return r.db.Create(doc).Error
+}
+
+// GetByUserID retrieves all documents for a given user
+func (r *UserDocumentRepository) GetByUserID(userID uint) ([]model.UserDocument, error) {
+	var docs []model.UserDocument
+	err := r.db.Where("user_id = ?", userID).Find(&docs).Error
+	return docs, err
+}
+
+
+───────────── user_document_mysql.go ─────────────
+package repository
+
+import (
+	"github.com/zerodayz7/platform/services/citizen-docs/internal/model"
+	"gorm.io/gorm"
+)
+
+// UserDocumentRepositoryGORM implements UserDocumentRepo
+type UserDocumentRepositoryGORM struct {
+	db *gorm.DB
+}
+
+// zwraca interfejs, nie konkretną strukturę
+func NewUserDocumentRepositoryGORM(db *gorm.DB) UserDocumentRepo {
+	return &UserDocumentRepositoryGORM{db: db}
+}
+
+func (r *UserDocumentRepositoryGORM) Create(doc *model.UserDocument) error {
+	return r.db.Create(doc).Error
+}
+
+func (r *UserDocumentRepositoryGORM) GetByUserID(userID uint) ([]model.UserDocument, error) {
+	var docs []model.UserDocument
+	err := r.db.Where("user_id = ?", userID).Find(&docs).Error
+	return docs, err
+}
+
+
+───────────── fallback.go ─────────────
+package router
+
+import (
+	"github.com/gofiber/fiber/v2"
+	"github.com/zerodayz7/platform/pkg/shared"
+)
+
+func SetupFallbackHandlers(app *fiber.App) {
+	app.Get("/favicon.ico", func(c *fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusNoContent)
+	})
+
+	app.Use(func(c *fiber.Ctx) error {
+		shared.GetLogger().WarnMap("404 - not found", map[string]any{
+			"path":   c.Path(),
+			"method": c.Method(),
+		})
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Not found",
+		})
+	})
+}
+
+
+───────────── health_routes.go ─────────────
+package router
+
+import (
+	"time"
+
+	"github.com/gofiber/fiber/v2"
+	"github.com/zerodayz7/platform/pkg/shared"
+)
+
+func SetupHealthRoutes(app *fiber.App) {
+	health := app.Group("/health")
+
+	health.Use(shared.NewLimiter("health"))
+
+	// GET /health
+	health.Get("/", func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{
+			"status": "ok",
+			"time":   time.Now().Format("2006-01-02 15:04:05"),
+		})
+	})
+}
+
+
+───────────── routes.go ─────────────
+package router
+
+import (
+	"github.com/gofiber/fiber/v2"
+	"github.com/zerodayz7/platform/services/citizen-docs/internal/handler"
+	"github.com/zerodayz7/platform/services/citizen-docs/internal/service"
+)
+
+// SetupDocsRoutes ustawia wszystkie trasy dla mikroserwisu dokumentów
+func SetupDocsRoutes(app *fiber.App, userDocService *service.UserDocumentService) {
+	h := handler.NewUserDocumentHandler(userDocService)
+
+	SetupHealthRoutes(app) // np. /health
+
+	docs := app.Group("/documents")
+
+	docs.Post("/", h.CreateDocument)
+	docs.Get("/me", h.GetDocumentsMe)
+	// Możesz dodać pozostałe operacje np. Get/:id, Put/:id, Delete/:id
+	// docs.Get("/:id", h.GetDocument)
+	// docs.Put("/:id", h.UpdateDocument)
+	// docs.Delete("/:id", h.DeleteDocument)
+
+	SetupFallbackHandlers(app)
+}
+
+
+───────────── errors.go ─────────────
+package server
+
+import (
+	stdErrors "errors"
+
+	"github.com/gofiber/fiber/v2"
+	apperrors "github.com/zerodayz7/platform/pkg/errors"
+	"github.com/zerodayz7/platform/pkg/shared"
+)
+
+func ErrorHandler() fiber.ErrorHandler {
+	log := shared.GetLogger()
+	return func(c *fiber.Ctx, err error) error {
+		var appErr *apperrors.AppError
+		if stdErrors.As(err, &appErr) {
+			status := fiber.StatusBadRequest
+			if appErr.Type == apperrors.Internal {
+				status = fiber.StatusInternalServerError
+			}
+
+			logMap := map[string]any{
+				"code": appErr.Code,
+			}
+			if appErr.Meta != nil {
+				logMap["meta"] = appErr.Meta
+			}
+			if appErr.Err != nil {
+				logMap["error"] = appErr.Err.Error()
+				log.ErrorMap("AppError occurred", logMap)
+			} else {
+				log.WarnMap("AppError occurred", logMap)
+			}
+
+			response := fiber.Map{
+				"code":    appErr.Code,
+				"message": appErr.Message,
+			}
+			if len(appErr.Meta) > 0 {
+				response["meta"] = appErr.Meta
+			}
+
+			return c.Status(status).JSON(response)
+		}
+
+		if e, ok := err.(*fiber.Error); ok {
+			log.ErrorMap("HTTP error", map[string]any{
+				"error": e.Error(),
+			})
+			return c.Status(e.Code).JSON(fiber.Map{"error": e.Message})
+		}
+
+		log.ErrorMap("Server error", map[string]any{
+			"error": err.Error(),
+		})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Internal server error",
+		})
+	}
+}
+
+
+───────────── server.go ─────────────
+// internal/server/server.go
+package server
+
+import (
+	"github.com/gofiber/fiber/v2"
+	"github.com/zerodayz7/platform/services/auth-service/config"
+)
+
+func New(cfg config.Config) *fiber.App {
+	return fiber.New(fiber.Config{
+		AppName:       cfg.Server.AppName,
+		ServerHeader:  cfg.Server.ServerHeader,
+		Prefork:       cfg.Server.Prefork,
+		CaseSensitive: cfg.Server.CaseSensitive,
+		StrictRouting: cfg.Server.StrictRouting,
+		IdleTimeout:   cfg.Server.IdleTimeout,
+		ReadTimeout:   cfg.Server.ReadTimeout,
+		WriteTimeout:  cfg.Server.WriteTimeout,
+		ErrorHandler:  ErrorHandler(),
+	})
+}
+
+
+───────────── shutdown.go ─────────────
+package server
+
+import (
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/gofiber/fiber/v2"
+	"github.com/zerodayz7/platform/pkg/shared"
+)
+
+func SetupGracefulShutdown(app *fiber.App, closeDB func(), timeout time.Duration) {
+	shutdown := make(chan os.Signal, 1)
+	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		<-shutdown
+		log := shared.GetLogger()
+		log.Info("Shutting down server gracefully...")
+
+		if err := app.Shutdown(); err != nil {
+			log.Error("Server shutdown failed: " + err.Error())
+		}
+
+		if closeDB != nil {
+			closeDB()
+		}
+
+		log.Info("Server stopped")
+		os.Exit(0)
+	}()
+}
+
+
+───────────── user_document_service.go ─────────────
+package service
+
+import (
+	"github.com/zerodayz7/platform/services/citizen-docs/internal/model"
+	"github.com/zerodayz7/platform/services/citizen-docs/internal/repository"
+)
+
+type UserDocumentService struct {
+	repo repository.UserDocumentRepo
+}
+
+func NewUserDocumentService(repo repository.UserDocumentRepo) *UserDocumentService {
+	return &UserDocumentService{repo: repo}
+}
+
+// Tworzy dokument
+func (s *UserDocumentService) CreateDocument(doc *model.UserDocument) error {
+	return s.repo.Create(doc)
+}
+
+// Pobiera dokumenty dla konkretnego userID
+func (s *UserDocumentService) GetDocumentsByUserID(userID uint) ([]model.UserDocument, error) {
+	return s.repo.GetByUserID(userID)
+}
+
+
+───────────── validator.go ─────────────
+package validator
+
+import (
+	"github.com/zerodayz7/platform/services/citizen-docs/internal/middleware"
+)
+
+type RegisterRequest struct {
+	Username string `json:"username" validate:"required,alphanum,min=3,max=30"`
+	Email    string `json:"email" validate:"required,email"`
+	Password string `json:"password" validate:"required,passwd"`
+}
+
+type LoginRequest struct {
+	Email    string `json:"email" validate:"required,email"`
+	Password string `json:"password" validate:"required,passwd"`
+}
+
+type TwoFARequest struct {
+	Code string `json:"code" validate:"required,len=6,numeric"`
+}
+
+// ===== JWT Refresh =====
+type RefreshTokenRequest struct {
+	RefreshToken string `json:"refresh_token" validate:"required"`
+}
+
+// ===== Helpers =====
+func ValidateStruct(s any) map[string]string {
+	return middleware.ValidateStruct(s)
+}
+
+
+───────────── main.go ─────────────
+package main
+
+import (
+	"os"
+
+	"github.com/zerodayz7/platform/pkg/server"
+	"github.com/zerodayz7/platform/pkg/shared"
+	"github.com/zerodayz7/platform/services/gateway/config"
+	"github.com/zerodayz7/platform/services/gateway/internal/router"
+)
+
+func main() {
+	// Inicjalizacja loggera
+	log := shared.InitLogger(os.Getenv("ENV"))
+
+	// Config
+	if err := config.LoadConfigGlobal(); err != nil {
+		log.ErrorObj("Config load failed", err)
+		return
+	}
+
+	// Fiber app
+	app := config.NewGatewayApp()
+	// Routes
+	router.SetupRoutes(app)
+
+	// Graceful shutdown
+	server.SetupGracefulShutdown(app, nil, config.AppConfig.Shutdown)
+
+	// Log start
+	address := "0.0.0.0:" + config.AppConfig.Server.Port
+	log.InfoObj("Gateway-Server listening", map[string]any{"address": address})
+
+	// Start serwera
+	if err := app.Listen(address); err != nil {
+		log.ErrorObj("Failed to start server", err)
+	}
+}
+
+
+───────────── app.go ─────────────
+package config
+
+import (
+	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/compress"
+	"github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/gofiber/fiber/v2/middleware/helmet"
+	"github.com/gofiber/fiber/v2/middleware/recover"
+	"github.com/gofiber/fiber/v2/middleware/requestid"
+	"github.com/zerodayz7/platform/pkg/server"
+	"github.com/zerodayz7/platform/pkg/shared"
+	"github.com/zerodayz7/platform/services/gateway/internal/di"
+	"github.com/zerodayz7/platform/services/gateway/internal/middleware"
+)
+
+func NewGatewayApp() *fiber.App {
+	cfg := AppConfig.Server
+
+	rdb := shared.InitRedis(
+		AppConfig.Redis.Host,
+		AppConfig.Redis.Port,
+		AppConfig.Redis.Password,
+		AppConfig.Redis.DB,
+	)
+
+	container := di.NewContainer(rdb)
+
+	cfgFiber := fiber.Config{
+		AppName:       cfg.AppName,
+		ServerHeader:  cfg.ServerHeader,
+		Prefork:       cfg.Prefork,
+		CaseSensitive: cfg.CaseSensitive,
+		StrictRouting: cfg.StrictRouting,
+		IdleTimeout:   cfg.IdleTimeout,
+		ReadTimeout:   cfg.ReadTimeout,
+		WriteTimeout:  cfg.WriteTimeout,
+
+		ProxyHeader:             fiber.HeaderXForwardedFor,
+		EnableTrustedProxyCheck: true,
+		TrustedProxies:          []string{"127.0.0.1", "::1"},
+		BodyLimit:               cfg.BodyLimitMB * 1024 * 1024,
+		DisableStartupMessage:   true,
+		EnableIPValidation:      true,
+
+		ErrorHandler: server.ErrorHandler(),
+	}
+
+	app := fiber.New(cfgFiber)
+
+	// Middleware
+	app.Use(requestid.New())
+	app.Use(recover.New())
+	app.Use(shared.FiberLoggerMiddleware())
+	app.Use(helmet.New(HelmetConfig()))
+	app.Use(cors.New(CorsConfig()))
+	app.Use(shared.NewLimiter("global"))
+	app.Use(compress.New(CompressConfig()))
+	app.Use(shared.RequestLoggerMiddleware())
+	app.Use(JWTMiddlewareWithExclusions())
+	app.Use(middleware.AuthRedisMiddleware(container.RedisClient))
+
+	return app
+}
+
+
+───────────── compress.go ─────────────
+package config
+
+import (
+	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/compress"
+)
+
+func CompressConfig() compress.Config {
+	return compress.Config{
+		Level: compress.LevelBestSpeed,
+		Next: func(c *fiber.Ctx) bool {
+			ct := string(c.Response().Header.ContentType())
+			return ct == "image/png" || ct == "image/jpeg" ||
+				ct == "video/mp4" || ct == "application/pdf"
+		},
+	}
+}
+
+
+───────────── config.go ─────────────
+package config
+
+import (
+	"fmt"
+	"time"
+
+	"github.com/gofiber/fiber/v2/middleware/session"
+	"github.com/spf13/viper"
+
+	"github.com/zerodayz7/platform/pkg/shared"
+)
+
+type ServerConfig struct {
+	AppName       string
+	Port          string
+	BodyLimitMB   int
+	Env           string
+	AppVersion    string
+	ServerHeader  string
+	Prefork       bool
+	CaseSensitive bool
+	StrictRouting bool
+	IdleTimeout   time.Duration
+	ReadTimeout   time.Duration
+	WriteTimeout  time.Duration
+}
+
+type RedisConfig struct {
+	Host     string
+	Port     string
+	Password string
+	DB       int
+}
+
+type JWTConfig struct {
+	AccessSecret  string
+	RefreshSecret string
+	AccessTTL     time.Duration
+	RefreshTTL    time.Duration
+}
+
+type Config struct {
+	Server    ServerConfig
+	Redis     RedisConfig
+	CORSAllow string
+	Shutdown  time.Duration
+	JWT       JWTConfig
+}
+
+var AppConfig Config
+var Store *session.Store
+
+func LoadConfigGlobal() error {
+	log := shared.GetLogger()
+
+	viper.SetConfigFile(".env")
+	viper.AutomaticEnv()
+
+	// Server defaults
+	viper.SetDefault("APP_NAME", "http-server")
+	viper.SetDefault("PORT", "8081")
+	viper.SetDefault("BODY_LIMIT_MB", 2)
+	viper.SetDefault("APP_VERSION", "2.1.1")
+	viper.SetDefault("ENV", "development")
+	viper.SetDefault("SERVER_HEADER", "ZeroDayZ7")
+	viper.SetDefault("PREFORK", false)
+	viper.SetDefault("CASE_SENSITIVE", true)
+	viper.SetDefault("STRICT_ROUTING", false)
+	viper.SetDefault("IDLE_TIMEOUT_SEC", 30)
+	viper.SetDefault("READ_TIMEOUT_SEC", 15)
+	viper.SetDefault("WRITE_TIMEOUT_SEC", 15)
+
+	// Redis defaults
+	viper.SetDefault("REDIS_HOST", "127.0.0.1")
+	viper.SetDefault("REDIS_PORT", "6379")
+	viper.SetDefault("REDIS_PASSWORD", "")
+	viper.SetDefault("REDIS_DB", 0)
+
+	// Shutdown
+	viper.SetDefault("SHUTDOWN_TIMEOUT_SEC", 5)
+
+	// JWT
+	viper.SetDefault("JWT_ACCESS_SECRET", "super_access_secret_123")
+	viper.SetDefault("JWT_REFRESH_SECRET", "super_refresh_secret_123")
+	viper.SetDefault("JWT_ACCESS_TTL_MIN", 15)
+	viper.SetDefault("JWT_REFRESH_TTL_DAYS", 7)
+
+	if err := viper.ReadInConfig(); err != nil {
+		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+			log.ErrorObj("Error loading .env", err)
+			return fmt.Errorf("error loading .env: %v", err)
+		}
+	}
+
+	AppConfig = Config{
+		Server: ServerConfig{
+			AppName:       viper.GetString("APP_NAME"),
+			Port:          viper.GetString("PORT"),
+			BodyLimitMB:   viper.GetInt("BODY_LIMIT_MB"),
+			AppVersion:    viper.GetString("APP_VERSION"),
+			Env:           viper.GetString("ENV"),
+			ServerHeader:  viper.GetString("SERVER_HEADER"),
+			Prefork:       viper.GetBool("PREFORK"),
+			CaseSensitive: viper.GetBool("CASE_SENSITIVE"),
+			StrictRouting: viper.GetBool("STRICT_ROUTING"),
+			IdleTimeout:   time.Duration(viper.GetInt("IDLE_TIMEOUT_SEC")) * time.Second,
+			ReadTimeout:   time.Duration(viper.GetInt("READ_TIMEOUT_SEC")) * time.Second,
+			WriteTimeout:  time.Duration(viper.GetInt("WRITE_TIMEOUT_SEC")) * time.Second,
+		},
+		Redis: RedisConfig{
+			Host:     viper.GetString("REDIS_HOST"),
+			Port:     viper.GetString("REDIS_PORT"),
+			Password: viper.GetString("REDIS_PASSWORD"),
+			DB:       viper.GetInt("REDIS_DB"),
+		},
+		CORSAllow: viper.GetString("CORS_ALLOW_ORIGINS"),
+		Shutdown:  time.Duration(viper.GetInt("SHUTDOWN_TIMEOUT_SEC")) * time.Second,
+		JWT: JWTConfig{
+			AccessSecret:  viper.GetString("JWT_ACCESS_SECRET"),
+			RefreshSecret: viper.GetString("JWT_REFRESH_SECRET"),
+		},
+	}
+
+	log.Info("Gateway - Configuration loaded")
+	return nil
+}
+
+
+───────────── cors.go ─────────────
+package config
+
+import (
+	"github.com/gofiber/fiber/v2/middleware/cors"
+)
+
+func CorsConfig() cors.Config {
+	allowOrigins := AppConfig.CORSAllow
+	return cors.Config{
+		AllowOrigins:     allowOrigins,
+		AllowMethods:     "GET,POST,PUT,DELETE",
+		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, X-CSRF-TOKEN",
+		AllowCredentials: false,
+	}
+}
+
+
+───────────── helmet.go ─────────────
+package config
+
+import "github.com/gofiber/fiber/v2/middleware/helmet"
+
+func HelmetConfig() helmet.Config {
+	return helmet.Config{
+		XSSProtection:             "0",
+		ContentTypeNosniff:        "nosniff",
+		XFrameOptions:             "DENY",
+		HSTSMaxAge:                31536000,
+		HSTSExcludeSubdomains:     false,
+		HSTSPreloadEnabled:        false,
+		ContentSecurityPolicy:     "default-src 'self'; script-src 'self'; object-src 'none';",
+		CSPReportOnly:             false,
+		ReferrerPolicy:            "no-referrer",
+		PermissionPolicy:          "",
+		CrossOriginEmbedderPolicy: "require-corp",
+		CrossOriginOpenerPolicy:   "same-origin",
+		CrossOriginResourcePolicy: "same-origin",
+		OriginAgentCluster:        "?1",
+		XDNSPrefetchControl:       "off",
+		XDownloadOptions:          "noopen",
+		XPermittedCrossDomain:     "none",
+	}
+}
+
+
+───────────── jwt.go ─────────────
+package config
+
+import (
+	jwtware "github.com/gofiber/contrib/jwt"
+	"github.com/gofiber/fiber/v2"
+	"github.com/zerodayz7/platform/pkg/shared"
+)
+
+// NewJWTConfig — konfiguracja middleware JWT dla Fiber
+func NewJWTConfig() jwtware.Config {
+	return jwtware.Config{
+		SigningKey:   jwtware.SigningKey{Key: []byte(AppConfig.JWT.AccessSecret)},
+		ContextKey:   "user",
+		TokenLookup:  "header:Authorization",
+		AuthScheme:   "Bearer",
+		ErrorHandler: jwtErrorHandler,
+	}
+}
+
+// jwtErrorHandler — standardowa obsługa błędów JWT
+func jwtErrorHandler(c *fiber.Ctx, err error) error {
+	log := shared.GetLogger()
+	log.WarnObj("JWT error", err.Error())
+	return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+		"error": "Unauthorized or invalid token",
+	})
+}
+
+
+───────────── jwt_wrapper.go ─────────────
+package config
+
+import (
+	"slices"
+
+	jwtware "github.com/gofiber/contrib/jwt"
+	"github.com/gofiber/fiber/v2"
+)
+
+// PublicPaths - ścieżki, które NIE wymagają autoryzacji JWT
+var PublicPaths = []string{
+	"/auth/login",
+	"/auth/register",
+	"/auth/refresh",
+	"/auth/2fa-verify",
+	"/health",
+}
+
+var SkipJWT = false
+
+// JWTMiddlewareWithExclusions — middleware JWT z obsługą wyjątków (publicznych tras)
+func JWTMiddlewareWithExclusions() fiber.Handler {
+	if SkipJWT {
+		// w testach omijamy JWT
+		return func(c *fiber.Ctx) error {
+			return c.Next()
+		}
+	}
+
+	jwtHandler := jwtware.New(NewJWTConfig())
+	return func(c *fiber.Ctx) error {
+		if slices.Contains(PublicPaths, c.Path()) {
+			return c.Next()
+		}
+		return jwtHandler(c)
+	}
+}
+
+
+───────────── container.go ─────────────
+package di
+
+import (
+	"github.com/redis/go-redis/v9"
+)
+
+// Container przechowuje wszystkie zależności mikroserwisu
+type Container struct {
+	RedisClient *redis.Client
+	// inne serwisy np. UserService, Repozytoria...
+}
+
+// NewContainer tworzy kontener
+func NewContainer(redisClient *redis.Client) *Container {
+	return &Container{
+		RedisClient: redisClient,
+	}
+}
+
+
+───────────── errors.go ─────────────
+package errors
+
+import "github.com/zerodayz7/platform/pkg/errors"
+
+var (
+	// autoryzacja i tokeny
+	ErrUnauthorized = &errors.AppError{
+		Code:    "UNAUTHORIZED",
+		Type:    errors.Unauthorized,
+		Message: "Unauthorized access",
+	}
+	ErrInvalidToken = &errors.AppError{
+		Code:    "INVALID_TOKEN",
+		Type:    errors.Unauthorized,
+		Message: "Invalid token",
+	}
+
+	// walidacja requestów przychodzących do gateway
+	ErrValidationFailed = &errors.AppError{
+		Code:    "VALIDATION_FAILED",
+		Type:    errors.Validation,
+		Message: "Request validation failed",
+	}
+
+	ErrBadRequest = &errors.AppError{
+		Code:    "BAD_REQUEST",
+		Type:    errors.BadRequest,
+		Message: "Bad request",
+	}
+
+	// rate limit
+	ErrTooManyRequests = &errors.AppError{
+		Code:    "TOO_MANY_REQUESTS",
+		Type:    errors.BadRequest,
+		Message: "Too many requests",
+	}
+
+	// serwerowe
+	ErrInternal = &errors.AppError{
+		Code:    "SERVER_ERROR",
+		Type:    errors.Internal,
+		Message: "Internal server error",
+	}
+)
+
+
+───────────── auth_redis.go ─────────────
+package middleware
+
+import (
+	"context"
+	"errors"
+
+	"slices"
+
+	"github.com/gofiber/fiber/v2"
+	jwt "github.com/golang-jwt/jwt/v5"
+	"github.com/redis/go-redis/v9"
+	"github.com/zerodayz7/platform/pkg/shared"
+)
+
+// PublicPathsRedis - ścieżki, które NIE wymagają weryfikacji Redis
+var PublicPathsRedis = []string{
+	"/auth/login",
+	"/auth/register",
+	"/auth/refresh",
+	"/auth/2fa-verify",
+	"/health",
+}
+
+// AuthRedisMiddleware - middleware do weryfikacji sesji w Redis
+func AuthRedisMiddleware(rdb *redis.Client) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		log := shared.GetLogger()
+		path := c.Path()
+
+		// 1. Sprawdź, czy ścieżka jest publiczna
+		if slices.Contains(PublicPathsRedis, path) {
+			log.DebugMap("Public path, skipping Redis check", map[string]any{"path": path})
+			return c.Next()
+		}
+
+		// 2. Pobierz JWT z ctx ustawionego przez JWT middleware
+		jwtPayload := c.Locals("user")
+		if jwtPayload == nil {
+			log.WarnMap("JWT payload missing", map[string]any{"path": path})
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "missing token"})
+		}
+
+		// 3. Rzutowanie na *jwt.Token
+		jwtToken, ok := jwtPayload.(*jwt.Token)
+		if !ok {
+			log.WarnMap("JWT payload has invalid type", map[string]any{"path": path})
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid token payload"})
+		}
+
+		// 4. Wyciągnięcie claims jako MapClaims
+		claims, ok := jwtToken.Claims.(jwt.MapClaims)
+		if !ok {
+			log.WarnMap("JWT claims invalid type", map[string]any{"path": path})
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid token claims"})
+		}
+
+		// 5. Wyciągnij sessionID z claims
+		sessionID, ok := claims["sid"].(string)
+		if !ok || sessionID == "" {
+			log.WarnMap("Missing session_id in JWT claims", map[string]any{"path": path})
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "missing session_id in token"})
+		}
+
+		// 6. Pobierz userID z Redis po sessionID
+		ctx := context.Background()
+		userID, err := rdb.Get(ctx, "session:"+sessionID).Result()
+		if err != nil {
+			if errors.Is(err, redis.Nil) {
+				log.WarnMap("Session not found or expired", map[string]any{"sessionID": sessionID, "path": path})
+				return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid or expired session"})
+			}
+			log.ErrorObj("Redis error", err.Error())
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal server error"})
+		}
+
+		// 7. Zapisz userID w ctx dla downstream (np. proxy)
+		c.Locals("userID", userID)
+		log.DebugMap("User session verified", map[string]any{"userID": userID, "path": path})
+
+		return c.Next()
+	}
+}
+
+
+───────────── validate.go ─────────────
+package middleware
+
+import (
+	"strings"
+
+	"github.com/go-playground/validator/v10"
+)
+
+var validate = validator.New()
+
+func init() {
+	validate.RegisterValidation("passwd", func(fl validator.FieldLevel) bool {
+		pw := fl.Field().String()
+
+		if len(pw) < 8 {
+			return false
+		}
+
+		var hasUpper, hasLower, hasDigit, hasSpecial bool
+		for _, c := range pw {
+			switch {
+			case 'A' <= c && c <= 'Z':
+				hasUpper = true
+			case 'a' <= c && c <= 'z':
+				hasLower = true
+			case '0' <= c && c <= '9':
+				hasDigit = true
+			case strings.ContainsRune("!@#$%^&*()-_=+[]{}|;:,.<>/?~`", c):
+				hasSpecial = true
+			}
+
+			if hasUpper && hasLower && hasDigit && hasSpecial {
+				break
+			}
+		}
+
+		return hasUpper && hasLower && hasDigit && hasSpecial
+	})
+}
+
+func ValidateStruct(s any) map[string]string {
+	errs := make(map[string]string)
+	if err := validate.Struct(s); err != nil {
+		for _, e := range err.(validator.ValidationErrors) {
+			errs[e.Field()] = e.Tag()
+		}
+	}
+	return errs
+}
+
+// ValidateStruct validates any struct using the global `validator` instance.
+// By default, it returns a map of field names to validation tags (e.g., "required", "passwd").
+// If you prefer human-readable error messages, you can use the commented-out version below,
+// which maps validation tags to descriptive messages for each field.
+// You can choose either approach depending on your use case.
+
+//  var errorMessages = map[string]string{
+// 	"required": "This field is required",
+// 	"min":      "Minimum length not met",
+// 	"alphanum": "Can only contain letters and numbers",
+// 	"email":    "Invalid email address",
+// 	"passwd":   "Password must be at least 8 chars, include uppercase, lowercase, number and special character",
+// }
+
+// func ValidateStruct(s any) map[string]string {
+// 	errs := make(map[string]string)
+// 	if err := validate.Struct(s); err != nil {
+// 		for _, e := range err.(validator.ValidationErrors) {
+// 			msg, ok := errorMessages[e.Tag()]
+// 			if !ok {
+// 				msg = e.Error()
+// 			}
+// 			errs[e.Field()] = msg
+// 		}
+// 	}
+// 	if len(errs) > 0 {
+// 		return errs
+// 	}
+// 	return nil
+// }
+
+
+───────────── validate_body.go ─────────────
+package middleware
+
+import (
+	"github.com/gofiber/fiber/v2"
+	"github.com/zerodayz7/platform/pkg/errors"
+)
+
+func ValidateBody[T any]() fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		var body T
+		if err := c.BodyParser(&body); err != nil {
+			return errors.SendAppError(c, errors.ErrInvalidJSON)
+		}
+
+		if errs := ValidateStruct(body); len(errs) > 0 {
+
+			meta := make(map[string]any)
+			for k, v := range errs {
+				meta[k] = v
+			}
+
+			appErr := errors.ErrValidationFailed
+			appErr.Meta = meta
+			return errors.SendAppError(c, appErr)
+		}
+
+		c.Locals("validatedBody", body)
+		return c.Next()
+	}
+}
+
+
+───────────── validate_params.go ─────────────
+package middleware
+
+import (
+	"github.com/gofiber/fiber/v2"
+)
+
+func ValidateParams[T any]() fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		params := new(T)
+		if err := c.ParamsParser(params); err != nil {
+			return fiber.NewError(fiber.StatusBadRequest, "INVALID_PARAMS")
+		}
+
+		if errs := ValidateStruct(params); len(errs) > 0 {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"code":   "VALIDATION_FAILED",
+				"errors": errs,
+			})
+		}
+
+		c.Locals("validatedParams", params)
+		return c.Next()
+	}
+}
+
+
+───────────── validate_query.go ─────────────
+package middleware
+
+import (
+	"github.com/gofiber/fiber/v2"
+)
+
+func ValidateQuery[T any]() fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		query := new(T)
+		if err := c.QueryParser(query); err != nil {
+			return fiber.NewError(fiber.StatusBadRequest, "INVALID_QUERY")
+		}
+
+		if errs := ValidateStruct(query); len(errs) > 0 {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"code":   "VALIDATION_FAILED",
+				"errors": errs,
+			})
+		}
+
+		c.Locals("validatedQuery", query)
+		return c.Next()
+	}
+}
+
+
+───────────── fallback.go ─────────────
+package router
+
+import (
+	"github.com/zerodayz7/platform/pkg/shared"
+
+	"github.com/gofiber/fiber/v2"
+)
+
+// SetupFallbackHandlers - obsługa 404 i favicon
+func SetupFallbackHandlers(app *fiber.App) {
+	app.Get("/favicon.ico", func(c *fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusNoContent)
+	})
+
+	app.Use(func(c *fiber.Ctx) error {
+		log := shared.GetLogger()
+		log.WarnMap("404 - not found", map[string]any{
+			"path":   c.Path(),
+			"method": c.Method(),
+		})
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Not found",
+		})
+	})
+}
+
+
+───────────── health_routes.go ─────────────
+package router
+
+import (
+	"time"
+
+	"github.com/gofiber/fiber/v2"
+	"github.com/zerodayz7/platform/pkg/shared"
+)
+
+func SetupHealthRoutes(app *fiber.App) {
+	health := app.Group("/health")
+
+	health.Use(shared.NewLimiter("health"))
+
+	// GET /health
+	health.Get("/", func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{
+			"status": "ok",
+			"time":   time.Now().Format("2006-01-02 15:04:05"),
+		})
+	})
+}
+
+
+───────────── reverse_proxy.go ─────────────
+package router
+
+import (
+	"bytes"
+	"io"
+	"net/http"
+
+	"github.com/gofiber/fiber/v2"
+)
+
+// ReverseProxy przesyła request do wskazanego adresu backendowego
+func ReverseProxy(target string) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		body := c.Body()
+
+		req, err := http.NewRequest(
+			string(c.Method()),
+			target+c.OriginalURL(),
+			bytes.NewReader(body),
+		)
+		if err != nil {
+			return err
+		}
+
+		c.Request().Header.VisitAll(func(key, value []byte) {
+			req.Header.Set(string(key), string(value))
+		})
+
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+
+		for k, v := range resp.Header {
+			for _, vv := range v {
+				c.Set(k, vv)
+			}
+		}
+
+		c.Status(resp.StatusCode)
+		_, err = io.Copy(c, resp.Body)
+		return err
+	}
+}
+
+// ReverseProxyWithUserID - przekazuje request do backendu i dodaje X-User-ID z ctx
+func ReverseProxyWithUserID(target string) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		body := c.Body()
+
+		req, err := http.NewRequest(
+			string(c.Method()),
+			target+c.OriginalURL(),
+			bytes.NewReader(body),
+		)
+		if err != nil {
+			return err
+		}
+
+		c.Request().Header.VisitAll(func(key, value []byte) {
+			req.Header.Set(string(key), string(value))
+		})
+
+		// Dodanie userID z ctx
+		if userID := c.Locals("userID"); userID != nil {
+			req.Header.Set("X-User-ID", userID.(string))
+		}
+
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+
+		for k, v := range resp.Header {
+			for _, vv := range v {
+				c.Set(k, vv)
+			}
+		}
+
+		c.Status(resp.StatusCode)
+		_, err = io.Copy(c, resp.Body)
+		return err
+	}
+}
+
+// ReverseProxyWithCustomHeader - pozwala przekazać dowolny nagłówek z ctx do backendu
+func ReverseProxyWithCustomHeader(target string, headerKey string, ctxKey string) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		body := c.Body()
+
+		req, err := http.NewRequest(
+			string(c.Method()),
+			target+c.OriginalURL(),
+			bytes.NewReader(body),
+		)
+		if err != nil {
+			return err
+		}
+
+		c.Request().Header.VisitAll(func(key, value []byte) {
+			req.Header.Set(string(key), string(value))
+		})
+
+		// Dodanie nagłówka z ctx
+		if val := c.Locals(ctxKey); val != nil {
+			req.Header.Set(headerKey, val.(string))
+		}
+
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+
+		for k, v := range resp.Header {
+			for _, vv := range v {
+				c.Set(k, vv)
+			}
+		}
+
+		c.Status(resp.StatusCode)
+		_, err = io.Copy(c, resp.Body)
+		return err
+	}
+}
+
+
+───────────── routes.go ─────────────
+package router
+
+import (
+	"github.com/gofiber/fiber/v2"
+)
+
+func SetupRoutes(app *fiber.App) {
+	SetupHealthRoutes(app)
+
+	// Proxy / redirect do mikroserwisów
+	app.All("/auth/*", ReverseProxy("http://localhost:8082"))
+	// app.All("/documents/*", ReverseProxy("http://localhost:8083"))
+	app.All("/documents/*", ReverseProxyWithUserID("http://localhost:8083"))
+	app.All("/users/*", ReverseProxy("http://users-service:3000"))
+
+	SetupFallbackHandlers(app)
+}
+
+
+───────────── cookies.go ─────────────
+// internal/shared/cookies.go
+package shared
+
+import "github.com/gofiber/fiber/v2"
+
+// SetSessionCookie ustawia ciasteczko sesji
+func SetSessionCookie(c *fiber.Ctx, sessionID string) {
+	c.Cookie(&fiber.Cookie{
+		Name:     "__Host-session_",
+		Value:    sessionID,
+		HTTPOnly: true,
+		Secure:   true, // włączone w produkcji
+		SameSite: "Strict",
+		Path:     "/",
+	})
+}
+
+// ClearSessionCookie usuwa ciasteczko sesji (wylogowanie)
+func ClearSessionCookie(c *fiber.Ctx) {
+	c.Cookie(&fiber.Cookie{
+		Name:     "__Host-session_",
+		Value:    "",
+		HTTPOnly: true,
+		Secure:   true,
+		SameSite: "Strict",
+		Path:     "/",
+		MaxAge:   -1,
+	})
+}
+
+
+───────────── jwt.go ─────────────
+package security
+
+import (
+	"errors"
+
+	"github.com/golang-jwt/jwt/v5"
+)
+
+// ------------------- ACCESS TOKEN (JWT) -------------------
+
+func ValidateAccessToken(tokenString string, secret string) (*jwt.Token, error) {
+	return jwt.Parse(tokenString, func(token *jwt.Token) (any, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, errors.New("unexpected signing method")
+		}
+		return []byte(secret), nil
+	})
+}
+
+func ParseJWT(tokenStr string, secret string) (map[string]interface{}, error) {
+	token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, errors.New("unexpected signing method")
+		}
+		return []byte(secret), nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
+		return claims, nil
+	}
+	return nil, errors.New("invalid token claims")
+}
+
+
+───────────── password.go ─────────────
+package security
+
+import (
+	"crypto/rand"
+	"crypto/subtle"
+	"encoding/base64"
+	"errors"
+	"strings"
+
+	"golang.org/x/crypto/argon2"
+)
+
+const (
+	memory      = 64 * 1024
+	iterations  = 3
+	parallelism = 2
+	saltLength  = 16
+	keyLength   = 32
+)
+
+// HashPassword generates a salted Argon2id hash of the password
+func HashPassword(password string) (string, error) {
+	salt := make([]byte, saltLength)
+	if _, err := rand.Read(salt); err != nil {
+		return "", err
+	}
+
+	hash := argon2.IDKey([]byte(password), salt, iterations, memory, parallelism, keyLength)
+	encodedSalt := base64.RawStdEncoding.EncodeToString(salt)
+	encodedHash := base64.RawStdEncoding.EncodeToString(hash)
+	return encodedSalt + "$" + encodedHash, nil
+}
+
+// VerifyPassword compares password with encoded Argon2id hash
+func VerifyPassword(password, encoded string) (bool, error) {
+	parts := strings.Split(encoded, "$")
+	if len(parts) != 2 {
+		return false, errors.New("incorrect password format in the database")
+	}
+
+	salt, err := base64.RawStdEncoding.DecodeString(parts[0])
+	if err != nil {
+		return false, err
+	}
+	hash, err := base64.RawStdEncoding.DecodeString(parts[1])
+	if err != nil {
+		return false, err
+	}
+
+	computedHash := argon2.IDKey([]byte(password), salt, iterations, memory, parallelism, keyLength)
+	isValid := subtle.ConstantTimeCompare(hash, computedHash) == 1
+	return isValid, nil
+}
+
+
+───────────── validator.go ─────────────
+package validator
+
+import (
+	"github.com/zerodayz7/platform/services/gateway/internal/middleware"
+)
+
+type RegisterRequest struct {
+	Username string `json:"username" validate:"required,alphanum,min=3,max=30"`
+	Email    string `json:"email" validate:"required,email"`
+	Password string `json:"password" validate:"required,passwd"`
+}
+
+type LoginRequest struct {
+	Email    string `json:"email" validate:"required,email"`
+	Password string `json:"password" validate:"required,passwd"`
+}
+
+type TwoFARequest struct {
+	Code string `json:"code" validate:"required,len=6,numeric"`
+}
+
+// ===== JWT Refresh =====
+type RefreshTokenRequest struct {
+	RefreshToken string `json:"refresh_token" validate:"required"`
+}
+
+// ===== Helpers =====
+func ValidateStruct(s any) map[string]string {
+	return middleware.ValidateStruct(s)
+}
+
+

@@ -1,4 +1,3 @@
-// internal/di/container.go
 package di
 
 import (
@@ -11,6 +10,8 @@ import (
 	refRepo "github.com/zerodayz7/platform/services/auth-service/internal/features/auth/repository/mysql"
 	userRepo "github.com/zerodayz7/platform/services/auth-service/internal/features/users/repository/mysql"
 
+	"github.com/zerodayz7/platform/pkg/redis"
+	"github.com/zerodayz7/platform/services/auth-service/config"
 	"gorm.io/gorm"
 )
 
@@ -18,10 +19,12 @@ import (
 type Container struct {
 	AuthHandler *authHandler.AuthHandler
 	UserHandler *userHandler.UserHandler
+	Redis       *redis.Client
+	Cache       *redis.Cache
 }
 
 // NewContainer tworzy nowy kontener z wszystkimi zależnościami
-func NewContainer(db *gorm.DB) *Container {
+func NewContainer(db *gorm.DB, redisClient *redis.Client) *Container {
 	// repozytorium użytkowników
 	userRepo := userRepo.NewUserRepository(db)
 	refreshRepo := refRepo.NewRefreshTokenRepository(db)
@@ -29,9 +32,14 @@ func NewContainer(db *gorm.DB) *Container {
 	authSvc := authService.NewAuthService(userRepo, refreshRepo)
 	userSvc := userService.NewUserService(userRepo)
 
+	// Cache wrapper do sesji
+	cache := redis.NewCache(redisClient, "session:", config.AppConfig.SessionTTL)
+
 	// handlery
 	return &Container{
-		AuthHandler: authHandler.NewAuthHandler(authSvc),
+		AuthHandler: authHandler.NewAuthHandler(authSvc, cache),
 		UserHandler: userHandler.NewUserHandler(userSvc),
+		Redis:       redisClient,
+		Cache:       cache,
 	}
 }

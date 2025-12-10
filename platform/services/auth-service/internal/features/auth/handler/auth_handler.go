@@ -5,9 +5,10 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/zerodayz7/platform/pkg/errors"
+	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/auth-service/config"
-	"github.com/zerodayz7/platform/services/auth-service/internal/errors"
 	"github.com/zerodayz7/platform/services/auth-service/internal/features/auth/service"
 	"github.com/zerodayz7/platform/services/auth-service/internal/shared/security"
 	"github.com/zerodayz7/platform/services/auth-service/internal/validator"
@@ -15,11 +16,13 @@ import (
 
 type AuthHandler struct {
 	authService *service.AuthService
+	cache       *redis.Cache
 }
 
-func NewAuthHandler(authService *service.AuthService) *AuthHandler {
+func NewAuthHandler(authService *service.AuthService, cache *redis.Cache) *AuthHandler {
 	return &AuthHandler{
 		authService: authService,
+		cache:       cache,
 	}
 }
 
@@ -47,7 +50,11 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{"2fa_required": true})
 	}
 
-	accessToken, err := security.GenerateAccessToken(fmt.Sprint(user.ID))
+	accessToken, err := security.GenerateAccessToken(
+		fmt.Sprint(user.ID),
+		h.cache,
+		config.AppConfig.JWT.AccessSecret,
+	)
 	if err != nil {
 		log.ErrorObj("Failed to generate access token", err)
 		return errors.SendAppError(c, errors.ErrInternal)
@@ -84,7 +91,11 @@ func (h *AuthHandler) RefreshToken(c *fiber.Ctx) error {
 		return errors.SendAppError(c, errors.ErrInvalidToken)
 	}
 
-	accessToken, err := security.GenerateAccessToken(fmt.Sprint(rt.UserID))
+	accessToken, err := security.GenerateAccessToken(
+		fmt.Sprint(rt.UserID),
+		h.cache,                           // używamy cache z handlera
+		config.AppConfig.JWT.AccessSecret, // sekret JWT
+	)
 	if err != nil {
 		log.ErrorObj("Failed to generate access token", err)
 		return errors.SendAppError(c, errors.ErrInternal)

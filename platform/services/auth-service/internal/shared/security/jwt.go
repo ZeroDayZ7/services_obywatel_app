@@ -8,44 +8,42 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/shared"
-	"github.com/zerodayz7/platform/services/auth-service/config"
 )
 
 // ------------------- ACCESS TOKEN (JWT) -------------------
 
-func GenerateAccessToken(userID string) (string, error) {
-	rdb := config.NewRedisClient()
+func GenerateAccessToken(userID string, cache *redis.Cache, secret string) (string, error) {
 	ctx := context.Background()
-
 	var sessionID string
 
+	// Unikalne sessionID
 	for {
 		sessionID = shared.GenerateUuid()
-
-		exists, err := rdb.Exists(ctx, sessionID).Result()
+		exists, err := cache.Exists(ctx, "session:"+sessionID)
 		if err != nil {
 			return "", err
 		}
-		if exists == 0 {
+		if !exists {
 			break
 		}
 	}
 
-	err := rdb.Set(ctx, "session:"+sessionID, userID, config.AppConfig.SessionTTL).Err()
-
+	// Zapis do Redis
+	err := cache.Set(ctx, "session:"+sessionID, userID)
 	if err != nil {
 		return "", err
 	}
 
 	claims := jwt.MapClaims{
 		"sid": sessionID,
-		"exp": jwt.NewNumericDate(time.Now().Add(config.AppConfig.JWT.AccessTTL)),
+		"exp": jwt.NewNumericDate(time.Now().Add(cache.TTL())),
 		"iat": jwt.NewNumericDate(time.Now()),
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	signedToken, err := token.SignedString([]byte(config.AppConfig.JWT.AccessSecret))
+	signedToken, err := token.SignedString([]byte(secret))
 	if err != nil {
 		return "", err
 	}
@@ -53,12 +51,12 @@ func GenerateAccessToken(userID string) (string, error) {
 	return signedToken, nil
 }
 
-func ValidateAccessToken(tokenString string) (*jwt.Token, error) {
+func ValidateAccessToken(tokenString string, secret string) (*jwt.Token, error) {
 	return jwt.Parse(tokenString, func(token *jwt.Token) (any, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, errors.New("unexpected signing method")
 		}
-		return []byte(config.AppConfig.JWT.AccessSecret), nil
+		return []byte(secret), nil
 	})
 }
 

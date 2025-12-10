@@ -3,10 +3,12 @@ package main
 import (
 	"os"
 
+	"github.com/zerodayz7/platform/pkg/redis"
+	"github.com/zerodayz7/platform/pkg/server"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/gateway/config"
+	"github.com/zerodayz7/platform/services/gateway/internal/di"
 	"github.com/zerodayz7/platform/services/gateway/internal/router"
-	"github.com/zerodayz7/platform/services/gateway/internal/server"
 )
 
 func main() {
@@ -19,11 +21,23 @@ func main() {
 		return
 	}
 
+	// Redis – z nowego pkg
+	redisClient, err := redis.New(redis.Config(config.AppConfig.Redis))
+	if err != nil {
+		log.ErrorObj("Redis failed", err)
+	}
+	defer redisClient.Close()
+
+	// Cache wrapper bez TTL
+	cache := redis.NewCache(redisClient, "session:", 0)
+
+	container := di.NewContainer(redisClient, cache)
+
 	// Fiber app
-	app := config.NewFiberApp()
+	app := config.NewGatewayApp(container)
 
 	// Routes
-	router.SetupRoutes(app)
+	router.SetupRoutes(app, container)
 
 	// Graceful shutdown
 	server.SetupGracefulShutdown(app, nil, config.AppConfig.Shutdown)

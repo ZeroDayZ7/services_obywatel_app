@@ -4,13 +4,13 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/zerodayz7/platform/services/auth-service/config"
+	"github.com/zerodayz7/platform/pkg/shared"
 )
 
 func SetupHealthRoutes(app *fiber.App) {
 	health := app.Group("/health")
 
-	health.Use(config.NewLimiter("health"))
+	health.Use(shared.NewLimiter("health"))
 
 	// GET /health
 	health.Get("/", func(c *fiber.Ctx) error {

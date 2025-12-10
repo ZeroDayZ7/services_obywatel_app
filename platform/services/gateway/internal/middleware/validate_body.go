@@ -2,7 +2,7 @@ package middleware
 
 import (
 	"github.com/gofiber/fiber/v2"
-	"github.com/zerodayz7/platform/services/gateway/internal/errors"
+	"github.com/zerodayz7/platform/pkg/errors"
 )
 
 func ValidateBody[T any]() fiber.Handler {

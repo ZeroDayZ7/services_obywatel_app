@@ -7,8 +7,7 @@ import (
 	"github.com/zerodayz7/platform/pkg/shared"
 )
 
-func NewFiberApp() *fiber.App {
-	_ = NewRedisClient()
+func NewAuthApp() *fiber.App {
 	app := fiber.New(fiber.Config{
 		TrustedProxies:        []string{"127.0.0.1", "::1"},
 		BodyLimit:             AppConfig.Server.BodyLimitMB * 1024 * 1024,
@@ -23,8 +22,8 @@ func NewFiberApp() *fiber.App {
 	// Middleware
 	app.Use(requestid.New())
 	app.Use(recover.New())
-	app.Use(FiberLoggerMiddleware())
-	app.Use(NewLimiter("global"))
+	app.Use(shared.FiberLoggerMiddleware())
+	app.Use(shared.NewLimiter("global"))
 	app.Use(shared.RequestLoggerMiddleware())
 
 	return app

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/zerodayz7/platform/pkg/errors"
 	"github.com/zerodayz7/platform/services/auth-service/config"
-	"github.com/zerodayz7/platform/services/auth-service/internal/errors"
 	authModel "github.com/zerodayz7/platform/services/auth-service/internal/features/auth/model"
 	authRepo "github.com/zerodayz7/platform/services/auth-service/internal/features/auth/repository"
 	"github.com/zerodayz7/platform/services/auth-service/internal/features/users/model"

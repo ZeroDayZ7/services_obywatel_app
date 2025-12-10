@@ -3,8 +3,8 @@ package main
 import (
 	"os"
 
+	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/shared"
-
 	"github.com/zerodayz7/platform/services/auth-service/config"
 	"github.com/zerodayz7/platform/services/auth-service/internal/di"
 	"github.com/zerodayz7/platform/services/auth-service/internal/router"
@@ -21,15 +21,22 @@ func main() {
 		return
 	}
 
+	// Redis – z nowego pkg
+	redisClient, err := redis.New(redis.Config(config.AppConfig.Redis))
+	if err != nil {
+		log.ErrorObj("Redis failed", err)
+	}
+	defer redisClient.Close()
+
 	// DB
 	db, closeDB := config.MustInitDB()
 	defer closeDB()
 
 	// Dependency Injection
-	container := di.NewContainer(db)
+	container := di.NewContainer(db, redisClient)
 
 	// Fiber
-	app := config.NewFiberApp()
+	app := config.NewAuthApp()
 
 	// Routes
 	router.SetupRoutes(app, container.AuthHandler, container.UserHandler)

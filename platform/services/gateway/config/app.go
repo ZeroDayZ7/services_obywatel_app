@@ -7,39 +7,51 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/helmet"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/gofiber/fiber/v2/middleware/requestid"
+	"github.com/zerodayz7/platform/pkg/server"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/gateway/internal/di"
 	"github.com/zerodayz7/platform/services/gateway/internal/middleware"
 )
 
-func NewFiberApp() *fiber.App {
+func NewGatewayApp(
+	container *di.Container,
+) *fiber.App {
 
-	rdb := NewRedisClient()
-	container := di.NewContainer(rdb)
+	cfg := AppConfig.Server
 
-	app := fiber.New(fiber.Config{
+	cfgFiber := fiber.Config{
+		AppName:       cfg.AppName,
+		ServerHeader:  cfg.ServerHeader,
+		Prefork:       cfg.Prefork,
+		CaseSensitive: cfg.CaseSensitive,
+		StrictRouting: cfg.StrictRouting,
+		IdleTimeout:   cfg.IdleTimeout,
+		ReadTimeout:   cfg.ReadTimeout,
+		WriteTimeout:  cfg.WriteTimeout,
+
 		ProxyHeader:             fiber.HeaderXForwardedFor,
 		EnableTrustedProxyCheck: true,
 		TrustedProxies:          []string{"127.0.0.1", "::1"},
-		BodyLimit:               AppConfig.Server.BodyLimitMB * 1024 * 1024,
-		ReadTimeout:             AppConfig.Server.ReadTimeout,
-		WriteTimeout:            AppConfig.Server.WriteTimeout,
-		IdleTimeout:             AppConfig.Server.IdleTimeout,
+		BodyLimit:               cfg.BodyLimitMB * 1024 * 1024,
 		DisableStartupMessage:   true,
 		EnableIPValidation:      true,
-		ServerHeader:            AppConfig.Server.ServerHeader,
-	})
 
+		ErrorHandler: server.ErrorHandler(),
+	}
+
+	app := fiber.New(cfgFiber)
+
+	// Middleware
 	app.Use(requestid.New())
 	app.Use(recover.New())
-	app.Use(FiberLoggerMiddleware())
+	app.Use(shared.FiberLoggerMiddleware())
 	app.Use(helmet.New(HelmetConfig()))
 	app.Use(cors.New(CorsConfig()))
-	app.Use(NewLimiter("global"))
+	app.Use(shared.NewLimiter("global"))
 	app.Use(compress.New(CompressConfig()))
 	app.Use(shared.RequestLoggerMiddleware())
 	app.Use(JWTMiddlewareWithExclusions())
-	app.Use(middleware.AuthRedisMiddleware(container.RedisClient))
+	app.Use(middleware.AuthRedisMiddleware(container.Redis.Client))
 
 	return app
 }

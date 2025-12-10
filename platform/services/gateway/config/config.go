@@ -32,11 +32,6 @@ type RedisConfig struct {
 	DB       int
 }
 
-type RateLimitConfig struct {
-	Max    int
-	Window time.Duration
-}
-
 type JWTConfig struct {
 	AccessSecret  string
 	RefreshSecret string
@@ -47,7 +42,6 @@ type JWTConfig struct {
 type Config struct {
 	Server    ServerConfig
 	Redis     RedisConfig
-	RateLimit RateLimitConfig
 	CORSAllow string
 	Shutdown  time.Duration
 	JWT       JWTConfig
@@ -81,10 +75,6 @@ func LoadConfigGlobal() error {
 	viper.SetDefault("REDIS_PORT", "6379")
 	viper.SetDefault("REDIS_PASSWORD", "")
 	viper.SetDefault("REDIS_DB", 0)
-
-	// Rate limiting
-	viper.SetDefault("RATE_LIMIT_MAX", 100)
-	viper.SetDefault("RATE_LIMIT_WINDOW_SEC", 60)
 
 	// Shutdown
 	viper.SetDefault("SHUTDOWN_TIMEOUT_SEC", 5)
@@ -122,10 +112,6 @@ func LoadConfigGlobal() error {
 			Port:     viper.GetString("REDIS_PORT"),
 			Password: viper.GetString("REDIS_PASSWORD"),
 			DB:       viper.GetInt("REDIS_DB"),
-		},
-		RateLimit: RateLimitConfig{
-			Max:    viper.GetInt("RATE_LIMIT_MAX"),
-			Window: time.Duration(viper.GetInt("RATE_LIMIT_WINDOW_SEC")) * time.Second,
 		},
 		CORSAllow: viper.GetString("CORS_ALLOW_ORIGINS"),
 		Shutdown:  time.Duration(viper.GetInt("SHUTDOWN_TIMEOUT_SEC")) * time.Second,
