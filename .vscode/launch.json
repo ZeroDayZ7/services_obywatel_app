@@ -6,48 +6,48 @@
       "type": "go",
       "request": "launch",
       "mode": "debug",
-      "program": "${workspaceFolder}/gateway/cmd/main.go",
+      "program": "${workspaceFolder}/platform/services/gateway/cmd/main.go",
       "args": [],
       "env": {
         "ENV": "development",
         "APP_ENV": "dev"
       },
       "buildFlags": "-tags=dev",
-      "cwd": "${workspaceFolder}/gateway",
+      "cwd": "${workspaceFolder}/platform/services/gateway",
       "showLog": true,
-      "output": "${workspaceFolder}/gateway/bin/gateway_debug.exe"
+      "output": "${workspaceFolder}/platform/services/gateway/bin/gateway_debug.exe"
     },
     {
       "name": "Auth Service",
       "type": "go",
       "request": "launch",
       "mode": "debug",
-      "program": "${workspaceFolder}/auth-service/cmd/main.go",
+      "program": "${workspaceFolder}/platform/services/auth-service/cmd/main.go",
       "args": [],
       "env": {
         "ENV": "development",
         "APP_ENV": "dev"
       },
       "buildFlags": "-tags=dev",
-      "cwd": "${workspaceFolder}/auth-service",
+      "cwd": "${workspaceFolder}/platform/services/auth-service",
       "showLog": true,
-      "output": "${workspaceFolder}/auth-service/bin/auth_debug.exe"
+      "output": "${workspaceFolder}/platform/services/auth-service/bin/auth_debug.exe"
     },
       {
       "name": "Citizen Docs Service",
       "type": "go",
       "request": "launch",
       "mode": "debug",
-      "program": "${workspaceFolder}/citizen-docs/cmd/main.go",
+      "program": "${workspaceFolder}/platform/services/citizen-docs/cmd/main.go",
       "args": [],
       "env": {
         "ENV": "development",
         "APP_ENV": "dev"
       },
       "buildFlags": "-tags=dev",
-      "cwd": "${workspaceFolder}/citizen-docs",
+      "cwd": "${workspaceFolder}/platform/services/citizen-docs",
       "showLog": true,
-      "output": "${workspaceFolder}/citizen-docs/bin/citizen-docs_debug.exe"
+      "output": "${workspaceFolder}/platform/services/citizen-docs/bin/citizen-docs_debug.exe"
     }
   ]
 }

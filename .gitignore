@@ -1,0 +1,13 @@
+# Ignore actual environment files
+.env
+.env.*           # ignore all env variants like .env.dev, .env.local, etc.
+.env.dev
+# Keep example env files
+!*.example       # e.g. .env.example, .env.dev.example
+
+# Ignore binary outputs
+bin/*
+
+# Ignore logs
+**/logs/
+**/combined.txt
