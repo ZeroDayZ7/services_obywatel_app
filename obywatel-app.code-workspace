@@ -15,7 +15,7 @@
       "**/bin": true,
       "**/LICENSE": true,
       "**/go.sum": true,
-      "**/README.md": true,
+      // "**/README.md": true,
     },
 
     "search.exclude": {
