@@ -1,19 +1,24 @@
-﻿package main
+package main
 
 import (
-    "log"
-    "net/http"
-    "platform/pkg/server"
-    "platform/services/version-service/internal/router"
+	"log"
+	"net/http"
+
+	"github.com/zerodayz7/platform/pkg/server"
+	"github.com/zerodayz7/platform/services/version-service/config"
+	"github.com/zerodayz7/platform/services/version-service/internal/router"
 )
 
 func main() {
-    mux := http.NewServeMux()
-    router.RegisterRoutes(mux)
+	cfg := config.Get()
 
-    srv := server.New(mux)
-    log.Println("version-service running on :3005")
-    if err := srv.Start(":3005"); err != nil {
-        log.Fatal(err)
-    }
+	mux := http.NewServeMux()
+	router.RegisterRoutes(mux)
+
+	srv := server.New(mux)
+	log.Printf("version-service running on :%s\n", cfg.Port)
+
+	if err := srv.Start(":" + cfg.Port); err != nil {
+		log.Fatal(err)
+	}
 }

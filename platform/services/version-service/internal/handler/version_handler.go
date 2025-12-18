@@ -1,11 +1,11 @@
-﻿package handler
+package handler
 
 import (
 	"encoding/json"
 	"net/http"
 
-	"platform/services/version-service/config"
-	"platform/services/version-service/internal/model"
+	"github.com/zerodayz7/platform/services/version-service/config"
+	"github.com/zerodayz7/platform/services/version-service/internal/model"
 )
 
 func VersionHandler(w http.ResponseWriter, r *http.Request) {

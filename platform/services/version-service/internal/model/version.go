@@ -1,4 +1,4 @@
-﻿package model
+package model
 
 type VersionResponse struct {
 	MinVersion  string `json:"minVersion"`
