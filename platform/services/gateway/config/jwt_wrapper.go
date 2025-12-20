@@ -11,12 +11,13 @@ import (
 var PublicPaths = []string{
 	"/auth/login",
 	"/auth/register",
+	"/auth/reset/send",
 	"/auth/refresh",
 	"/auth/2fa-verify",
 	"/health",
 }
 
-var SkipJWT = false
+var SkipJWT = true
 
 // JWTMiddlewareWithExclusions — middleware JWT z obsługą wyjątków (publicznych tras)
 func JWTMiddlewareWithExclusions() fiber.Handler {
