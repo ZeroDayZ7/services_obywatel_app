@@ -12,9 +12,10 @@ func VersionHandler(w http.ResponseWriter, r *http.Request) {
 	cfg := config.Get()
 
 	resp := model.VersionResponse{
-		MinVersion:  cfg.Min,
-		Latest:      cfg.Latest,
-		ForceUpdate: cfg.Force,
+		MinVersion:       cfg.Min,
+		Latest:           cfg.Latest,
+		ForceUpdate:      cfg.Force,
+		UpdateUrlWindows: cfg.UpdateUrlWindows,
 	}
 
 	w.Header().Set("Content-Type", "application/json")

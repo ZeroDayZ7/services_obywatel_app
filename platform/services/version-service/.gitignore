@@ -9,6 +9,6 @@
 bin/*
 
 # Ignore logs
-**/logs/
+logs/
 **/combined.txt
-
+my_private_key.pem
