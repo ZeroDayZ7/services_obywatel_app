@@ -11,9 +11,9 @@ import (
 var PublicPaths = []string{
 	"/auth/login",
 	"/auth/register",
+	"/auth/2fa/verify",
 	"/auth/reset/send",
 	"/auth/refresh",
-	"/auth/2fa-verify",
 	"/health",
 }
 
