@@ -17,7 +17,8 @@ var PublicPathsRedis = []string{
 	"/auth/login",
 	"/auth/register",
 	"/auth/refresh",
-	"/auth/2fa/verify",
+	"/auth/2fa-verify",
+	"/auth/2fa-resend",
 	"/auth/reset/send",
 	"/health",
 }

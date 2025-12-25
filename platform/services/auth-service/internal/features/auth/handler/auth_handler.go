@@ -44,29 +44,30 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 
 	// 2FA
 	if user.TwoFactorEnabled {
-		// generujemy 6-cyfrowy kod
 		code := fmt.Sprintf("%06d", shared.RandInt(100000, 999999))
+		twoFAToken := shared.GenerateUuid()
 
-		// zapisujemy w Redis na 5 minut
-		key := fmt.Sprintf("2fa:%d", user.ID)
+		session := map[string]any{
+			"user_id":  user.ID,
+			"code":     code,
+			"attempts": 0,
+		}
+
+		key := fmt.Sprintf("login:2fa:%s", twoFAToken)
 		ttl := 5 * time.Minute
 
-		// używamy context z Fiber
-		if err := h.cache.Set(c.Context(), key, code, ttl); err != nil {
-			log.ErrorObj("Failed to save 2FA code in Redis", err)
+		if err := h.cache.Set(c.Context(), key, session, ttl); err != nil {
+			log.ErrorObj("Failed to save 2FA session", err)
 			return errors.SendAppError(c, errors.ErrInternal)
 		}
 
-		// TODO: tutaj możesz wysłać kod do usera email/sms
-		log.InfoObj("Generated 2FA code", map[string]any{"userID": user.ID, "code": code})
+		// wysyłka maila/SMS
+		// h.authService.Send2FACode(user.Email, code)
 
-		// odsyłamy tylko info o 2FA, nie generujemy tokenów
-		response := fiber.Map{
+		return c.JSON(fiber.Map{
 			"2fa_required": true,
-		}
-
-		log.InfoMap("2FA required response", response)
-		return c.JSON(response)
+			"two_fa_token": twoFAToken,
+		})
 	}
 
 	userID := fmt.Sprint(user.ID)

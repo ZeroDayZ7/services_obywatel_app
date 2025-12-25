@@ -38,6 +38,20 @@ services:
     networks:
       - app-network
 
+  postgres_notification:
+    image: postgres:18.1-alpine
+    container_name: notification-database
+    ports:
+      - "5434:5432"
+    environment:
+      POSTGRES_USER: ${NOTIFICATION_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${NOTIFICATION_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${NOTIFICATION_POSTGRES_DB}
+    volumes:
+      - pg_notification_data:/var/lib/postgresql/data
+    networks:
+      - app-network
+
   redis:
     image: redis:8.4-alpine
     container_name: auth-redis
@@ -53,6 +67,7 @@ volumes:
   pg_data:
   redis_data:
   pg_citizen_docs_data:
+  pg_notification_data:
 
 networks:
   app-network:

@@ -64,6 +64,22 @@
       "cwd": "${workspaceFolder}/platform/services/version-service",
       "showLog": true,
       "output": "${workspaceFolder}/platform/services/version-service/bin/version_service_debug.exe"
+    },
+    {
+      "name": "Notification Service",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/platform/services/notification-service/cmd/main.go",
+      "args": [],
+      "env": {
+        "ENV": "development",
+        "APP_ENV": "dev"
+      },
+      "buildFlags": "-tags=dev",
+      "cwd": "${workspaceFolder}/platform/services/notification-service",
+      "showLog": true,
+      "output": "${workspaceFolder}/platform/services/notification-service/bin/notification_debug.exe"
     }
   ]
 }

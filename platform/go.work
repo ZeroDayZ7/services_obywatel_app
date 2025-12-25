@@ -6,4 +6,5 @@ use (
 	./services/citizen-docs
 	./services/gateway
 	./services/version-service
+	./services/notification-service
 )
