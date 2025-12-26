@@ -16,7 +16,9 @@ type LoginRequest struct {
 }
 
 type TwoFARequest struct {
-	Code string `json:"code" validate:"required,len=6,numeric"`
+	Email string `json:"email" validate:"required,email"`
+	Code  string `json:"code" validate:"required,len=6,numeric"`
+	Token string `json:"token" validate:"required,uuid4"`
 }
 
 // ===== JWT Refresh =====

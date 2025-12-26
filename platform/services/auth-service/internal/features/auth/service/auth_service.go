@@ -136,23 +136,6 @@ func (s *AuthService) VerifyPassword(user *model.User, password string) (bool, e
 	return security.VerifyPassword(password, user.Password)
 }
 
-func (s *AuthService) Verify2FACodeByID(userID uint, code string) (bool, error) {
-	log := shared.GetLogger()
-	log.DebugMap("Verify2FACodeByID", map[string]any{"userID": userID})
-
-	u, err := s.repo.GetByID(userID)
-	if err != nil {
-		log.ErrorMap("GetByID failed", map[string]any{"error": err.Error()})
-		return false, err
-	}
-	if !u.TwoFactorEnabled {
-		log.WarnMap("2FA not enabled", map[string]any{"userID": userID})
-		return false, nil
-	}
-
-	return code == u.TwoFactorSecret, nil
-}
-
 func (s *AuthService) Register(username, email, rawPassword string) (*model.User, error) {
 	log := shared.GetLogger()
 	log.DebugMap("Register attempt", map[string]any{"email": email, "username": username})

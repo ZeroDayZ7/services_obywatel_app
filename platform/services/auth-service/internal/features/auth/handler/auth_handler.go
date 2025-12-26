@@ -1,7 +1,9 @@
 package handler
 
 import (
+	"encoding/json"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -11,6 +13,7 @@ import (
 	"github.com/zerodayz7/platform/services/auth-service/config"
 	"github.com/zerodayz7/platform/services/auth-service/internal/features/auth/service"
 	"github.com/zerodayz7/platform/services/auth-service/internal/validator"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type AuthHandler struct {
@@ -23,6 +26,14 @@ func NewAuthHandler(authService *service.AuthService, cache *redis.Cache) *AuthH
 		authService: authService,
 		cache:       cache,
 	}
+}
+
+type TwoFASession struct {
+	UserID   string `json:"user_id"`  // ID użytkownika
+	Email    string `json:"email"`    // opcjonalnie email do wysyłki powiadomień
+	CodeHash string `json:"code"`     // kod 2FA
+	Token    string `json:"token"`    // token wygenerowany do 2FA
+	Attempts int    `json:"attempts"` // liczba prób
 }
 
 // LOGIN
@@ -45,18 +56,33 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	// 2FA
 	if user.TwoFactorEnabled {
 		code := fmt.Sprintf("%06d", shared.RandInt(100000, 999999))
+		hashedCode, _ := bcrypt.GenerateFromPassword([]byte(code), bcrypt.DefaultCost)
 		twoFAToken := shared.GenerateUuid()
 
-		session := map[string]any{
-			"user_id":  user.ID,
-			"code":     code,
-			"attempts": 0,
+		log.DebugMap("Generated 2FA code", map[string]any{
+			"email": body.Email,
+			"code":  code,
+			"token": twoFAToken,
+		})
+
+		session := TwoFASession{
+			UserID:   fmt.Sprint(user.ID),
+			Email:    user.Email,
+			CodeHash: string(hashedCode),
+			Token:    twoFAToken,
+			Attempts: 0,
+		}
+
+		data, err := json.Marshal(session)
+		if err != nil {
+			log.ErrorObj("Failed to marshal 2FA session", err)
+			return errors.SendAppError(c, errors.ErrInternal)
 		}
 
 		key := fmt.Sprintf("login:2fa:%s", twoFAToken)
 		ttl := 5 * time.Minute
 
-		if err := h.cache.Set(c.Context(), key, session, ttl); err != nil {
+		if err := h.cache.Set(c.Context(), key, data, ttl); err != nil {
 			log.ErrorObj("Failed to save 2FA session", err)
 			return errors.SendAppError(c, errors.ErrInternal)
 		}
@@ -220,16 +246,52 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 	})
 }
 
-// OPTIONAL: Verify2FA jeśli używasz 2FA
 func (h *AuthHandler) Verify2FA(c *fiber.Ctx) error {
+	log := shared.GetLogger()
 	body := c.Locals("validatedBody").(validator.TwoFARequest)
-	userID, ok := c.Locals("userID").(uint)
-	if !ok {
-		return errors.SendAppError(c, errors.ErrUnauthorized)
+
+	key := fmt.Sprintf("login:2fa:%s", body.Token)
+	data, err := h.cache.Get(c.Context(), key)
+	if err != nil {
+		return errors.SendAppError(c, errors.ErrInternal)
 	}
-	ok, err := h.authService.Verify2FACodeByID(userID, body.Code)
-	if err != nil || !ok {
+
+	var session TwoFASession
+	if err := json.Unmarshal([]byte(data), &session); err != nil {
+		return errors.SendAppError(c, errors.ErrInternal)
+	}
+
+	if session.Attempts >= 5 {
 		return errors.SendAppError(c, errors.ErrInvalid2FACode)
 	}
-	return c.JSON(fiber.Map{"message": "2FA verified successfully"})
+
+	if bcrypt.CompareHashAndPassword([]byte(session.CodeHash), []byte(body.Code)) != nil {
+		session.Attempts++
+		updated, _ := json.Marshal(session)
+		h.cache.Set(c.Context(), key, updated, 5*time.Minute)
+		return errors.SendAppError(c, errors.ErrInvalid2FACode)
+	}
+
+	h.cache.Del(c.Context(), key)
+
+	userID, err := strconv.ParseUint(session.UserID, 10, 64)
+	if err != nil {
+		return errors.SendAppError(c, errors.ErrInternal)
+	}
+	uid := uint(userID)
+
+	accessToken, _, _ := h.authService.CreateAccessToken(uid)
+	refreshToken, _ := h.authService.CreateRefreshToken(uid)
+
+	response := fiber.Map{
+		"success":       true,
+		"access_token":  accessToken,
+		"refresh_token": refreshToken.Token,
+		"user_id":       session.UserID,
+	}
+	log.InfoMap("Login response", response)
+
+	// Zwracamy JSON
+	return c.JSON(response)
+
 }
