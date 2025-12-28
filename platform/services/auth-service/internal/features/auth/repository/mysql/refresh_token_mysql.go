@@ -37,7 +37,6 @@ func (r *RefreshTokenRepository) Revoke(token string) error {
 	return r.DB.Model(&model.RefreshToken{}).Where("token = ?", token).Update("revoked", true).Error
 }
 
-// GetByToken zwraca refresh token niezależnie od revokacji lub daty wygaśnięcia
 func (r *RefreshTokenRepository) GetByToken(token string) (*model.RefreshToken, error) {
 	var rt model.RefreshToken
 	err := r.DB.Where("token = ?", token).First(&rt).Error
@@ -47,7 +46,6 @@ func (r *RefreshTokenRepository) GetByToken(token string) (*model.RefreshToken, 
 	return &rt, nil
 }
 
-// Update zapisuje zmiany w refresh tokenie
 func (r *RefreshTokenRepository) Update(rt *model.RefreshToken) error {
 	return r.DB.Save(rt).Error
 }

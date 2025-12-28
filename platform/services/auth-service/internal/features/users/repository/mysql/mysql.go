@@ -73,3 +73,7 @@ func (r *MySQLUserRepo) EmailOrUsernameExists(email, username string) (emailExis
 	}
 	return
 }
+
+func (r *MySQLUserRepo) Update(user *model.User) error {
+	return r.db.Save(user).Error
+}

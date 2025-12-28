@@ -28,6 +28,38 @@ func NewAuthService(repo userRepo.UserRepository, refreshRepo authRepo.RefreshTo
 	}
 }
 
+// Pobranie użytkownika po ID
+func (s *AuthService) UpdatePassword(userID uint, newPassword string) error {
+	log := shared.GetLogger()
+
+	// Pobranie użytkownika po ID
+	user, err := s.repo.GetByID(userID)
+	if err != nil {
+		log.ErrorMap("GetByID failed", map[string]any{"userID": userID, "error": err.Error()})
+		return err
+	}
+	if user == nil {
+		return errors.ErrUserNotFound
+	}
+
+	// Hashowanie nowego hasła
+	hashed, err := security.HashPassword(newPassword)
+	if err != nil {
+		log.ErrorMap("HashPassword failed", map[string]any{"error": err.Error()})
+		return err
+	}
+
+	// Aktualizacja hasła w bazie
+	user.Password = hashed
+	if err := s.repo.Update(user); err != nil {
+		log.ErrorMap("Update user failed", map[string]any{"userID": userID, "error": err.Error()})
+		return err
+	}
+
+	log.InfoMap("Password updated successfully", map[string]any{"userID": userID})
+	return nil
+}
+
 // CreateAccessToken generuje access token i zwraca sessionID
 func (s *AuthService) CreateAccessToken(userID uint) (accessToken string, sessionID string, err error) {
 	sessionID = shared.GenerateUuid() // lub ksuid

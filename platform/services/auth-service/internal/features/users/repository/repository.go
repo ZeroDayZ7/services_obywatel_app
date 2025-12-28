@@ -9,4 +9,5 @@ type UserRepository interface {
 	EmailExists(string) (bool, error)
 	UsernameExists(string) (bool, error)
 	EmailOrUsernameExists(email, username string) (bool, bool, error)
+	Update(user *model.User) error
 }

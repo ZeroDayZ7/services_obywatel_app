@@ -48,12 +48,13 @@ var (
 
 // --- Błędy specyficzne dla auth ---
 var (
-	ErrInvalid2FACode     = &AppError{Code: "login_2fa_invalid_code", Type: Validation, Message: "Invalid 2FA code"}
-	ErrInvalidRequest     = &AppError{Code: "INVALID_REQUEST", Type: Validation, Message: "Invalid request data"}
-	ErrEmailExists        = &AppError{Code: "EMAIL_EXISTS", Type: Validation, Message: "Email already registered"}
-	ErrUsernameExists     = &AppError{Code: "USERNAME_EXISTS", Type: Validation, Message: "Username already exist"}
-	ErrPasswordTooShort   = &AppError{Code: "PASSWORD_TOO_SHORT", Type: Validation, Message: "Password must be at least 8 characters"}
-	ErrCSRFInvalid        = &AppError{Code: "CSRF_INVALID", Type: Unauthorized, Message: "CSRF token invalid or missing"}
-	ErrInvalidCredentials = &AppError{Code: "INVALID_CREDENTIALS", Type: Unauthorized, Message: "Incorrect login data"}
-	ErrUserNotFound       = &AppError{Code: "USER_NOT_FOUND", Type: Unauthorized, Message: "User not found"}
+	ErrInvalid2FACode      = &AppError{Code: "INVALID_2FA", Type: Validation, Message: "Invalid 2FA code"}
+	ErrInvalidRequest      = &AppError{Code: "INVALID_REQUEST", Type: Validation, Message: "Invalid request data"}
+	ErrEmailExists         = &AppError{Code: "EMAIL_EXISTS", Type: Validation, Message: "Email already registered"}
+	ErrUsernameExists      = &AppError{Code: "USERNAME_EXISTS", Type: Validation, Message: "Username already exist"}
+	ErrPasswordTooShort    = &AppError{Code: "PASSWORD_TOO_SHORT", Type: Validation, Message: "Password must be at least 8 characters"}
+	ErrCSRFInvalid         = &AppError{Code: "CSRF_INVALID", Type: Unauthorized, Message: "CSRF token invalid or missing"}
+	ErrInvalidCredentials  = &AppError{Code: "INVALID_CREDENTIALS", Type: Unauthorized, Message: "Incorrect login data"}
+	ErrUserNotFound        = &AppError{Code: "USER_NOT_FOUND", Type: Unauthorized, Message: "User not found"}
+	ErrEmailIsSendIfExists = &AppError{Code: "EMAIL_IS_SEND_IF_EXISTS", Type: Validation, Message: "If the account exists, a reset code has been sent to the provided email."}
 )

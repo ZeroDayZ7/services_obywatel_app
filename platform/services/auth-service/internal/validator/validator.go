@@ -4,6 +4,23 @@ import (
 	"github.com/zerodayz7/platform/services/auth-service/internal/middleware"
 )
 
+// ===== Reset Password =====
+type ResetPasswordRequest struct {
+	Value  string `json:"value" validate:"required,email"` // zamiast Email
+	Method string `json:"method"`                          // np. "email" lub "sms"
+}
+
+type ResetCodeVerifyRequest struct {
+	Token string `json:"token" validate:"required"` // token z SendResetCode
+	Code  string `json:"code" validate:"required"`  // kod, który użytkownik otrzymał
+}
+
+type ResetPasswordFinalRequest struct {
+	Token       string `json:"token" validate:"required"`        // token z VerifyResetCode
+	NewPassword string `json:"new_password" validate:"required"` // nowe hasło
+}
+
+// ===== Registration & Login =====
 type RegisterRequest struct {
 	Username string `json:"username" validate:"required,alphanum,min=3,max=30"`
 	Email    string `json:"email" validate:"required,email"`
@@ -16,9 +33,8 @@ type LoginRequest struct {
 }
 
 type TwoFARequest struct {
-	Email string `json:"email" validate:"required,email"`
 	Code  string `json:"code" validate:"required,len=6,numeric"`
-	Token string `json:"token" validate:"required,uuid4"`
+	Token string `json:"token" validate:"required"`
 }
 
 // ===== JWT Refresh =====

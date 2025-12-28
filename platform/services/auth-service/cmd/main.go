@@ -39,8 +39,12 @@ func main() {
 	app := config.NewAuthApp()
 
 	// Routes
-	router.SetupRoutes(app, container.AuthHandler, container.UserHandler)
-
+	router.SetupRoutes(
+		app,
+		container.AuthHandler,  // AuthHandler
+		container.ResetHandler, // ResetHandler
+		container.UserHandler,  // UserHandler
+	)
 	// Graceful shutdown
 	server.SetupGracefulShutdown(app, closeDB, config.AppConfig.Shutdown)
 

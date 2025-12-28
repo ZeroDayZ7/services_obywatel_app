@@ -15,6 +15,7 @@ var Presets = map[string]struct {
 }{
 	"global": {Max: 100, Window: 60 * time.Second},
 	"auth":   {Max: 10, Window: 60 * time.Second},
+	"reset":  {Max: 3, Window: 60 * time.Second},
 	"users":  {Max: 5, Window: 60 * time.Second},
 	"health": {Max: 20, Window: 30 * time.Second},
 }

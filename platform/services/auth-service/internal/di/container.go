@@ -2,6 +2,7 @@ package di
 
 import (
 	authHandler "github.com/zerodayz7/platform/services/auth-service/internal/features/auth/handler"
+	resetHandler "github.com/zerodayz7/platform/services/auth-service/internal/features/auth/handler"
 	userHandler "github.com/zerodayz7/platform/services/auth-service/internal/features/users/handler"
 
 	authService "github.com/zerodayz7/platform/services/auth-service/internal/features/auth/service"
@@ -17,15 +18,16 @@ import (
 
 // Container przechowuje wszystkie zależności serwisów i handlerów
 type Container struct {
-	AuthHandler *authHandler.AuthHandler
-	UserHandler *userHandler.UserHandler
-	Redis       *redis.Client
-	Cache       *redis.Cache
+	AuthHandler  *authHandler.AuthHandler
+	ResetHandler *resetHandler.ResetHandler
+	UserHandler  *userHandler.UserHandler
+	Redis        *redis.Client
+	Cache        *redis.Cache
 }
 
 // NewContainer tworzy nowy kontener z wszystkimi zależnościami
 func NewContainer(db *gorm.DB, redisClient *redis.Client) *Container {
-	// repozytorium użytkowników
+	// repozytoria
 	userRepo := userRepo.NewUserRepository(db)
 	refreshRepo := refRepo.NewRefreshTokenRepository(db)
 	// serwisy
@@ -36,10 +38,14 @@ func NewContainer(db *gorm.DB, redisClient *redis.Client) *Container {
 	cache := redis.NewCache(redisClient, redis.SessionPrefix, config.AppConfig.SessionTTL)
 
 	// handlery
+	authH := authHandler.NewAuthHandler(authSvc, cache)
+	resetH := resetHandler.NewResetHandler(authSvc, cache)
+
 	return &Container{
-		AuthHandler: authHandler.NewAuthHandler(authSvc, cache),
-		UserHandler: userHandler.NewUserHandler(userSvc),
-		Redis:       redisClient,
-		Cache:       cache,
+		AuthHandler:  authH,
+		ResetHandler: resetH,
+		UserHandler:  userHandler.NewUserHandler(userSvc),
+		Redis:        redisClient,
+		Cache:        cache,
 	}
 }
