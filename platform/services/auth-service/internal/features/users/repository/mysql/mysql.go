@@ -1,11 +1,14 @@
 package mysql
 
 import (
+	"context"
 	"errors"
 
+	authModel "github.com/zerodayz7/platform/services/auth-service/internal/features/auth/model"
 	"github.com/zerodayz7/platform/services/auth-service/internal/features/users/model"
 	"github.com/zerodayz7/platform/services/auth-service/internal/features/users/repository"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 var _ repository.UserRepository = (*MySQLUserRepo)(nil)
@@ -76,4 +79,19 @@ func (r *MySQLUserRepo) EmailOrUsernameExists(email, username string) (emailExis
 
 func (r *MySQLUserRepo) Update(user *model.User) error {
 	return r.db.Save(user).Error
+}
+
+func (r *MySQLUserRepo) SaveDevice(ctx context.Context, device *authModel.UserDevice) error {
+	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
+		// Klucz unikalny to kombinacja UserID i Fingerprint
+		Columns: []clause.Column{{Name: "user_id"}, {Name: "device_fingerprint"}},
+		// Co ma się stać przy konflikcie? Aktualizujemy dane:
+		DoUpdates: clause.AssignmentColumns([]string{
+			"public_key",
+			"device_name_encrypted",
+			"platform",
+			"is_active",
+			"last_used_at",
+		}),
+	}).Create(device).Error
 }

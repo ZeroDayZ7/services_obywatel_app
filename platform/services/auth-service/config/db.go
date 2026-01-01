@@ -36,6 +36,7 @@ func MustInitDB() (*gorm.DB, func()) {
 	if err := db.AutoMigrate(
 		&model.User{},
 		&model.RefreshToken{},
+		&model.UserDevice{},
 	); err != nil {
 		log.ErrorObj("Failed to migrate database", err)
 		panic(err)

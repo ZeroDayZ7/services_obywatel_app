@@ -12,7 +12,6 @@ func SetupAuthRoutes(app *fiber.App, h *handler.AuthHandler, resetHandler *handl
 	auth := app.Group("/auth")
 	auth.Use(shared.NewLimiter("auth"))
 
-
 	// ==========================
 	// LOGIN / REGISTER / JWT
 	// ==========================
@@ -42,11 +41,20 @@ func SetupAuthRoutes(app *fiber.App, h *handler.AuthHandler, resetHandler *handl
 	)
 
 	// ==========================
+	// DEVICE MANAGEMENT (NEW)
+	// ==========================
+	// Tutaj dodajemy endpoint, którego szuka Flutter
+	auth.Post("/register-device",
+		middleware.ValidateBody[validator.RegisterDeviceRequest](),
+		h.RegisterDevice,
+	)
+
+	// ==========================
 	// RESET PASSWORD
 	// ==========================
 	reset := auth.Group("/reset")
 	reset.Use(shared.NewLimiter("reset"))
-	
+
 	reset.Post("/send",
 		middleware.ValidateBody[validator.ResetPasswordRequest](),
 		resetHandler.SendResetCode,

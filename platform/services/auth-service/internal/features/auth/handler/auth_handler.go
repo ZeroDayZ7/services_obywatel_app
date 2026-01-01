@@ -343,3 +343,41 @@ func (h *AuthHandler) Verify2FA(c *fiber.Ctx) error {
 	log.InfoMap("2FA verification successful", response)
 	return c.JSON(response)
 }
+
+// RegisterDevice obsługuje zapisanie klucza publicznego urządzenia i jego danych
+func (h *AuthHandler) RegisterDevice(c *fiber.Ctx) error {
+	log := shared.GetLogger()
+
+	// 1. Pobieramy body z walidacji (tutaj validator jest na miejscu)
+	body, ok := c.Locals("validatedBody").(validator.RegisterDeviceRequest)
+	if !ok {
+		return errors.SendAppError(c, errors.ErrInternal)
+	}
+
+	// 2. Pobieramy UserID (wstrzyknięte przez Gateway)
+	userIDStr := c.Get("X-User-Id")
+	userID, err := strconv.ParseUint(userIDStr, 10, 64)
+	if err != nil {
+		return errors.SendAppError(c, errors.ErrInvalidToken)
+	}
+
+	// 3. Przekazujemy "rozpakowane" dane do serwisu (Czysta Funkcja)
+	err = h.authService.RegisterUserDevice(
+		c.Context(),
+		uint(userID),
+		body.DeviceFingerprint,
+		body.PublicKey,
+		body.DeviceNameEncrypted,
+		body.Platform,
+	)
+
+	if err != nil {
+		log.ErrorObj("RegisterDevice: Service error", err)
+		return errors.SendAppError(c, errors.ErrInternal)
+	}
+
+	return c.JSON(fiber.Map{
+		"success": true,
+		"message": "Device registered successfully",
+	})
+}

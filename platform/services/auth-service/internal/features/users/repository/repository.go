@@ -1,6 +1,11 @@
 package repository
 
-import "github.com/zerodayz7/platform/services/auth-service/internal/features/users/model"
+import (
+	"context"
+
+	authModel "github.com/zerodayz7/platform/services/auth-service/internal/features/auth/model"
+	"github.com/zerodayz7/platform/services/auth-service/internal/features/users/model"
+)
 
 type UserRepository interface {
 	CreateUser(*model.User) error
@@ -10,4 +15,6 @@ type UserRepository interface {
 	UsernameExists(string) (bool, error)
 	EmailOrUsernameExists(email, username string) (bool, bool, error)
 	Update(user *model.User) error
+	// NOWA METODA
+	SaveDevice(ctx context.Context, device *authModel.UserDevice) error
 }

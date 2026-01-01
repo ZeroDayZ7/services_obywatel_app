@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -207,4 +208,33 @@ func (s *AuthService) Register(username, email, rawPassword string) (*model.User
 
 	log.InfoMap("User registered successfully", map[string]any{"email": email, "username": username})
 	return u, nil
+}
+
+// RegisterUserDevice przyjmuje czyste dane, nie wie nic o pakiecie validator
+func (s *AuthService) RegisterUserDevice(
+	ctx context.Context,
+	userID uint,
+	fingerprint string,
+	publicKey string,
+	deviceName string,
+	platform string,
+) error {
+	log := shared.GetLogger()
+
+	device := authModel.UserDevice{
+		UserID:              userID,
+		DeviceFingerprint:   fingerprint,
+		PublicKey:           publicKey,
+		DeviceNameEncrypted: deviceName,
+		Platform:            platform,
+		IsActive:            true,
+	}
+
+	err := s.repo.SaveDevice(ctx, &device)
+	if err != nil {
+		log.ErrorObj("Failed to save device", err)
+		return errors.ErrInternal
+	}
+
+	return nil
 }
