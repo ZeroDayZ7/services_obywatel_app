@@ -7,13 +7,13 @@ import (
 
 func ValidateBody[T any]() fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		var body T
-		if err := c.BodyParser(&body); err != nil {
+		body := new(T)
+
+		if err := c.BodyParser(body); err != nil {
 			return errors.SendAppError(c, errors.ErrInvalidJSON)
 		}
 
-		if errs := ValidateStruct(body); len(errs) > 0 {
-
+		if errs := ValidateStruct(*body); len(errs) > 0 {
 			meta := make(map[string]any)
 			for k, v := range errs {
 				meta[k] = v
@@ -24,7 +24,7 @@ func ValidateBody[T any]() fiber.Handler {
 			return errors.SendAppError(c, appErr)
 		}
 
-		c.Locals("validatedBody", body)
+		c.Locals("validatedBody", *body)
 		return c.Next()
 	}
 }

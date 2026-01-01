@@ -164,7 +164,8 @@ func (s *AuthService) GetUserByEmail(email string) (*model.User, error) {
 	return u, nil
 }
 
-func (s *AuthService) VerifyPassword(user *model.User, password string) (bool, error) {
+// W auth_service.go
+func (s *AuthService) VerifyPassword(user *model.User, password []byte) (bool, error) {
 	return security.VerifyPassword(password, user.Password)
 }
 

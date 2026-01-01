@@ -19,7 +19,7 @@ func RequestLoggerMiddleware() fiber.Handler {
 		}
 
 		// Logujemy metodę, path i body
-		log.InfoObj("Incoming request", map[string]any{
+		log.DebugObj("Incoming request", map[string]any{
 			"method": c.Method(),
 			"path":   c.Path(),
 			"body":   body,

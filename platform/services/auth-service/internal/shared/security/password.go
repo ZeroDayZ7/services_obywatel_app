@@ -32,7 +32,9 @@ func HashPassword(password string) (string, error) {
 }
 
 // VerifyPassword compares password with encoded Argon2id hash
-func VerifyPassword(password, encoded string) (bool, error) {
+// VerifyPassword compares password bytes with encoded Argon2id hash
+// ZMIANA: password to teraz []byte
+func VerifyPassword(password []byte, encoded string) (bool, error) {
 	parts := strings.Split(encoded, "$")
 	if len(parts) != 2 {
 		return false, errors.New("incorrect password format in the database")
@@ -47,7 +49,14 @@ func VerifyPassword(password, encoded string) (bool, error) {
 		return false, err
 	}
 
-	computedHash := argon2.IDKey([]byte(password), salt, iterations, memory, parallelism, keyLength)
+	computedHash := argon2.IDKey(password, salt, iterations, memory, parallelism, keyLength)
+
+	// Constant-time comparison chroni przed timing attacks
 	isValid := subtle.ConstantTimeCompare(hash, computedHash) == 1
+
+	for i := range computedHash {
+		computedHash[i] = 0
+	}
+
 	return isValid, nil
 }

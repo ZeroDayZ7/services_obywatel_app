@@ -39,10 +39,21 @@ type TwoFASession struct {
 // LOGIN
 func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	log := shared.GetLogger()
+
 	body := c.Locals("validatedBody").(validator.LoginRequest)
+
+	defer func() {
+		if len(body.Password) > 0 {
+			for i := range body.Password {
+				body.Password[i] = 0
+			}
+			log.Debug("Sensitive password bytes cleared from RAM")
+		}
+	}()
 
 	user, err := h.authService.GetUserByEmail(body.Email)
 	if err != nil {
+
 		log.WarnObj("User not found", body)
 		return errors.SendAppError(c, errors.ErrInvalidCredentials)
 	}
@@ -87,9 +98,6 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 			return errors.SendAppError(c, errors.ErrInternal)
 		}
 
-		// wysyłka maila/SMS
-		// h.authService.Send2FACode(user.Email, code)
-
 		return c.JSON(fiber.Map{
 			"2fa_required": true,
 			"two_fa_token": twoFAToken,
@@ -98,14 +106,12 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 
 	userID := fmt.Sprint(user.ID)
 
-	// generujemy access token i sessionID
 	accessToken, sessionID, err := h.authService.CreateAccessToken(user.ID)
 	if err != nil {
 		log.ErrorObj("Failed to generate access token", err)
 		return errors.SendAppError(c, errors.ErrInternal)
 	}
 
-	// zapis w Redis
 	if err := h.cache.SetSession(c.Context(), sessionID, userID, config.AppConfig.SessionTTL); err != nil {
 		log.ErrorObj("Failed to save session in Redis", err)
 		return errors.SendAppError(c, errors.ErrInternal)
@@ -248,50 +254,92 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 
 func (h *AuthHandler) Verify2FA(c *fiber.Ctx) error {
 	log := shared.GetLogger()
-	body := c.Locals("validatedBody").(validator.TwoFARequest)
+
+	// 1. Pobieramy body (jako wskaźnik, zgodnie z logiką middleware ValidateBody)
+	body, ok := c.Locals("validatedBody").(validator.TwoFARequest)
+	if !ok {
+		log.Error("Failed to cast validatedBody to TwoFARequest")
+		return errors.SendAppError(c, errors.ErrInternal)
+	}
+
+	// ✅ KLUCZOWE: Zerowanie kodu 2FA z pamięci na koniec funkcji
+	defer func() {
+		if len(body.Code) > 0 {
+			for i := range body.Code {
+				body.Code[i] = 0
+			}
+			log.Debug("Sensitive 2FA code bytes cleared from RAM")
+		}
+	}()
 
 	key := fmt.Sprintf("login:2fa:%s", body.Token)
 	data, err := h.cache.Get(c.Context(), key)
 	if err != nil {
-		return errors.SendAppError(c, errors.ErrInternal)
+		// Jeśli sesja wygasła lub nie istnieje
+		log.WarnObj("2FA session expired or not found", map[string]string{"token": body.Token})
+		return errors.SendAppError(c, errors.ErrInvalidCredentials)
 	}
 
 	var session TwoFASession
 	if err := json.Unmarshal([]byte(data), &session); err != nil {
+		log.ErrorObj("Failed to unmarshal 2FA session", err)
 		return errors.SendAppError(c, errors.ErrInternal)
 	}
 
+	// Sprawdzamy limit prób
 	if session.Attempts >= 5 {
+		log.WarnObj("Max 2FA attempts reached", map[string]string{"user_id": session.UserID})
 		return errors.SendAppError(c, errors.ErrInvalid2FACode)
 	}
 
-	if bcrypt.CompareHashAndPassword([]byte(session.CodeHash), []byte(body.Code)) != nil {
+	// ✅ Porównanie: body.Code jest już []byte, więc nie musimy go rzutować
+	if err := bcrypt.CompareHashAndPassword([]byte(session.CodeHash), body.Code); err != nil {
 		session.Attempts++
 		updated, _ := json.Marshal(session)
 		h.cache.Set(c.Context(), key, updated, 5*time.Minute)
+
+		log.DebugMap("Invalid 2FA code", map[string]any{
+			"user_id":  session.UserID,
+			"attempts": session.Attempts,
+			"code":     body.Code,
+		})
 		return errors.SendAppError(c, errors.ErrInvalid2FACode)
 	}
 
+	// Usuwamy sesję 2FA po sukcesie
 	h.cache.Del(c.Context(), key)
 
 	userID, err := strconv.ParseUint(session.UserID, 10, 64)
 	if err != nil {
+		log.ErrorObj("Failed to parse user ID from session", err)
 		return errors.SendAppError(c, errors.ErrInternal)
 	}
 	uid := uint(userID)
 
-	accessToken, _, _ := h.authService.CreateAccessToken(uid)
-	refreshToken, _ := h.authService.CreateRefreshToken(uid)
+	// Tworzymy tokeny
+	accessToken, sessionID, err := h.authService.CreateAccessToken(uid)
+	if err != nil {
+		return errors.SendAppError(c, errors.ErrInternal)
+	}
+
+	// Zapisujemy sesję w Redis
+	if err := h.cache.SetSession(c.Context(), sessionID, session.UserID, config.AppConfig.SessionTTL); err != nil {
+		return errors.SendAppError(c, errors.ErrInternal)
+	}
+
+	refreshToken, err := h.authService.CreateRefreshToken(uid)
+	if err != nil {
+		return errors.SendAppError(c, errors.ErrInternal)
+	}
 
 	response := fiber.Map{
 		"success":       true,
 		"access_token":  accessToken,
 		"refresh_token": refreshToken.Token,
 		"user_id":       session.UserID,
+		"expires_at":    refreshToken.ExpiresAt,
 	}
-	log.InfoMap("Login response", response)
 
-	// Zwracamy JSON
+	log.InfoMap("2FA verification successful", response)
 	return c.JSON(response)
-
 }

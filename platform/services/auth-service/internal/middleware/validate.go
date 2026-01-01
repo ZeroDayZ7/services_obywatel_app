@@ -1,23 +1,50 @@
 package middleware
 
 import (
+	"reflect"
 	"strings"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/zerodayz7/platform/pkg/shared" // Importujemy Twój pakiet shared
 )
 
 var validate = validator.New()
 
 func init() {
 	validate.RegisterValidation("passwd", func(fl validator.FieldLevel) bool {
-		pw := fl.Field().String()
+		log := shared.GetLogger() // Pobieramy Twój logger
+		field := fl.Field()
+		var passwordBytes []byte
 
-		if len(pw) < 8 {
+		// Logujemy typ pola, który walidator próbuje sprawdzić
+		log.DebugMap("Validator: checking field", map[string]any{
+			"kind": field.Kind().String(),
+			"type": field.Type().String(),
+		})
+
+		switch field.Kind() {
+		case reflect.Slice:
+			if field.Type().Elem().Kind() == reflect.Uint8 {
+				passwordBytes = field.Bytes()
+			}
+		case reflect.String:
+			passwordBytes = []byte(field.String())
+		default:
+			log.Warn("Validator: unsupported field kind")
+			return false
+		}
+
+		// LOG: Długość po parsowaniu
+		passLen := len(passwordBytes)
+		if passLen < 8 {
+			log.WarnObj("Validator: password too short", map[string]any{"length": passLen})
 			return false
 		}
 
 		var hasUpper, hasLower, hasDigit, hasSpecial bool
-		for _, c := range pw {
+
+		for _, b := range passwordBytes {
+			c := rune(b)
 			switch {
 			case 'A' <= c && c <= 'Z':
 				hasUpper = true
@@ -28,13 +55,22 @@ func init() {
 			case strings.ContainsRune("!@#$%^&*()-_=+[]{}|;:,.<>/?~`", c):
 				hasSpecial = true
 			}
-
-			if hasUpper && hasLower && hasDigit && hasSpecial {
-				break
-			}
 		}
 
-		return hasUpper && hasLower && hasDigit && hasSpecial
+		// LOG: Wyniki skanowania znaków
+		log.DebugMap("Validator: password flags", map[string]any{
+			"upper":   hasUpper,
+			"lower":   hasLower,
+			"digit":   hasDigit,
+			"special": hasSpecial,
+		})
+
+		isValid := hasUpper && hasLower && hasDigit && hasSpecial
+		if !isValid {
+			log.Warn("Validator: password missing required character types")
+		}
+
+		return isValid
 	})
 }
 
@@ -47,34 +83,3 @@ func ValidateStruct(s any) map[string]string {
 	}
 	return errs
 }
-
-// ValidateStruct validates any struct using the global `validator` instance.
-// By default, it returns a map of field names to validation tags (e.g., "required", "passwd").
-// If you prefer human-readable error messages, you can use the commented-out version below,
-// which maps validation tags to descriptive messages for each field.
-// You can choose either approach depending on your use case.
-
-//  var errorMessages = map[string]string{
-// 	"required": "This field is required",
-// 	"min":      "Minimum length not met",
-// 	"alphanum": "Can only contain letters and numbers",
-// 	"email":    "Invalid email address",
-// 	"passwd":   "Password must be at least 8 chars, include uppercase, lowercase, number and special character",
-// }
-
-// func ValidateStruct(s any) map[string]string {
-// 	errs := make(map[string]string)
-// 	if err := validate.Struct(s); err != nil {
-// 		for _, e := range err.(validator.ValidationErrors) {
-// 			msg, ok := errorMessages[e.Tag()]
-// 			if !ok {
-// 				msg = e.Error()
-// 			}
-// 			errs[e.Field()] = msg
-// 		}
-// 	}
-// 	if len(errs) > 0 {
-// 		return errs
-// 	}
-// 	return nil
-// }

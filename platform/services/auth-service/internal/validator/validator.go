@@ -29,11 +29,11 @@ type RegisterRequest struct {
 
 type LoginRequest struct {
 	Email    string `json:"email" validate:"required,email"`
-	Password string `json:"password" validate:"required,passwd"`
+	Password []byte `json:"password" validate:"required"`
 }
 
 type TwoFARequest struct {
-	Code  string `json:"code" validate:"required,len=6,numeric"`
+	Code  []byte `json:"code" validate:"required,min=6,max=6"`
 	Token string `json:"token" validate:"required"`
 }
 
