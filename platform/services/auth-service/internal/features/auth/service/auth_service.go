@@ -62,11 +62,14 @@ func (s *AuthService) UpdatePassword(userID uint, newPassword string) error {
 }
 
 // CreateAccessToken generuje access token i zwraca sessionID
-func (s *AuthService) CreateAccessToken(userID uint) (accessToken string, sessionID string, err error) {
-	sessionID = shared.GenerateUuid() // lub ksuid
+// Dodajemy fingerprint jako argument, aby "przypiąć" token do urządzenia
+func (s *AuthService) CreateAccessToken(userID uint, fingerprint string) (accessToken string, sessionID string, err error) {
+	sessionID = shared.GenerateUuid()
+
 	claims := jwt.MapClaims{
 		"uid": userID,
 		"sid": sessionID,
+		"fpt": fingerprint,
 	}
 
 	accessToken, err = security.GenerateJWT(claims, config.AppConfig.JWT.AccessSecret, config.AppConfig.JWT.AccessTTL)
@@ -74,7 +77,7 @@ func (s *AuthService) CreateAccessToken(userID uint) (accessToken string, sessio
 		return "", "", err
 	}
 
-	// NIE zapisujemy w Redis tutaj – handler to zrobi
+	// Zwracamy accessToken i sessionID zgodnie z Twoim oryginalnym zamysłem
 	return accessToken, sessionID, nil
 }
 
@@ -84,7 +87,7 @@ func (s *AuthService) CreateSession(userID uint) (string, error) {
 	return sessionID, nil
 }
 
-func (s *AuthService) CreateRefreshToken(userID uint) (*authModel.RefreshToken, error) {
+func (s *AuthService) CreateRefreshToken(userID uint, fingerprint string) (*authModel.RefreshToken, error) {
 	refreshTTL := config.AppConfig.JWT.RefreshTTL
 
 	token, err := security.GenerateRefreshToken()
@@ -93,19 +96,22 @@ func (s *AuthService) CreateRefreshToken(userID uint) (*authModel.RefreshToken, 
 	}
 
 	rt := &authModel.RefreshToken{
-		UserID:    userID,
-		Token:     token,
-		Revoked:   false,
-		CreatedAt: time.Now(),
-		ExpiresAt: time.Now().Add(refreshTTL),
+		UserID:            userID,
+		Token:             token,
+		DeviceFingerprint: fingerprint,
+		Revoked:           false,
+		CreatedAt:         time.Now(),
+		ExpiresAt:         time.Now().Add(refreshTTL),
 	}
 
-	if err := s.refreshRepo.Save(userID, token, refreshTTL); err != nil {
+	// WAŻNE: Dodajemy fingerprint do argumentów Save
+	if err := s.refreshRepo.Save(userID, token, fingerprint, refreshTTL); err != nil {
 		return nil, err
 	}
 
 	return rt, nil
 }
+
 
 func (s *AuthService) GetRefreshToken(token string) (*authModel.RefreshToken, error) {
 	return s.refreshRepo.GetByToken(token)

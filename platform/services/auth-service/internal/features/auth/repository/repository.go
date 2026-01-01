@@ -12,7 +12,7 @@ type UserRepository interface {
 }
 
 type RefreshTokenRepository interface {
-	Save(userID uint, token string, duration time.Duration) error
+	Save(userID uint, token string, fingerprint string, ttl time.Duration) error
 	Get(token string) (*model.RefreshToken, error)
 	Revoke(token string) error
 	GetByToken(token string) (*model.RefreshToken, error)

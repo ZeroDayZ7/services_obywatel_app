@@ -15,11 +15,14 @@ func NewRefreshTokenRepository(db *gorm.DB) *RefreshTokenRepository {
 	return &RefreshTokenRepository{DB: db}
 }
 
-func (r *RefreshTokenRepository) Save(userID uint, token string, duration time.Duration) error {
+// Save — dodajemy parametr fingerprint
+func (r *RefreshTokenRepository) Save(userID uint, token string, fingerprint string, duration time.Duration) error {
 	rt := model.RefreshToken{
-		UserID:    userID,
-		Token:     token,
-		ExpiresAt: time.Now().Add(duration),
+		UserID:            userID,
+		Token:             token,
+		DeviceFingerprint: fingerprint,
+		ExpiresAt:         time.Now().Add(duration),
+		Revoked:           false,
 	}
 	return r.DB.Create(&rt).Error
 }

@@ -2,6 +2,7 @@ package redis
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 )
 
@@ -19,13 +20,30 @@ func NewCache(client *Client, prefix string, defaultTTL time.Duration) *Cache {
 	}
 }
 
+type UserSession struct {
+	UserID      string `json:"user_id"`
+	Fingerprint string `json:"fingerprint"`
+}
+
 func (c *Cache) key(k string) string {
 	return c.prefix + k
 }
 
 // SessionCache
-func (c *Cache) SetSession(ctx context.Context, sessionID string, userID string, ttl time.Duration) error {
-	return c.Set(ctx, sessionID, userID, ttl)
+// SetSession teraz przyjmuje fingerprint i zapisuje JSON
+func (c *Cache) SetSession(ctx context.Context, sessionID string, userID string, fingerprint string, ttl time.Duration) error {
+	session := UserSession{
+		UserID:      userID,
+		Fingerprint: fingerprint,
+	}
+
+	data, err := json.Marshal(session)
+	if err != nil {
+		return err
+	}
+
+	// Używamy c.Set, która już dodaje prefix
+	return c.Set(ctx, sessionID, data, ttl)
 }
 
 func (c *Cache) GetUserIDBySession(ctx context.Context, sessionID string) (string, error) {
@@ -59,4 +77,29 @@ func (c *Cache) TTL() time.Duration {
 func (c *Cache) Exists(ctx context.Context, key string) (bool, error) {
 	n, err := c.client.Exists(ctx, c.key(key)).Result()
 	return n > 0, err
+}
+
+// UpdateSessionFingerprint - poprawiona wersja z prefixami
+func (c *Cache) UpdateSessionFingerprint(ctx context.Context, sessionID string, newFingerprint string) error {
+	// 1. Pobieramy dane używając c.Get (obsługuje prefixy)
+	data, err := c.Get(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+
+	var session UserSession
+	if err := json.Unmarshal([]byte(data), &session); err != nil {
+		return err
+	}
+
+	// 2. Aktualizacja
+	session.Fingerprint = newFingerprint
+
+	// 3. Pobranie TTL dla klucza z prefixem
+	fullKey := c.key(sessionID)
+	ttl, _ := c.client.TTL(ctx, fullKey).Result()
+
+	// 4. Zapis z powrotem przez c.Set
+	updatedData, _ := json.Marshal(session)
+	return c.Set(ctx, sessionID, updatedData, ttl)
 }

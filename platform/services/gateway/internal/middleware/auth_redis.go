@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 
 	"slices"
@@ -23,66 +24,72 @@ var PublicPathsRedis = []string{
 	"/health",
 }
 
+type UserSession struct {
+	UserID      string `json:"user_id"`
+	Fingerprint string `json:"fingerprint"`
+}
+
 // AuthRedisMiddleware - middleware do weryfikacji sesji w Redis
 func AuthRedisMiddleware(rdb *redis.Client) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		log := shared.GetLogger()
 		path := c.Path()
 
-		// 1. Sprawdź, czy ścieżka jest publiczna
+		// 1. Skip public paths
 		if slices.Contains(PublicPathsRedis, path) {
-			log.DebugMap("Public path, skipping Redis check", map[string]any{"path": path})
 			return c.Next()
 		}
 
-		// 2. Pobierz JWT z ctx ustawionego przez JWT middleware
+		// 2. Pobierz fingerprint wysłany przez klienta (Dio Interceptor)
+		clientFingerprint := c.Get("X-Device-Fingerprint")
+		if clientFingerprint == "" {
+			log.Warn("Missing X-Device-Fingerprint header")
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "device identification missing"})
+		}
+
+		// 3. Wyciągnij sessionID z JWT (ustawionego wcześniej przez JWTMiddleware)
 		jwtPayload := c.Locals("user")
 		if jwtPayload == nil {
-			log.WarnMap("JWT payload missing", map[string]any{"path": path})
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "missing token"})
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
 		}
+		jwtToken := jwtPayload.(*jwt.Token)
+		claims := jwtToken.Claims.(jwt.MapClaims)
+		sessionID, _ := claims["sid"].(string)
 
-		// 3. Rzutowanie na *jwt.Token
-		jwtToken, ok := jwtPayload.(*jwt.Token)
-		if !ok {
-			log.WarnMap("JWT payload has invalid type", map[string]any{"path": path})
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid token payload"})
-		}
-
-		// 4. Wyciągnięcie claims jako MapClaims
-		claims, ok := jwtToken.Claims.(jwt.MapClaims)
-		if !ok {
-			log.WarnMap("JWT claims invalid type", map[string]any{"path": path})
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid token claims"})
-		}
-
-		// 5. Wyciągnij sessionID z claims
-		sessionID, ok := claims["sid"].(string)
-		if !ok || sessionID == "" {
-			log.WarnMap("Missing session_id in JWT claims", map[string]any{"path": path})
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "missing session_id in token"})
-		}
-
-		// 6. Pobierz userID z Redis po sessionID
+		// 4. Pobierz dane sesji z Redis
 		ctx := context.Background()
-		userID, err := rdb.Get(ctx, "session:"+sessionID).Result()
+		jsonData, err := rdb.Get(ctx, "session:"+sessionID).Result()
 		if err != nil {
 			if errors.Is(err, redis.Nil) {
-				log.WarnMap("Session not found or expired", map[string]any{"sessionID": sessionID, "path": path})
-				return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid or expired session"})
+				return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "session expired"})
 			}
-			log.ErrorObj("Redis error", err.Error())
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal server error"})
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "redis error"})
 		}
 
-		// 7. Zapisz userID w ctx dla downstream (np. proxy)
-		c.Locals("userID", userID)
+		// 5. PARSOWANIE JSON I WERYFIKACJA FINGERPRINTU
+		var session UserSession
+		if err := json.Unmarshal([]byte(jsonData), &session); err != nil {
+			log.Error("Failed to unmarshal session from redis")
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "session data corrupted"})
+		}
+
+		// --- KLUCZOWY MOMENT ---
+		if session.Fingerprint != clientFingerprint {
+			log.WarnMap("Fingerprint mismatch!", map[string]any{
+				"sessionID": sessionID,
+				"expected":  session.Fingerprint,
+				"received":  clientFingerprint,
+			})
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid device binding"})
+		}
+
+		// 6. Ustawienie danych dla downstreamu (Gateway przekaże to w nagłówkach do mikroserwisów)
+		c.Locals("userID", session.UserID)
 		c.Locals("sessionID", sessionID)
-		log.DebugMap("User session verified", map[string]any{
-			"userID":    userID,
-			"sessionID": sessionID,
-			"path":      path,
-		})
+
+		// Opcjonalnie: ustaw nagłówki dla mikroserwisów, żeby wiedziały kto pyta
+		c.Request().Header.Set("X-User-Id", session.UserID)
+		c.Request().Header.Set("X-Session-Id", sessionID)
 
 		return c.Next()
 	}
