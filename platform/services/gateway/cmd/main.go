@@ -31,9 +31,15 @@ func main() {
 	// Cache wrapper bez TTL
 	cache := redis.NewCache(redisClient, "session:", 0)
 
-	container := di.NewContainer(redisClient, cache)
+	container := di.NewContainer(
+		redisClient,
+		cache,
+		config.AppConfig.Proxy.RequestTimeout,
+		config.AppConfig.Proxy.MaxIdleConns,
+		config.AppConfig.Proxy.MaxIdleConnsPerHost,
+	)
 
-	// Fiber app
+	// 5. Fiber app (config importuje di - to jest ok)
 	app := config.NewGatewayApp(container)
 
 	// Routes

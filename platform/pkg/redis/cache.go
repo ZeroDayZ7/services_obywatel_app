@@ -103,3 +103,17 @@ func (c *Cache) UpdateSessionFingerprint(ctx context.Context, sessionID string, 
 	updatedData, _ := json.Marshal(session)
 	return c.Set(ctx, sessionID, updatedData, ttl)
 }
+
+func (c *Cache) GetSession(ctx context.Context, sessionID string) (*UserSession, error) {
+	data, err := c.Get(ctx, sessionID) // c.Get automatycznie dodaje prefix
+	if err != nil {
+		return nil, err
+	}
+
+	var session UserSession
+	if err := json.Unmarshal([]byte(data), &session); err != nil {
+		return nil, err
+	}
+
+	return &session, nil
+}

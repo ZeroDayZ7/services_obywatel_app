@@ -19,15 +19,24 @@ func SetupRoutes(app *fiber.App, container *di.Container) {
 	}
 	health.RegisterRoutes(app, checker)
 
-	// Proxy / redirect do mikroserwisów
-	app.Post("/auth/login", ReverseProxy("http://localhost:8082"))
-	app.Post("/auth/2fa-verify", ReverseProxy("http://localhost:8082"))
+	// --- PUBLICZNE PROXY ---
+	// Przekazujemy 'container' do każdej funkcji
+	app.Post("/auth/login", ReverseProxy(container, "http://localhost:8082"))
+	app.Post("/auth/2fa-verify", ReverseProxy(container, "http://localhost:8082"))
+	app.Post("/auth/refresh", ReverseProxy(container, "http://localhost:8082"))
 
-	app.Post("/auth/register-device", ReverseProxySecure("http://localhost:8082"))
-	app.Post("/auth/logout", ReverseProxySecure("http://localhost:8082"))
+	// --- ZABEZPIECZONE PROXY (Wymaga JWT) ---
+	// Te endpointy automatycznie dodadzą X-User-Id do nagłówka
+	app.Post("/auth/register-device", ReverseProxySecure(container, "http://localhost:8082"))
+	app.Post("/auth/logout", ReverseProxySecure(container, "http://localhost:8082"))
 
-	app.All("/documents/*", ReverseProxySecure("http://localhost:8083"))
-	app.All("/users/*", ReverseProxy("http://users-service:3000"))
+	// SESJE (do ekranu we Flutterze)
+	app.Get("/user/sessions", ReverseProxySecure(container, "http://localhost:8082"))
+	app.Post("/user/sessions/terminate", ReverseProxySecure(container, "http://localhost:8082"))
+
+	// DOKUMENTY I INNE
+	app.All("/documents/*", ReverseProxySecure(container, "http://localhost:8083"))
+	app.All("/users/*", ReverseProxy(container, "http://users-service:3000"))
 
 	SetupFallbackHandlers(app)
 }

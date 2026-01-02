@@ -386,45 +386,67 @@ func (h *AuthHandler) RegisterDevice(c *fiber.Ctx) error {
 		return errors.SendAppError(c, errors.ErrInternal)
 	}
 
-	// 1. Wyciągamy dane sesyjne
 	userIDStr := c.Get("X-User-Id")
-	sessionID := c.Get("X-Session-Id") // Gateway musi to przekazywać!
-
+	sessionID := c.Get("X-Session-Id")
 	userID, err := strconv.ParseUint(userIDStr, 10, 64)
 	if err != nil {
 		return errors.SendAppError(c, errors.ErrInvalidToken)
 	}
 
-	// 2. Zapisujemy NOWY fingerprint do bazy SQL (ten z body)
+	ctx := c.Context()
+
+	// 1️⃣ Sprawdzamy obecny stan sesji
+	var oldFingerprint string
+	if sessionID != "" {
+		currentSession, err := h.cache.GetSession(ctx, sessionID)
+		if err == nil && currentSession != nil {
+			oldFingerprint = currentSession.Fingerprint
+		}
+	}
+
+	// 2️⃣ Rejestrujemy urządzenie w DB
 	err = h.authService.RegisterUserDevice(
-		c.Context(),
+		ctx,
 		uint(userID),
-		body.DeviceFingerprint, // To jest ten docelowy: bae39e...
+		body.DeviceFingerprint,
 		body.PublicKey,
 		body.DeviceNameEncrypted,
 		body.Platform,
 	)
-
 	if err != nil {
 		log.ErrorObj("RegisterDevice: Service error", err)
 		return errors.SendAppError(c, errors.ErrInternal)
 	}
 
-	// 3. 🔥 KLUCZOWA SYNCHRONIZACJA REDIS 🔥
-	// Od tego momentu Flutter (przez Interceptor) będzie wysyłał NOWY fingerprint.
-	// Musimy go zaktualizować w sesji, żeby Middleware Gatewaya nas nie wyrzuciło.
-	if sessionID != "" {
-		err = h.cache.UpdateSessionFingerprint(c.Context(), sessionID, body.DeviceFingerprint)
-		if err != nil {
-			log.ErrorObj("Failed to sync new fingerprint to Redis", err)
-			// Możesz tu zwrócić błąd, bo bez tego kolejne żądanie padnie na 401
-			return errors.SendAppError(c, errors.ErrInternal)
-		}
-		log.Info("Session fingerprint updated in Redis to new version")
+	// 3️⃣ Jeśli to pierwsze "prawdziwe" parowanie, aktualizujemy stare Refresh Tokeny
+	if oldFingerprint != "" && oldFingerprint != body.DeviceFingerprint {
+		_ = h.authService.UpdateRefreshTokensFingerprint(uint(userID), oldFingerprint, body.DeviceFingerprint)
 	}
 
+	// 4️⃣ Synchronizacja Redis
+	if sessionID != "" {
+		if err := h.cache.UpdateSessionFingerprint(ctx, sessionID, body.DeviceFingerprint); err != nil {
+			log.ErrorObj("Failed to sync Redis", err)
+			return errors.SendAppError(c, errors.ErrInternal)
+		}
+	}
+
+	// 5️⃣ KLUCZOWE: Generujemy NOWY Access Token z NOWYM fingerprintem
+	// Dzięki temu Flutter natychmiast podmieni token i nie dostanie 401 na Gatewayu
+	newAccessToken, _, err := h.authService.CreateAccessToken(uint(userID), body.DeviceFingerprint)
+	if err != nil {
+		log.ErrorObj("Failed to issue post-registration token", err)
+		return errors.SendAppError(c, errors.ErrInternal)
+	}
+
+	log.DebugMap("Device registration successful", map[string]any{
+		"userId": userID,
+		"fpt":    body.DeviceFingerprint,
+	})
+
 	return c.JSON(fiber.Map{
-		"success": true,
-		"message": "Device registered and session synced",
+		"success":      true,
+		"message":      "Device registered",
+		"access_token": newAccessToken, // Przekazujemy nowy token do Fluttera
 	})
 }

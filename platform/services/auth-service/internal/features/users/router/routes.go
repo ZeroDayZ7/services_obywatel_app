@@ -2,26 +2,26 @@ package router
 
 import (
 	"github.com/gofiber/fiber/v2"
-	// "github.com/gofiber/fiber/v2/middleware/csrf"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/auth-service/internal/features/users/handler"
 )
 
 func SetupUserRoutes(app *fiber.App, h *handler.UserHandler) {
-	users := app.Group("/users")
-	protected := users.Group("/")
-	protected.Use(shared.NewLimiter("users"))
+	// Grupa /user – pasuje do Gatewaya i Fluttera
+	user := app.Group("/user")
 
-	// Test sesji – handler pobiera sesję z c.Locals("session")
+	// Middleware limitujący requesty
+	user.Use(shared.NewLimiter("users"))
 
-	// Middleware CSRF dla wybranych endpointów
-	// csrfProtected := protected.Group("/")
-	// csrfProtected.Use(csrf.New(config.NewCSRFConfig(config.SessionStore().Storage)))
+	// --- SESJE URZĄDZEŃ ---
+	// Pobieranie aktywnych sesji (urządzeń)
+	user.Get("/sessions", h.GetSessions)
 
-	// Test CSRF – handler pobiera token z c.Locals("csrf")
-	// csrfProtected.Post("/test-csrf", h.TestCSRF)
+	// Wylogowanie konkretnego urządzenia (terminacja sesji)
+	user.Post("/sessions/terminate", h.TerminateSession)
 
-	// Przykładowe routy użytkownika
+	// --- PROFIL UŻYTKOWNIKA ---
+	// protected := user.Group("/profile")
 	// protected.Get("/me", h.GetProfile)
-	// protected.Post("/update", h.UpdateProfile)
+	// protected.Patch("/update", h.UpdateProfile)
 }

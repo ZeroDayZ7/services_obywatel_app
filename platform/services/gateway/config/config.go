@@ -10,6 +10,13 @@ import (
 	"github.com/zerodayz7/platform/pkg/shared"
 )
 
+type ProxyConfig struct {
+	MaxIdleConns        int
+	IdleConnTimeout     time.Duration
+	MaxIdleConnsPerHost int
+	RequestTimeout      time.Duration
+}
+
 type ServerConfig struct {
 	AppName       string
 	Port          string
@@ -42,6 +49,7 @@ type JWTConfig struct {
 type Config struct {
 	Server    ServerConfig
 	Redis     RedisConfig
+	Proxy     ProxyConfig
 	CORSAllow string
 	Shutdown  time.Duration
 	JWT       JWTConfig
@@ -85,6 +93,11 @@ func LoadConfigGlobal() error {
 	viper.SetDefault("JWT_ACCESS_TTL_MIN", 15)
 	viper.SetDefault("JWT_REFRESH_TTL_DAYS", 7)
 
+	viper.SetDefault("PROXY_MAX_IDLE_CONNS", 100)
+	viper.SetDefault("PROXY_IDLE_CONN_TIMEOUT_SEC", 90)
+	viper.SetDefault("PROXY_MAX_IDLE_CONNS_PER_HOST", 20)
+	viper.SetDefault("PROXY_REQUEST_TIMEOUT_SEC", 30)
+
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
 			log.ErrorObj("Error loading .env", err)
@@ -118,6 +131,12 @@ func LoadConfigGlobal() error {
 		JWT: JWTConfig{
 			AccessSecret:  viper.GetString("JWT_ACCESS_SECRET"),
 			RefreshSecret: viper.GetString("JWT_REFRESH_SECRET"),
+		},
+		Proxy: ProxyConfig{
+			MaxIdleConns:        viper.GetInt("PROXY_MAX_IDLE_CONNS"),
+			IdleConnTimeout:     time.Duration(viper.GetInt("PROXY_IDLE_CONN_TIMEOUT_SEC")) * time.Second,
+			MaxIdleConnsPerHost: viper.GetInt("PROXY_MAX_IDLE_CONNS_PER_HOST"),
+			RequestTimeout:      time.Duration(viper.GetInt("PROXY_REQUEST_TIMEOUT_SEC")) * time.Second,
 		},
 	}
 

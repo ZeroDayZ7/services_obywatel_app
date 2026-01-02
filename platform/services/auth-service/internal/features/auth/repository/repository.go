@@ -4,6 +4,8 @@ import (
 	"time"
 
 	"github.com/zerodayz7/platform/services/auth-service/internal/features/auth/model"
+	// DODAJ TEN IMPORT TUTAJ:
+	userModel "github.com/zerodayz7/platform/services/auth-service/internal/features/users/model"
 )
 
 type UserRepository interface {
@@ -17,4 +19,13 @@ type RefreshTokenRepository interface {
 	Revoke(token string) error
 	GetByToken(token string) (*model.RefreshToken, error)
 	Update(rt *model.RefreshToken) error
+
+	// Teraz userModel będzie już rozpoznawany
+	GetSessionsWithDeviceData(userID uint) ([]userModel.UserSessionDTO, error)
+	DeleteByID(sessionID uint, userID uint) error
+	UpdateFingerprintByUser(
+		userID uint,
+		oldFingerprint string,
+		newFingerprint string,
+	) error
 }

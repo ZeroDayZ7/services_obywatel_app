@@ -112,6 +112,10 @@ func (s *AuthService) CreateRefreshToken(userID uint, fingerprint string) (*auth
 	return rt, nil
 }
 
+func (s *AuthService) UpdateRefreshTokensFingerprint(userID uint, oldFP, newFP string) error {
+	// Delegacja do repozytorium, które już masz zaimplementowane
+	return s.refreshRepo.UpdateFingerprintByUser(userID, oldFP, newFP)
+}
 
 func (s *AuthService) GetRefreshToken(token string) (*authModel.RefreshToken, error) {
 	return s.refreshRepo.GetByToken(token)

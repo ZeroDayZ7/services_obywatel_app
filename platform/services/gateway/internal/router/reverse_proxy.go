@@ -2,139 +2,88 @@ package router
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"net/http"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/zerodayz7/platform/services/gateway/internal/di"
 )
 
-// ReverseProxy przesyła request do wskazanego adresu backendowego
-func ReverseProxy(target string) fiber.Handler {
+// ReverseProxy - podstawowe przekierowanie z użyciem klienta z DI
+func ReverseProxy(container *di.Container, target string) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		body := c.Body()
-
-		req, err := http.NewRequest(
-			string(c.Method()),
-			target+c.OriginalURL(),
-			bytes.NewReader(body),
-		)
+		req, err := prepareProxyRequest(c, target)
 		if err != nil {
 			return err
 		}
 
+		// Kopiujemy wszystkie nagłówki od klienta
 		c.Request().Header.VisitAll(func(key, value []byte) {
 			req.Header.Set(string(key), string(value))
 		})
 
-		client := &http.Client{}
-		resp, err := client.Do(req)
-		if err != nil {
-			return err
-		}
-		defer resp.Body.Close()
-
-		for k, v := range resp.Header {
-			for _, vv := range v {
-				c.Set(k, vv)
-			}
-		}
-
-		c.Status(resp.StatusCode)
-		_, err = io.Copy(c, resp.Body)
-		return err
+		return executeProxyRequest(c, container, req)
 	}
 }
 
-// ReverseProxyWithUserID - przekazuje request do backendu i dodaje X-User-ID z ctx
-func ReverseProxySecure(target string) fiber.Handler {
+// ReverseProxySecure - przekazuje request, dodaje ID użytkownika i usuwa Auth
+func ReverseProxySecure(container *di.Container, target string) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		body := c.Body()
-
-		req, err := http.NewRequest(
-			string(c.Method()),
-			target+c.OriginalURL(),
-			bytes.NewReader(body),
-		)
+		req, err := prepareProxyRequest(c, target)
 		if err != nil {
 			return err
 		}
 
-		// Kopiujemy tylko krytyczne nagłówki
+		// Kopiujemy nagłówki (Content-Type itp.)
 		if ct := c.Get("Content-Type"); ct != "" {
 			req.Header.Set("Content-Type", ct)
 		}
 		req.Header.Set("Accept", c.Get("Accept", "*/*"))
 
-		// Dodajemy X-User-Id i X-Session-Id z gateway
+		// Wstrzykujemy tożsamość użytkownika z contextu (Locals)
 		if uid := c.Locals("userID"); uid != nil {
-			req.Header.Set("X-User-Id", uid.(string))
+			req.Header.Set("X-User-Id", fmt.Sprintf("%v", uid))
 		}
 		if sid := c.Locals("sessionID"); sid != nil {
-			req.Header.Set("X-Session-Id", sid.(string))
+			req.Header.Set("X-Session-Id", fmt.Sprintf("%v", sid))
 		}
 
-		// USUWAMY Authorization, zawsze (backend go nie potrzebuje)
+		// Ważne: usuwamy token, backend ufa nagłówkowi X-User-Id
 		req.Header.Del("Authorization")
 
-		// Wysłanie requesta
-		client := &http.Client{}
-		resp, err := client.Do(req)
-		if err != nil {
-			return err
-		}
-		defer resp.Body.Close()
-
-		// Kopiujemy sensowne response nagłówki
-		for _, h := range []string{"Content-Type"} {
-			if v := resp.Header.Get(h); v != "" {
-				c.Set(h, v)
-			}
-		}
-
-		c.Status(resp.StatusCode)
-		_, err = io.Copy(c, resp.Body)
-		return err
+		return executeProxyRequest(c, container, req)
 	}
 }
 
-// ReverseProxyWithCustomHeader - pozwala przekazać dowolny nagłówek z ctx do backendu
-func ReverseProxyWithCustomHeader(target string, headerKey string, ctxKey string) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		body := c.Body()
+// --- FUNKCJE POMOCNICZE (DRY) ---
 
-		req, err := http.NewRequest(
-			string(c.Method()),
-			target+c.OriginalURL(),
-			bytes.NewReader(body),
-		)
-		if err != nil {
-			return err
-		}
+func prepareProxyRequest(c *fiber.Ctx, target string) (*http.Request, error) {
+	body := c.Body()
+	// Sklejamy bazowy adres mikroserwisu z oryginalną ścieżką requestu
+	url := target + c.OriginalURL()
 
-		c.Request().Header.VisitAll(func(key, value []byte) {
-			req.Header.Set(string(key), string(value))
+	return http.NewRequest(string(c.Method()), url, bytes.NewReader(body))
+}
+
+func executeProxyRequest(c *fiber.Ctx, container *di.Container, req *http.Request) error {
+	// UŻYWAMY WSPÓŁDZIELONEGO KLIENTA Z KONTENERA
+	resp, err := container.HTTPClient.Do(req)
+	if err != nil {
+		return c.Status(fiber.StatusBadGateway).JSON(fiber.Map{
+			"error": "Upstream service unreachable",
 		})
-
-		// Dodanie nagłówka z ctx
-		if val := c.Locals(ctxKey); val != nil {
-			req.Header.Set(headerKey, val.(string))
-		}
-
-		client := &http.Client{}
-		resp, err := client.Do(req)
-		if err != nil {
-			return err
-		}
-		defer resp.Body.Close()
-
-		for k, v := range resp.Header {
-			for _, vv := range v {
-				c.Set(k, vv)
-			}
-		}
-
-		c.Status(resp.StatusCode)
-		_, err = io.Copy(c, resp.Body)
-		return err
 	}
+	defer resp.Body.Close()
+
+	// Kopiujemy nagłówki odpowiedzi z mikroserwisu do klienta (Fluttera)
+	for k, v := range resp.Header {
+		for _, vv := range v {
+			c.Set(k, vv)
+		}
+	}
+
+	c.Status(resp.StatusCode)
+	_, err = io.Copy(c, resp.Body)
+	return err
 }
