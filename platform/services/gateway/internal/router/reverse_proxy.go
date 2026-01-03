@@ -10,7 +10,7 @@ import (
 	"github.com/zerodayz7/platform/services/gateway/internal/di"
 )
 
-// ReverseProxy - podstawowe przekierowanie z użyciem klienta z DI
+// W internal/router/proxy.go popraw ReverseProxy:
 func ReverseProxy(container *di.Container, target string) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		req, err := prepareProxyRequest(c, target)
@@ -18,10 +18,14 @@ func ReverseProxy(container *di.Container, target string) fiber.Handler {
 			return err
 		}
 
-		// Kopiujemy wszystkie nagłówki od klienta
-		c.Request().Header.VisitAll(func(key, value []byte) {
-			req.Header.Set(string(key), string(value))
-		})
+		// JAWNIE kopiujemy fingerprint, bo to nasz krytyczny nagłówek bezpieczeństwa
+		if fpt := c.Get("X-Device-Fingerprint"); fpt != "" {
+			req.Header.Set("X-Device-Fingerprint", fpt)
+		}
+
+		// Kopiujemy resztę standardowych nagłówków
+		req.Header.Set("Content-Type", c.Get("Content-Type"))
+		req.Header.Set("User-Agent", c.Get("User-Agent"))
 
 		return executeProxyRequest(c, container, req)
 	}

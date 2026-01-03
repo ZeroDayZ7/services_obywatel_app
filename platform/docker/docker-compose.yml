@@ -43,7 +43,7 @@ services:
     container_name: notification-database
     ports:
       - "5434:5432"
-    environment:
+    environment:   
       POSTGRES_USER: ${NOTIFICATION_POSTGRES_USER}
       POSTGRES_PASSWORD: ${NOTIFICATION_POSTGRES_PASSWORD}
       POSTGRES_DB: ${NOTIFICATION_POSTGRES_DB}

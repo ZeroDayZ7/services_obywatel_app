@@ -30,6 +30,8 @@ func SetupRoutes(app *fiber.App, container *di.Container) {
 	app.Post("/auth/register-device", ReverseProxySecure(container, "http://localhost:8082"))
 	app.Post("/auth/logout", ReverseProxySecure(container, "http://localhost:8082"))
 
+	app.All("/notifications*", ReverseProxySecure(container, "http://localhost:8084"))
+
 	// SESJE (do ekranu we Flutterze)
 	app.Get("/user/sessions", ReverseProxySecure(container, "http://localhost:8082"))
 	app.Post("/user/sessions/terminate", ReverseProxySecure(container, "http://localhost:8082"))

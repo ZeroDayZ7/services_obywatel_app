@@ -3,40 +3,43 @@ package service
 import (
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/services/notification-service/internal/model"
 	mysql "github.com/zerodayz7/platform/services/notification-service/internal/repository/database"
 )
 
-// NotificationService logika biznesowa powiadomień
 type NotificationService struct {
 	repo *mysql.NotificationRepository
 }
 
-// NewNotificationService tworzy instancję serwisu
 func NewNotificationService(repo *mysql.NotificationRepository) *NotificationService {
 	return &NotificationService{repo: repo}
 }
 
-// Send tworzy powiadomienie
-func (s *NotificationService) Send(userID uint, title, message, notifType string) error {
-	notification := &model.Notification{
-		UserID:    userID,
-		Title:     title,
-		Message:   message,
-		Type:      notifType,
-		Read:      false,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+// Send tworzy powiadomienie z pełnymi danymi spójnymi z Flutterem
+func (s *NotificationService) Send(n *model.Notification) error {
+	// Generujemy UUID jeśli nie zostało podane
+	if n.ID == "" {
+		n.ID = uuid.New().String()
 	}
-	return s.repo.Create(notification)
+
+	n.IsRead = false
+	n.CreatedAt = time.Now()
+	n.UpdatedAt = time.Now()
+
+	return s.repo.Create(n)
 }
 
-// ListByUser pobiera wszystkie powiadomienia użytkownika
+// ListByUser pobiera listę dla konkretnego użytkownika
 func (s *NotificationService) ListByUser(userID uint) ([]model.Notification, error) {
 	return s.repo.GetByUserID(userID)
 }
 
-// MarkRead oznacza powiadomienie jako przeczytane
-func (s *NotificationService) MarkRead(id uint) error {
+func (s *NotificationService) MarkAllRead(userID uint) error {
+	return s.repo.MarkAllAsRead(userID)
+}
+
+// MarkRead zmienia status na przeczytane
+func (s *NotificationService) MarkRead(id string) error {
 	return s.repo.MarkAsRead(id)
 }

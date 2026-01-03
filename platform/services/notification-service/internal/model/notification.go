@@ -6,15 +6,15 @@ import (
 	"gorm.io/gorm"
 )
 
-// Notification reprezentuje powiadomienie w systemie
 type Notification struct {
-	ID        uint           `gorm:"primaryKey" json:"id"`
-	UserID    uint           `gorm:"index" json:"user_id"`
+	ID        string         `gorm:"primaryKey;type:varchar(50)" json:"id"`
+	UserID    uint           `gorm:"index" json:"-"` // Ukrywamy w JSON, Gateway to wie
 	Title     string         `gorm:"type:varchar(255)" json:"title"`
-	Message   string         `gorm:"type:text" json:"message"`
-	Type      string         `gorm:"type:varchar(50)" json:"type"`
-	Read      bool           `gorm:"default:false" json:"read"`
-	CreatedAt time.Time      `json:"created_at"`
-	UpdatedAt time.Time      `json:"updated_at"`
+	Content   string         `gorm:"type:text" json:"content"`         // Zmienione z Message
+	Priority  string         `gorm:"type:varchar(20)" json:"priority"` // info, success, warning, error
+	Category  string         `gorm:"type:varchar(50)" json:"category"` // payments, security, itp.
+	IsRead    bool           `gorm:"default:false" json:"isRead"`      // camelCase dla Fluttera
+	CreatedAt time.Time      `json:"createdAt"`
+	UpdatedAt time.Time      `json:"updatedAt"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }

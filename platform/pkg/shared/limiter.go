@@ -13,11 +13,12 @@ var Presets = map[string]struct {
 	Max    int
 	Window time.Duration
 }{
-	"global": {Max: 100, Window: 60 * time.Second},
-	"auth":   {Max: 10, Window: 60 * time.Second},
-	"reset":  {Max: 3, Window: 60 * time.Second},
-	"users":  {Max: 5, Window: 60 * time.Second},
-	"health": {Max: 20, Window: 30 * time.Second},
+	"global":        {Max: 100, Window: 60 * time.Second},
+	"auth":          {Max: 10, Window: 60 * time.Second},
+	"reset":         {Max: 3, Window: 60 * time.Second},
+	"notifications": {Max: 30, Window: 60 * time.Second},
+	"users":         {Max: 5, Window: 60 * time.Second},
+	"health":        {Max: 20, Window: 30 * time.Second},
 }
 
 func NewLimiter(group string) fiber.Handler {

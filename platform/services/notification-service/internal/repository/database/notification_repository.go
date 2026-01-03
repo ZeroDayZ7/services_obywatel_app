@@ -5,29 +5,34 @@ import (
 	"gorm.io/gorm"
 )
 
-// NotificationRepository obsługuje bazę powiadomień
 type NotificationRepository struct {
 	db *gorm.DB
 }
 
-// NewNotificationRepository tworzy instancję repozytorium
 func NewNotificationRepository(db *gorm.DB) *NotificationRepository {
 	return &NotificationRepository{db: db}
 }
 
-// Create zapisuje nowe powiadomienie
 func (r *NotificationRepository) Create(notification *model.Notification) error {
 	return r.db.Create(notification).Error
 }
 
-// GetByUserID pobiera powiadomienia dla użytkownika
 func (r *NotificationRepository) GetByUserID(userID uint) ([]model.Notification, error) {
 	var notifications []model.Notification
+	// GORM automatycznie zmapuje createdAt desc na created_at desc
 	err := r.db.Where("user_id = ?", userID).Order("created_at desc").Find(&notifications).Error
 	return notifications, err
 }
 
-// MarkAsRead oznacza powiadomienie jako przeczytane
-func (r *NotificationRepository) MarkAsRead(id uint) error {
-	return r.db.Model(&model.Notification{}).Where("id = ?", id).Update("read", true).Error
+// Zmieniono id z uint na string, aby pasowało do UUID
+func (r *NotificationRepository) MarkAsRead(id string) error {
+	// Upewnij się, że nazwa pola to "is_read" (tak GORM mapuje IsRead z modelu)
+	return r.db.Model(&model.Notification{}).Where("id = ?", id).Update("is_read", true).Error
+}
+
+func (r *NotificationRepository) MarkAllAsRead(userID uint) error {
+	// Aktualizujemy tylko powiadomienia należące do zalogowanego UserID
+	return r.db.Model(&model.Notification{}).
+		Where("user_id = ? AND is_read = ?", userID, false).
+		Update("is_read", true).Error
 }
