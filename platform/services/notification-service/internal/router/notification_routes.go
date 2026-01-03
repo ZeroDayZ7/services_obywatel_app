@@ -20,4 +20,7 @@ func SetupNotificationRoutes(app *fiber.App, notificationH *handler.Notification
 	// Usuwanie
 	notifications.Patch("/:id/trash", notificationH.MoveToTrash)
 	notifications.Delete("/trash", notificationH.ClearTrash)
+
+	notifications.Patch("/:id/restore", notificationH.RestoreFromTrash)
+	notifications.Delete("/:id", notificationH.DeletePermanently)
 }

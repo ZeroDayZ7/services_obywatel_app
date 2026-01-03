@@ -50,3 +50,16 @@ func (r *NotificationRepository) HardDeleteTrash(userID uint) error {
 		Where("user_id = ? AND deleted_at IS NOT NULL", userID).
 		Delete(&model.Notification{}).Error
 }
+
+func (r *NotificationRepository) RestoreFromTrash(id string, userID uint) error {
+	return r.db.Model(&model.Notification{}).Unscoped().
+		Where("id = ? AND user_id = ?", id, userID).
+		Update("deleted_at", nil).Error
+}
+
+// Repository w Go
+func (r *NotificationRepository) DeletePermanently(id string, userID uint) error {
+	return r.db.Unscoped().
+		Where("id = ? AND user_id = ?", id, userID).
+		Delete(&model.Notification{}).Error
+}

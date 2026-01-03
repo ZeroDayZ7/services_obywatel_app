@@ -52,3 +52,11 @@ func (s *NotificationService) MoveToTrash(id string, userID uint) error {
 func (s *NotificationService) ClearTrash(userID uint) error {
 	return s.repo.HardDeleteTrash(userID)
 }
+
+func (s *NotificationService) Restore(id string, userID uint) error {
+	return s.repo.RestoreFromTrash(id, userID)
+}
+
+func (s *NotificationService) DeletePermanently(id string, userID uint) error {
+	return s.repo.DeletePermanently(id, userID)
+}

@@ -113,3 +113,45 @@ func (h *NotificationHandler) SendNotification(c *fiber.Ctx) error {
 
 	return c.Status(fiber.StatusCreated).JSON(req)
 }
+
+// RestoreFromTrash PATCH /notifications/:id/restore
+func (h *NotificationHandler) RestoreFromTrash(c *fiber.Ctx) error {
+	id := c.Params("id")
+	if id == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "missing notification id"})
+	}
+
+	userIDStr := c.Get("X-User-Id")
+	userID, err := strconv.ParseUint(userIDStr, 10, 32)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid user identity"})
+	}
+
+	// Wywołujemy serwis, który ustawi deleted_at na null
+	if err := h.service.Restore(id, uint(userID)); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to restore notification"})
+	}
+
+	return c.SendStatus(fiber.StatusNoContent)
+}
+
+// DeletePermanently DELETE /notifications/:id
+func (h *NotificationHandler) DeletePermanently(c *fiber.Ctx) error {
+	id := c.Params("id")
+	if id == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "missing notification id"})
+	}
+
+	userIDStr := c.Get("X-User-Id")
+	userID, err := strconv.ParseUint(userIDStr, 10, 32)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid user identity"})
+	}
+
+	// Wywołujemy serwis
+	if err := h.service.DeletePermanently(id, uint(userID)); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to delete notification permanently"})
+	}
+
+	return c.SendStatus(fiber.StatusNoContent)
+}
