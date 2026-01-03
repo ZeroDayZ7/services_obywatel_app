@@ -18,7 +18,6 @@ func NewNotificationService(repo *mysql.NotificationRepository) *NotificationSer
 
 // Send tworzy powiadomienie z pełnymi danymi spójnymi z Flutterem
 func (s *NotificationService) Send(n *model.Notification) error {
-	// Generujemy UUID jeśli nie zostało podane
 	if n.ID == "" {
 		n.ID = uuid.New().String()
 	}
@@ -39,7 +38,17 @@ func (s *NotificationService) MarkAllRead(userID uint) error {
 	return s.repo.MarkAllAsRead(userID)
 }
 
-// MarkRead zmienia status na przeczytane
-func (s *NotificationService) MarkRead(id string) error {
-	return s.repo.MarkAsRead(id)
+// POPRAWIONE: Teraz przyjmuje userID i przekazuje je do repozytorium
+func (s *NotificationService) MarkRead(id string, userID uint) error {
+	return s.repo.MarkAsRead(id, userID)
+}
+
+// MoveToTrash - Soft Delete (przeniesienie do kosza)
+func (s *NotificationService) MoveToTrash(id string, userID uint) error {
+	return s.repo.MoveToTrash(id, userID)
+}
+
+// ClearTrash - Hard Delete (opróżnienie kosza)
+func (s *NotificationService) ClearTrash(userID uint) error {
+	return s.repo.HardDeleteTrash(userID)
 }

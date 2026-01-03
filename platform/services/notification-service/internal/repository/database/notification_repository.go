@@ -1,6 +1,8 @@
 package database
 
 import (
+	"time"
+
 	"github.com/zerodayz7/platform/services/notification-service/internal/model"
 	"gorm.io/gorm"
 )
@@ -19,20 +21,32 @@ func (r *NotificationRepository) Create(notification *model.Notification) error 
 
 func (r *NotificationRepository) GetByUserID(userID uint) ([]model.Notification, error) {
 	var notifications []model.Notification
-	// GORM automatycznie zmapuje createdAt desc na created_at desc
+	// Pobieramy tylko te, które NIE są w koszu (GORM automatycznie obsłuży deleted_at IS NULL)
 	err := r.db.Where("user_id = ?", userID).Order("created_at desc").Find(&notifications).Error
 	return notifications, err
 }
 
-// Zmieniono id z uint na string, aby pasowało do UUID
-func (r *NotificationRepository) MarkAsRead(id string) error {
-	// Upewnij się, że nazwa pola to "is_read" (tak GORM mapuje IsRead z modelu)
-	return r.db.Model(&model.Notification{}).Where("id = ?", id).Update("is_read", true).Error
+// POPRAWIONE: Dodano userID dla bezpieczeństwa
+func (r *NotificationRepository) MarkAsRead(id string, userID uint) error {
+	return r.db.Model(&model.Notification{}).
+		Where("id = ? AND user_id = ?", id, userID).
+		Update("is_read", true).Error
 }
 
 func (r *NotificationRepository) MarkAllAsRead(userID uint) error {
-	// Aktualizujemy tylko powiadomienia należące do zalogowanego UserID
 	return r.db.Model(&model.Notification{}).
-		Where("user_id = ? AND is_read = ?", userID, false).
+		Where("user_id = ? AND is_read = ? AND deleted_at IS NULL", userID, false).
 		Update("is_read", true).Error
+}
+
+func (r *NotificationRepository) MoveToTrash(id string, userID uint) error {
+	return r.db.Model(&model.Notification{}).
+		Where("id = ? AND user_id = ?", id, userID).
+		Update("deleted_at", time.Now()).Error
+}
+
+func (r *NotificationRepository) HardDeleteTrash(userID uint) error {
+	return r.db.Unscoped().
+		Where("user_id = ? AND deleted_at IS NOT NULL", userID).
+		Delete(&model.Notification{}).Error
 }

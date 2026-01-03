@@ -44,7 +44,20 @@ func (h *NotificationHandler) MarkAsRead(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "missing notification id"})
 	}
 
-	if err := h.service.MarkRead(id); err != nil {
+	// 1. Wyciągamy UserID wstrzyknięte przez Gateway
+	userIDStr := c.Get("X-User-Id")
+	if userIDStr == "" {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized: missing user context"})
+	}
+
+	// 2. Konwersja na uint
+	userID, err := strconv.ParseUint(userIDStr, 10, 32)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid user identity"})
+	}
+
+	// 3. Przekazujemy oba parametry do serwisu
+	if err := h.service.MarkRead(id, uint(userID)); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to mark as read"})
 	}
 
@@ -57,6 +70,31 @@ func (h *NotificationHandler) MarkAllAsRead(c *fiber.Ctx) error {
 
 	if err := h.service.MarkAllRead(uint(userID)); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to mark all as read"})
+	}
+
+	return c.SendStatus(fiber.StatusNoContent)
+}
+
+// MoveToTrash PATCH /notifications/:id/trash
+func (h *NotificationHandler) MoveToTrash(c *fiber.Ctx) error {
+	id := c.Params("id")
+	userIDStr := c.Get("X-User-Id")
+	userID, _ := strconv.ParseUint(userIDStr, 10, 32)
+
+	if err := h.service.MoveToTrash(id, uint(userID)); err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "failed to move to trash"})
+	}
+
+	return c.SendStatus(fiber.StatusNoContent)
+}
+
+// ClearTrash DELETE /notifications/trash
+func (h *NotificationHandler) ClearTrash(c *fiber.Ctx) error {
+	userIDStr := c.Get("X-User-Id")
+	userID, _ := strconv.ParseUint(userIDStr, 10, 32)
+
+	if err := h.service.ClearTrash(uint(userID)); err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "failed to clear trash"})
 	}
 
 	return c.SendStatus(fiber.StatusNoContent)
