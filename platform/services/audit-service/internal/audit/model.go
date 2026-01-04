@@ -4,7 +4,7 @@ import "time"
 
 type AuditMessage struct {
 	UserID    int64                  `json:"user_id"`
-	Service   string                 `json:"service"`    // np. "auth-service", "payment-service"
+	Service   string                 `json:"service"`    // np. "Audit-service", "payment-service"
 	Action    string                 `json:"action"`     // np. "login_attempt", "payout_created"
 	IPAddress string                 `json:"ip_address"` // Jawne, do filtrowania w DB
 	Timestamp time.Time              `json:"timestamp"`

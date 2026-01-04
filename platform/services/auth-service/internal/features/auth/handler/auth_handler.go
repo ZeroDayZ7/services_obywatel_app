@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
@@ -145,6 +146,26 @@ func (h *AuthHandler) RegisterDevice(c *fiber.Ctx) error {
 	}
 
 	log.DebugMap("Device registration successful", response)
+
+	// 🛡️ WYŚLIJ LOG AUDYTOWY
+	auditData := map[string]any{
+		"user_id": userID,
+		"action":  "DEVICE_REGISTERED",
+		"service": "auth-service",
+		"ip":      clientIP,
+		"metadata": map[string]any{
+			"device_name": string(body.DeviceNameEncrypted), // Rzutowanie na string, jeśli to bytea
+			"platform":    string(body.Platform),            // Jawne rzutowanie zapobiega błędom refleksji
+			"fingerprint": string(body.DeviceFingerprint),
+			"method":      "ed25519_challenge",
+		},
+	}
+
+	go func() {
+		if err := h.cache.SendAuditLog(context.Background(), auditData); err != nil {
+			log.ErrorObj("Failed to send audit log", err)
+		}
+	}()
 
 	return c.JSON(response)
 }

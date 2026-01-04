@@ -133,6 +133,6 @@ func LoadConfigGlobal() error {
 		SessionTTL: time.Duration(viper.GetInt("SessionTTL_MIN")) * time.Minute,
 	}
 
-	log.Info("Auth-Service - Configuration loaded")
+	log.Info("Audit-Service - Configuration loaded")
 	return nil
 }

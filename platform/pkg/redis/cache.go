@@ -3,6 +3,7 @@ package redis
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"time"
 
 	goredis "github.com/redis/go-redis/v9"
@@ -89,6 +90,11 @@ func (c *Cache) Exists(ctx context.Context, key string) (bool, error) {
 	return n > 0, err
 }
 
+func (c *Cache) SendAuditLog(ctx context.Context, data any) error {
+	// Cache używa swojego wewnętrznego klienta, aby wysłać log
+	return c.client.SendAuditLog(ctx, data)
+}
+
 // UpdateSessionFingerprint - poprawiona wersja z prefixami
 func (c *Cache) UpdateSessionFingerprint(ctx context.Context, sessionID string, newFingerprint string) error {
 	// 1. Pobieramy dane używając c.Get (obsługuje prefixy)
@@ -128,9 +134,15 @@ func (c *Cache) GetSession(ctx context.Context, sessionID string) (*UserSession,
 	return &session, nil
 }
 
-func (c *Client) ReadStream(ctx context.Context, stream, group, consumer string) ([]goredis.XMessage, error) {
-	// Upewniamy się, że grupa istnieje
-	c.XGroupCreateMkStream(ctx, stream, group, "0")
+// =========================================
+// ================  AUDIT  ================
+// =========================================
+func (c *Client) ReadStream(
+	ctx context.Context,
+	stream string,
+	group string,
+	consumer string,
+) ([]goredis.XMessage, error) {
 
 	res, err := c.XReadGroup(ctx, &goredis.XReadGroupArgs{
 		Group:    group,
@@ -141,21 +153,42 @@ func (c *Client) ReadStream(ctx context.Context, stream, group, consumer string)
 	}).Result()
 
 	if err != nil {
-		// Zmieniamy redis.Nil na goredis.Nil
 		if err == goredis.Nil {
 			return nil, nil
 		}
 		return nil, err
 	}
 
-	if len(res) > 0 {
-		return res[0].Messages, nil
+	if len(res) == 0 {
+		return nil, nil
 	}
 
-	return nil, nil
+	return res[0].Messages, nil
+}
+
+func (c *Client) EnsureGroup(ctx context.Context, stream, group string) error {
+	err := c.XGroupCreateMkStream(ctx, stream, group, "0").Err()
+	if err != nil && !strings.Contains(err.Error(), "BUSYGROUP") {
+		return err
+	}
+	return nil
 }
 
 // AckStream potwierdza przetworzenie wiadomości (XAck)
 func (c *Client) AckStream(ctx context.Context, stream, group, messageID string) error {
 	return c.XAck(ctx, stream, group, messageID).Err()
+}
+
+func (c *Client) SendAuditLog(ctx context.Context, data any) error {
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+
+	return c.XAdd(ctx, &goredis.XAddArgs{
+		Stream: "audit_stream",
+		Values: map[string]interface{}{
+			"payload": string(jsonData),
+		},
+	}).Err()
 }

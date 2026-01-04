@@ -22,7 +22,7 @@ func NewContainer(dbPool *pgxpool.Pool, redisClient *redis.Client, logger *share
 	auditSvc := audit.NewAuditService(queries, logger)
 
 	// 3. Handler
-	auditH := audit.NewAuditHandler(auditSvc)
+	auditH := audit.NewAuditHandler(auditSvc, logger)
 
 	// 4. Worker
 	auditW := audit.NewAuditWorker(redisClient, auditSvc, logger)

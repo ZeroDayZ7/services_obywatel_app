@@ -54,7 +54,7 @@ func main() {
 	server.SetupGracefulShutdown(app, closeDB, config.AppConfig.Shutdown)
 
 	address := "0.0.0.0:" + config.AppConfig.Server.Port
-	log.InfoObj("Auth-Server listening", map[string]any{"address": address})
+	log.InfoObj("Audit-Server listening", map[string]any{"address": address})
 
 	// Start serwera
 	if err := app.Listen(address); err != nil {
