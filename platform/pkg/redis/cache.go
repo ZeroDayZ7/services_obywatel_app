@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"time"
+
+	goredis "github.com/redis/go-redis/v9"
 )
 
 type Cache struct {
@@ -38,7 +40,6 @@ func (c *Cache) key(k string) string {
 	return c.prefix + k
 }
 
-// SessionCache
 // SetSession teraz przyjmuje fingerprint i zapisuje JSON
 func (c *Cache) SetSession(ctx context.Context, sessionID string, userID string, fingerprint string, ttl time.Duration) error {
 	session := UserSession{
@@ -125,4 +126,36 @@ func (c *Cache) GetSession(ctx context.Context, sessionID string) (*UserSession,
 	}
 
 	return &session, nil
+}
+
+func (c *Client) ReadStream(ctx context.Context, stream, group, consumer string) ([]goredis.XMessage, error) {
+	// Upewniamy się, że grupa istnieje
+	c.XGroupCreateMkStream(ctx, stream, group, "0")
+
+	res, err := c.XReadGroup(ctx, &goredis.XReadGroupArgs{
+		Group:    group,
+		Consumer: consumer,
+		Streams:  []string{stream, ">"},
+		Count:    10,
+		Block:    5 * time.Second,
+	}).Result()
+
+	if err != nil {
+		// Zmieniamy redis.Nil na goredis.Nil
+		if err == goredis.Nil {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	if len(res) > 0 {
+		return res[0].Messages, nil
+	}
+
+	return nil, nil
+}
+
+// AckStream potwierdza przetworzenie wiadomości (XAck)
+func (c *Client) AckStream(ctx context.Context, stream, group, messageID string) error {
+	return c.XAck(ctx, stream, group, messageID).Err()
 }

@@ -7,4 +7,5 @@ use (
 	./services/gateway
 	./services/version-service
 	./services/notification-service
+	./services/audit-service
 )

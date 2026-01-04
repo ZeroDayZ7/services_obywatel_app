@@ -80,6 +80,22 @@
       "cwd": "${workspaceFolder}/platform/services/notification-service",
       "showLog": true,
       "output": "${workspaceFolder}/platform/services/notification-service/bin/notification_debug.exe"
+    },
+    {
+      "name": "Audit Service",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/platform/services/audit-service/cmd/main.go",
+      "args": [],
+      "env": {
+        "ENV": "development",
+        "APP_ENV": "dev"
+      },
+      "buildFlags": "-tags=dev",
+      "cwd": "${workspaceFolder}/platform/services/audit-service",
+      "showLog": true,
+      "output": "${workspaceFolder}/platform/services/audit-service/bin/audit_debug.exe"
     }
   ]
 }
