@@ -57,4 +57,8 @@ var (
 	ErrInvalidCredentials  = &AppError{Code: "INVALID_CREDENTIALS", Type: Unauthorized, Message: "Incorrect login data"}
 	ErrUserNotFound        = &AppError{Code: "USER_NOT_FOUND", Type: Unauthorized, Message: "User not found"}
 	ErrEmailIsSendIfExists = &AppError{Code: "EMAIL_IS_SEND_IF_EXISTS", Type: Validation, Message: "If the account exists, a reset code has been sent to the provided email."}
+
+	ErrSessionExpired     = &AppError{Code: "SESSION_EXPIRED", Type: Unauthorized, Message: "Pairing session expired. Please log in again."}
+	ErrVerificationFailed = &AppError{Code: "VERIFICATION_FAILED", Type: Unauthorized, Message: "Device verification failed."}
+	ErrInvalidPairingData = &AppError{Code: "INVALID_PAIRING_DATA", Type: Validation, Message: "Invalid public key or signature format"}
 )

@@ -228,6 +228,8 @@ func (s *AuthService) RegisterUserDevice(
 	publicKey string,
 	deviceName string,
 	platform string,
+	isVerified bool,
+	lastIp string,
 ) error {
 	log := shared.GetLogger()
 
@@ -237,6 +239,8 @@ func (s *AuthService) RegisterUserDevice(
 		PublicKey:           publicKey,
 		DeviceNameEncrypted: deviceName,
 		Platform:            platform,
+		IsVerified:          isVerified,
+		LastIp:              lastIp,
 		IsActive:            true,
 	}
 

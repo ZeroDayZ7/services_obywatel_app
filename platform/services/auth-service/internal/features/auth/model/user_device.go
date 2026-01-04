@@ -16,4 +16,6 @@ type UserDevice struct {
 	LastUsedAt          time.Time `gorm:"autoUpdateTime"`
 	CreatedAt           time.Time `gorm:"autoCreateTime"`
 	IsActive            bool      `gorm:"default:true"`
+	IsVerified          bool      `gorm:"default:false"`
+	LastIp              string    `gorm:"size:45"`
 }

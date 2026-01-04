@@ -25,6 +25,15 @@ type UserSession struct {
 	Fingerprint string `json:"fingerprint"`
 }
 
+type TwoFASession struct {
+	UserID      string `json:"user_id"`
+	Email       string `json:"email"`
+	CodeHash    string `json:"code_hash"`
+	Token       string `json:"token"`
+	Fingerprint string `json:"fingerprint"`
+	Attempts    int    `json:"attempts"`
+}
+
 func (c *Cache) key(k string) string {
 	return c.prefix + k
 }

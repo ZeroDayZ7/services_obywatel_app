@@ -53,6 +53,10 @@ func ReverseProxySecure(container *di.Container, target string) fiber.Handler {
 			req.Header.Set("X-Session-Id", fmt.Sprintf("%v", sid))
 		}
 
+		userIP := c.IP()
+		req.Header.Set("X-Forwarded-For", userIP)
+		req.Header.Set("X-Real-IP", userIP)
+
 		// Ważne: usuwamy token, backend ufa nagłówkowi X-User-Id
 		req.Header.Del("Authorization")
 

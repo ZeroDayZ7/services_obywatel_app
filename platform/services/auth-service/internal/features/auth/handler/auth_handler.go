@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"crypto/ed25519"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -28,13 +30,123 @@ func NewAuthHandler(authService *service.AuthService, cache *redis.Cache) *AuthH
 	}
 }
 
-type TwoFASession struct {
-	UserID      string `json:"user_id"`
-	Email       string `json:"email"`
-	CodeHash    string `json:"code_hash"`
-	Token       string `json:"token"`
-	Fingerprint string `json:"fingerprint"`
-	Attempts    int    `json:"attempts"`
+// RegisterDevice obsługuje zapisanie klucza publicznego urządzenia i jego danych
+func (h *AuthHandler) RegisterDevice(c *fiber.Ctx) error {
+	log := shared.GetLogger()
+
+	body, ok := c.Locals("validatedBody").(validator.RegisterDeviceRequest)
+	if !ok {
+		return errors.SendAppError(c, errors.ErrInternal)
+	}
+
+	userIDStr := c.Get("X-User-Id")
+	sessionID := c.Get("X-Session-Id")
+	userID, err := strconv.ParseUint(userIDStr, 10, 64)
+	if err != nil {
+		return errors.SendAppError(c, errors.ErrInvalidToken)
+	}
+
+	ctx := c.Context()
+
+	// 1️⃣ Sprawdzamy obecny stan sesji
+	var oldFingerprint string
+	if sessionID != "" {
+		currentSession, err := h.cache.GetSession(ctx, sessionID)
+		if err == nil && currentSession != nil {
+			oldFingerprint = currentSession.Fingerprint
+		}
+	}
+
+	// 2. Pobieramy IP
+	clientIP := c.Get("X-Real-IP")
+	if clientIP == "" {
+		clientIP = c.IP()
+	}
+
+	// ==========================================================
+	// 🔐 NOWA SEKCJA: KRYPTOGRAFICZNA WERYFIKACJA URZĄDZENIA
+	// ==========================================================
+
+	// 1. Pobierz challenge z Redis (poprawiony błąd "multiple-value")
+	challengeKey := fmt.Sprintf("challenge:%d", userID)
+	storedChallenge, err := h.cache.Get(ctx, challengeKey)
+	if err != nil {
+		log.Warn(fmt.Sprintf("Challenge expired or missing for user: %d", userID))
+		return errors.SendAppError(c, errors.ErrSessionExpired)
+	}
+
+	// 2. Dekoduj klucz publiczny i podpis
+	pubKeyBytes, err := base64.StdEncoding.DecodeString(body.PublicKey)
+	if err != nil || len(pubKeyBytes) != ed25519.PublicKeySize {
+		return errors.SendAppError(c, errors.ErrInvalidPairingData)
+	}
+
+	// Używamy body.Signature
+	sigBytes, err := base64.StdEncoding.DecodeString(body.Signature)
+	if err != nil {
+		return errors.SendAppError(c, errors.ErrInvalidPairingData)
+	}
+
+	// 3. Weryfikacja Ed25519
+	if !ed25519.Verify(pubKeyBytes, []byte(storedChallenge), sigBytes) {
+		log.Error(fmt.Sprintf("Signature mismatch for user: %d", userID))
+		return errors.SendAppError(c, errors.ErrVerificationFailed)
+	}
+
+	// 4. Usuwamy challenge po użyciu
+	h.cache.Del(ctx, challengeKey)
+	// ==========================================================
+
+	// 2️⃣ Rejestrujemy urządzenie w DB
+	err = h.authService.RegisterUserDevice(
+		ctx,
+		uint(userID),
+		body.DeviceFingerprint,
+		body.PublicKey,
+		body.DeviceNameEncrypted,
+		body.Platform,
+		true,
+		clientIP,
+	)
+	if err != nil {
+		log.ErrorObj("RegisterDevice: Service error", err)
+		return errors.SendAppError(c, errors.ErrInternal)
+	}
+
+	// 3️⃣ Jeśli to pierwsze "prawdziwe" parowanie, aktualizujemy stare Refresh Tokeny
+	if oldFingerprint != "" && oldFingerprint != body.DeviceFingerprint {
+		_ = h.authService.UpdateRefreshTokensFingerprint(uint(userID), oldFingerprint, body.DeviceFingerprint)
+	}
+
+	// 4️⃣ Synchronizacja Redis
+	if sessionID != "" {
+		if err := h.cache.UpdateSessionFingerprint(ctx, sessionID, body.DeviceFingerprint); err != nil {
+			log.ErrorObj("Failed to sync Redis", err)
+			return errors.SendAppError(c, errors.ErrInternal)
+		}
+	}
+
+	// 5️⃣ Generujemy NOWY Access Token z NOWYM fingerprintem
+	newAccessToken, _, err := h.authService.CreateAccessToken(uint(userID), body.DeviceFingerprint)
+	if err != nil {
+		log.ErrorObj("Failed to issue post-registration token", err)
+		return errors.SendAppError(c, errors.ErrInternal)
+	}
+
+	log.DebugMap("Device registration successful", map[string]any{
+		"userId": userID,
+		"fpt":    body.DeviceFingerprint,
+	})
+
+	response := fiber.Map{
+		"success":      true,
+		"message":      "Device registered",
+		"access_token": newAccessToken,
+	}
+
+	log.DebugMap("Device registration successful", response)
+
+	return c.JSON(response)
 }
 
 // LOGIN
@@ -79,7 +191,7 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 			"token": twoFAToken,
 		})
 
-		session := TwoFASession{
+		session := redis.TwoFASession{
 			UserID:      fmt.Sprint(user.ID),
 			Email:       user.Email,
 			CodeHash:    string(hashedCode),
@@ -175,7 +287,7 @@ func (h *AuthHandler) Verify2FA(c *fiber.Ctx) error {
 		return errors.SendAppError(c, errors.ErrInvalidCredentials)
 	}
 
-	var session TwoFASession
+	var session redis.TwoFASession
 	if err := json.Unmarshal([]byte(data), &session); err != nil {
 		log.ErrorObj("Failed to unmarshal 2FA session", err)
 		return errors.SendAppError(c, errors.ErrInternal)
@@ -222,12 +334,16 @@ func (h *AuthHandler) Verify2FA(c *fiber.Ctx) error {
 		return errors.SendAppError(c, errors.ErrInternal)
 	}
 
+	challenge := shared.GenerateUuid()
+	h.cache.Set(c.Context(), fmt.Sprintf("challenge:%d", uid), challenge, 5*time.Minute)
+
 	response := fiber.Map{
 		"success":       true,
 		"access_token":  accessToken,
 		"refresh_token": refreshToken.Token,
 		"user_id":       session.UserID,
-		"expires_at":    refreshToken.ExpiresAt,
+		"challenge":     challenge,
+		"is_trusted":    false,
 	}
 
 	log.InfoMap("2FA verification successful", response)
@@ -374,79 +490,5 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
 		"success": true,
 		"user":    user,
-	})
-}
-
-// RegisterDevice obsługuje zapisanie klucza publicznego urządzenia i jego danych
-func (h *AuthHandler) RegisterDevice(c *fiber.Ctx) error {
-	log := shared.GetLogger()
-
-	body, ok := c.Locals("validatedBody").(validator.RegisterDeviceRequest)
-	if !ok {
-		return errors.SendAppError(c, errors.ErrInternal)
-	}
-
-	userIDStr := c.Get("X-User-Id")
-	sessionID := c.Get("X-Session-Id")
-	userID, err := strconv.ParseUint(userIDStr, 10, 64)
-	if err != nil {
-		return errors.SendAppError(c, errors.ErrInvalidToken)
-	}
-
-	ctx := c.Context()
-
-	// 1️⃣ Sprawdzamy obecny stan sesji
-	var oldFingerprint string
-	if sessionID != "" {
-		currentSession, err := h.cache.GetSession(ctx, sessionID)
-		if err == nil && currentSession != nil {
-			oldFingerprint = currentSession.Fingerprint
-		}
-	}
-
-	// 2️⃣ Rejestrujemy urządzenie w DB
-	err = h.authService.RegisterUserDevice(
-		ctx,
-		uint(userID),
-		body.DeviceFingerprint,
-		body.PublicKey,
-		body.DeviceNameEncrypted,
-		body.Platform,
-	)
-	if err != nil {
-		log.ErrorObj("RegisterDevice: Service error", err)
-		return errors.SendAppError(c, errors.ErrInternal)
-	}
-
-	// 3️⃣ Jeśli to pierwsze "prawdziwe" parowanie, aktualizujemy stare Refresh Tokeny
-	if oldFingerprint != "" && oldFingerprint != body.DeviceFingerprint {
-		_ = h.authService.UpdateRefreshTokensFingerprint(uint(userID), oldFingerprint, body.DeviceFingerprint)
-	}
-
-	// 4️⃣ Synchronizacja Redis
-	if sessionID != "" {
-		if err := h.cache.UpdateSessionFingerprint(ctx, sessionID, body.DeviceFingerprint); err != nil {
-			log.ErrorObj("Failed to sync Redis", err)
-			return errors.SendAppError(c, errors.ErrInternal)
-		}
-	}
-
-	// 5️⃣ KLUCZOWE: Generujemy NOWY Access Token z NOWYM fingerprintem
-	// Dzięki temu Flutter natychmiast podmieni token i nie dostanie 401 na Gatewayu
-	newAccessToken, _, err := h.authService.CreateAccessToken(uint(userID), body.DeviceFingerprint)
-	if err != nil {
-		log.ErrorObj("Failed to issue post-registration token", err)
-		return errors.SendAppError(c, errors.ErrInternal)
-	}
-
-	log.DebugMap("Device registration successful", map[string]any{
-		"userId": userID,
-		"fpt":    body.DeviceFingerprint,
-	})
-
-	return c.JSON(fiber.Map{
-		"success":      true,
-		"message":      "Device registered",
-		"access_token": newAccessToken, // Przekazujemy nowy token do Fluttera
 	})
 }

@@ -38,9 +38,10 @@ type TwoFARequest struct {
 }
 
 type RegisterDeviceRequest struct {
-	DeviceFingerprint   string `json:"device_fingerprint" validate:"required"`
 	PublicKey           string `json:"public_key" validate:"required"`
-	DeviceNameEncrypted string `json:"device_name_encrypted" validate:"required"`
+	Signature           string `json:"signature" validate:"required"`
+	DeviceFingerprint   string `json:"fingerprint" validate:"required"`
+	DeviceNameEncrypted string `json:"encrypted_name" validate:"required"`
 	Platform            string `json:"platform" validate:"required"`
 }
 
