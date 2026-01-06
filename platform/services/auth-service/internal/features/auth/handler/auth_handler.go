@@ -6,10 +6,10 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/pkg/errors"
 	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/shared"
@@ -31,6 +31,7 @@ func NewAuthHandler(authService *service.AuthService, cache *redis.Cache) *AuthH
 	}
 }
 
+// #region RegisterDevice
 // RegisterDevice obsługuje zapisanie klucza publicznego urządzenia i jego danych
 func (h *AuthHandler) RegisterDevice(c *fiber.Ctx) error {
 	log := shared.GetLogger()
@@ -42,14 +43,28 @@ func (h *AuthHandler) RegisterDevice(c *fiber.Ctx) error {
 
 	userIDStr := c.Get("X-User-Id")
 	sessionID := c.Get("X-Session-Id")
-	userID, err := strconv.ParseUint(userIDStr, 10, 64)
+	headerFingerprint := c.Get("X-Device-Fingerprint")
+
+	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
 		return errors.SendAppError(c, errors.ErrInvalidToken)
 	}
 
+	// ==========================================================
+	// 🛡️ WALIDACJA FINGERPRINTU (Nagłówek vs Body)
+	// ==========================================================
+	if headerFingerprint != "" && headerFingerprint != body.DeviceFingerprint {
+		log.WarnMap("Fingerprint mismatch detected", map[string]any{
+			"header": headerFingerprint,
+			"body":   body.DeviceFingerprint,
+			"userId": userID,
+		})
+		return errors.SendAppError(c, errors.ErrVerificationFailed)
+	}
+
 	ctx := c.Context()
 
-	// 1️⃣ Sprawdzamy obecny stan sesji
+	// 2. Sprawdzamy obecny stan sesji
 	var oldFingerprint string
 	if sessionID != "" {
 		currentSession, err := h.cache.GetSession(ctx, sessionID)
@@ -58,12 +73,10 @@ func (h *AuthHandler) RegisterDevice(c *fiber.Ctx) error {
 		}
 	}
 
-	// 2. Pobieramy IP
 	clientIP := c.Get("X-Real-IP")
 	if clientIP == "" {
 		clientIP = c.IP()
 	}
-
 	// ==========================================================
 	// 🔐 NOWA SEKCJA: KRYPTOGRAFICZNA WERYFIKACJA URZĄDZENIA
 	// ==========================================================
@@ -101,7 +114,7 @@ func (h *AuthHandler) RegisterDevice(c *fiber.Ctx) error {
 	// 2️⃣ Rejestrujemy urządzenie w DB
 	err = h.authService.RegisterUserDevice(
 		ctx,
-		uint(userID),
+		uuid.UUID(userID),
 		body.DeviceFingerprint,
 		body.PublicKey,
 		body.DeviceNameEncrypted,
@@ -116,7 +129,7 @@ func (h *AuthHandler) RegisterDevice(c *fiber.Ctx) error {
 
 	// 3️⃣ Jeśli to pierwsze "prawdziwe" parowanie, aktualizujemy stare Refresh Tokeny
 	if oldFingerprint != "" && oldFingerprint != body.DeviceFingerprint {
-		_ = h.authService.UpdateRefreshTokensFingerprint(uint(userID), oldFingerprint, body.DeviceFingerprint)
+		_ = h.authService.UpdateRefreshTokensFingerprint(uuid.UUID(userID), oldFingerprint, body.DeviceFingerprint)
 	}
 
 	// 4️⃣ Synchronizacja Redis
@@ -128,9 +141,22 @@ func (h *AuthHandler) RegisterDevice(c *fiber.Ctx) error {
 	}
 
 	// 5️⃣ Generujemy NOWY Access Token z NOWYM fingerprintem
-	newAccessToken, _, err := h.authService.CreateAccessToken(uint(userID), body.DeviceFingerprint)
+	newAccessToken, _, err := h.authService.CreateAccessToken(uuid.UUID(userID), body.DeviceFingerprint)
 	if err != nil {
 		log.ErrorObj("Failed to issue post-registration token", err)
+		return errors.SendAppError(c, errors.ErrInternal)
+	}
+
+	// 1. Pobieramy pełne dane użytkownika (żeby mieć imię, role itp.)
+	user, err := h.authService.GetUserByID(userID)
+	if err != nil {
+		log.ErrorObj("User not found during registration", err)
+		return errors.SendAppError(c, errors.ErrInternal)
+	}
+
+	// 2. Generujemy Refresh Token (bo po 2FA go nie było!)
+	refreshToken, err := h.authService.CreateRefreshToken(userID, body.DeviceFingerprint)
+	if err != nil {
 		return errors.SendAppError(c, errors.ErrInternal)
 	}
 
@@ -139,10 +165,18 @@ func (h *AuthHandler) RegisterDevice(c *fiber.Ctx) error {
 		"fpt":    body.DeviceFingerprint,
 	})
 
+	// 3. Budujemy paczkę UserData
+	userData := fiber.Map{
+		"user_id": user.ID.String(),
+		"roles":   []string{"USER", "ADMIN"},
+	}
+
 	response := fiber.Map{
-		"success":      true,
-		"message":      "Device registered",
-		"access_token": newAccessToken,
+		"success":       true,
+		"message":       "Device registered",
+		"access_token":  newAccessToken,
+		"refresh_token": refreshToken.Token,
+		"user":          userData,
 	}
 
 	log.DebugMap("Device registration successful", response)
@@ -170,15 +204,15 @@ func (h *AuthHandler) RegisterDevice(c *fiber.Ctx) error {
 	return c.JSON(response)
 }
 
-// LOGIN
+// #region LOGIN
 func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	log := shared.GetLogger()
 
+	// 1. Pobieramy body (używając Twojego validatora)
 	body := c.Locals("validatedBody").(validator.LoginRequest)
-
-	// 1. POBIERAMY FINGERPRINT Z NAGŁÓWKA
 	fingerprint := c.Get("X-Device-Fingerprint")
 
+	// Czyszczenie hasła z RAM po zakończeniu funkcji
 	defer func() {
 		if len(body.Password) > 0 {
 			for i := range body.Password {
@@ -188,32 +222,27 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		}
 	}()
 
+	// 2. Pobieramy użytkownika (serwis zwraca model z ID typu uuid.UUID)
 	user, err := h.authService.GetUserByEmail(body.Email)
 	if err != nil {
-		log.WarnObj("User not found", body)
+		log.WarnObj("User not found", body.Email)
 		return errors.SendAppError(c, errors.ErrInvalidCredentials)
 	}
 
 	valid, err := h.authService.VerifyPassword(user, body.Password)
 	if err != nil || !valid {
-		log.WarnObj("Invalid password", user)
+		log.WarnObj("Invalid password", user.Email)
 		return errors.SendAppError(c, errors.ErrInvalidCredentials)
 	}
 
-	// 2FA - Jeśli włączone, zwracamy token sesji 2FA i kończymy
+	// 3. Obsługa 2FA
 	if user.TwoFactorEnabled {
 		code := fmt.Sprintf("%06d", shared.RandInt(100000, 999999))
 		hashedCode, _ := bcrypt.GenerateFromPassword([]byte(code), bcrypt.DefaultCost)
-		twoFAToken := shared.GenerateUuid()
-
-		log.DebugMap("Generated 2FA code", map[string]any{
-			"email": body.Email,
-			"code":  code,
-			"token": twoFAToken,
-		})
+		twoFAToken := shared.GenerateUuidV7() // Zmieniono na V7 dla spójności
 
 		session := redis.TwoFASession{
-			UserID:      fmt.Sprint(user.ID),
+			UserID:      fmt.Sprint(user.ID), // Konwersja UUID na string dla Redisa
 			Email:       user.Email,
 			CodeHash:    string(hashedCode),
 			Token:       twoFAToken,
@@ -221,19 +250,19 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 			Attempts:    0,
 		}
 
-		data, err := json.Marshal(session)
-		if err != nil {
-			log.ErrorObj("Failed to marshal 2FA session", err)
-			return errors.SendAppError(c, errors.ErrInternal)
-		}
-
+		data, _ := json.Marshal(session)
 		key := fmt.Sprintf("login:2fa:%s", twoFAToken)
-		ttl := 5 * time.Minute
 
-		if err := h.cache.Set(c.Context(), key, data, ttl); err != nil {
+		if err := h.cache.Set(c.Context(), key, data, 5*time.Minute); err != nil {
 			log.ErrorObj("Failed to save 2FA session", err)
 			return errors.SendAppError(c, errors.ErrInternal)
 		}
+
+		log.DebugMap("Generated 2FA code", map[string]any{
+			"email": body.Email,
+			"code":  code,
+			"token": twoFAToken,
+		})
 
 		return c.JSON(fiber.Map{
 			"2fa_required": true,
@@ -241,19 +270,16 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		})
 	}
 
-	// --- LOGOWANIE BEZPOŚREDNIE (Jeśli 2FA wyłączone) ---
-	userIDStr := fmt.Sprint(user.ID)
-
-	// 2. TWORZYMY TOKEN (Z FINGERPRINTEM)
-	// Naprawia błąd kompilacji: want (uint, string)
+	// 4. Generowanie Tokenów (Używamy user.ID bezpośrednio jako uuid.UUID)
+	// To rozwiązuje błędy IncompatibleAssign
 	accessToken, sessionID, err := h.authService.CreateAccessToken(user.ID, fingerprint)
 	if err != nil {
 		log.ErrorObj("Failed to generate access token", err)
 		return errors.SendAppError(c, errors.ErrInternal)
 	}
 
-	// 3. ZAPISUJEMY SESJĘ W REDIS
-	if err := h.cache.SetSession(c.Context(), sessionID, userIDStr, fingerprint, config.AppConfig.SessionTTL); err != nil {
+	// 5. Zapis sesji w Redis (Używamy .String() dla identyfikatora użytkownika)
+	if err := h.cache.SetSession(c.Context(), sessionID, fmt.Sprint(user.ID), fingerprint, config.AppConfig.SessionTTL); err != nil {
 		log.ErrorObj("Failed to save session in Redis", err)
 		return errors.SendAppError(c, errors.ErrInternal)
 	}
@@ -264,18 +290,20 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		return errors.SendAppError(c, errors.ErrInternal)
 	}
 
+	// 6. Odpowiedź do Fluttera
 	response := fiber.Map{
 		"2fa_required":  false,
 		"access_token":  accessToken,
 		"refresh_token": refreshToken.Token,
-		"user_id":       userIDStr,
+		"user_id":       fmt.Sprint(user.ID),
 		"expires_at":    refreshToken.ExpiresAt,
 	}
 
-	log.InfoMap("Login response successful with device binding", response)
+	log.InfoMap("Login response successful", map[string]any{"user": user.Email})
 	return c.JSON(response)
 }
 
+// #region Verify2FA
 func (h *AuthHandler) Verify2FA(c *fiber.Ctx) error {
 	log := shared.GetLogger()
 
@@ -331,12 +359,14 @@ func (h *AuthHandler) Verify2FA(c *fiber.Ctx) error {
 	// 6. Usuwamy sesję 2FA po sukcesie
 	h.cache.Del(c.Context(), key)
 
-	userID, err := strconv.ParseUint(session.UserID, 10, 64)
+	uid, err := uuid.Parse(session.UserID)
 	if err != nil {
-		log.ErrorObj("Failed to parse user ID from session", err)
+		log.ErrorMap("Błędny format UUID w sesji", map[string]any{
+			"userID": session.UserID,
+			"error":  err.Error(),
+		})
 		return errors.SendAppError(c, errors.ErrInternal)
 	}
-	uid := uint(userID)
 
 	// 7. TWORZYMY TOKENY (Przekazujemy uid ORAZ fingerprint)
 	accessToken, sessionID, err := h.authService.CreateAccessToken(uid, fingerprint)
@@ -350,28 +380,21 @@ func (h *AuthHandler) Verify2FA(c *fiber.Ctx) error {
 		return errors.SendAppError(c, errors.ErrInternal)
 	}
 
-	refreshToken, err := h.authService.CreateRefreshToken(uid, fingerprint)
-	if err != nil {
-		return errors.SendAppError(c, errors.ErrInternal)
-	}
-
 	challenge := shared.GenerateUuid()
 	h.cache.Set(c.Context(), fmt.Sprintf("challenge:%d", uid), challenge, 5*time.Minute)
 
 	response := fiber.Map{
-		"success":       true,
-		"access_token":  accessToken,
-		"refresh_token": refreshToken.Token,
-		"user_id":       session.UserID,
-		"challenge":     challenge,
-		"is_trusted":    false,
+		"success":      true,
+		"access_token": accessToken,
+		"challenge":    challenge,
+		"is_trusted":   false,
 	}
 
 	log.InfoMap("2FA verification successful", response)
 	return c.JSON(response)
 }
 
-// REFRESH TOKEN
+// #region REFRESH TOKEN
 func (h *AuthHandler) RefreshToken(c *fiber.Ctx) error {
 	body := c.Locals("validatedBody").(validator.RefreshTokenRequest)
 	log := shared.GetLogger()
@@ -436,7 +459,7 @@ func (h *AuthHandler) RefreshToken(c *fiber.Ctx) error {
 	return c.JSON(response)
 }
 
-// LOGOUT
+// #region LOGOUT
 func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 	log := shared.GetLogger()
 
@@ -495,7 +518,7 @@ func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 	return c.JSON(response)
 }
 
-// REGISTER
+// #region REGISTER
 func (h *AuthHandler) Register(c *fiber.Ctx) error {
 	body := c.Locals("validatedBody").(validator.RegisterRequest)
 

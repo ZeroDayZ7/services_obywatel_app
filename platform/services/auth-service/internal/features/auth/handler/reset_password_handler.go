@@ -3,10 +3,10 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/pkg/errors"
 	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/shared"
@@ -125,13 +125,16 @@ func (h *ResetHandler) ResetPassword(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Internal error"})
 	}
 
-	userIDUint, err := strconv.ParseUint(session.UserID, 10, 32)
+	uid, err := uuid.Parse(session.UserID)
 	if err != nil {
-		log.ErrorObj("Invalid user ID", err)
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid user ID"})
+		log.ErrorMap("Błędny format UUID w sesji", map[string]any{
+			"userID": session.UserID,
+			"error":  err.Error(),
+		})
+		return errors.SendAppError(c, errors.ErrInternal)
 	}
 
-	if err := h.authService.UpdatePassword(uint(userIDUint), body.NewPassword); err != nil {
+	if err := h.authService.UpdatePassword(uuid.UUID(uid), body.NewPassword); err != nil {
 		log.ErrorObj("Failed to update password", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to reset password"})
 	}

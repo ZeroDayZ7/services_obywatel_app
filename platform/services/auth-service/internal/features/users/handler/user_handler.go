@@ -1,9 +1,8 @@
 package handler
 
 import (
-	"strconv"
-
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/pkg/shared"
 	authRepo "github.com/zerodayz7/platform/services/auth-service/internal/features/auth/repository"
 	"github.com/zerodayz7/platform/services/auth-service/internal/features/users/service"
@@ -35,18 +34,21 @@ func (h *UserHandler) GetSessions(c *fiber.Ctx) error {
 			JSON(fiber.Map{"error": "missing user id"})
 	}
 
-	userID, err := strconv.ParseUint(userIDStr, 10, 32)
+	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
-		log.WarnObj("GetSessions: invalid user id", userIDStr)
+		log.WarnObj("GetSessions: invalid user id format", userIDStr)
 		return c.Status(fiber.StatusBadRequest).
-			JSON(fiber.Map{"error": "invalid user id"})
+			JSON(fiber.Map{
+				"error": "invalid user id format",
+				"code":  "INVALID_UUID",
+			})
 	}
 
 	log.DebugMap("GetSessions: fetching sessions", map[string]any{
 		"user_id": userID,
 	})
 
-	sessions, err := h.authRepo.GetSessionsWithDeviceData(uint(userID))
+	sessions, err := h.authRepo.GetSessionsWithDeviceData(uuid.UUID(userID))
 	if err != nil {
 		log.ErrorObj("GetSessions: repository error", err)
 		return c.Status(fiber.StatusInternalServerError).
@@ -72,11 +74,14 @@ func (h *UserHandler) TerminateSession(c *fiber.Ctx) error {
 			JSON(fiber.Map{"error": "missing user id"})
 	}
 
-	userID, err := strconv.ParseUint(userIDStr, 10, 32)
+	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
-		log.WarnObj("TerminateSession: invalid user id", userIDStr)
+		log.WarnObj("GetSessions: invalid user id format", userIDStr)
 		return c.Status(fiber.StatusBadRequest).
-			JSON(fiber.Map{"error": "invalid user id"})
+			JSON(fiber.Map{
+				"error": "invalid user id format",
+				"code":  "INVALID_UUID",
+			})
 	}
 
 	type request struct {
@@ -95,7 +100,7 @@ func (h *UserHandler) TerminateSession(c *fiber.Ctx) error {
 		"session_id": req.SessionID,
 	})
 
-	err = h.authRepo.DeleteByID(req.SessionID, uint(userID))
+	err = h.authRepo.DeleteByID(req.SessionID, userID)
 	if err != nil {
 		log.ErrorMap("TerminateSession: failed to revoke session", map[string]any{
 			"user_id":    userID,

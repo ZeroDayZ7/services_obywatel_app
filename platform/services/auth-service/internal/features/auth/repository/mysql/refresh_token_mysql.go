@@ -3,6 +3,7 @@ package mysql
 import (
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/services/auth-service/internal/features/auth/model"
 	userModel "github.com/zerodayz7/platform/services/auth-service/internal/features/users/model"
 	"gorm.io/gorm"
@@ -17,7 +18,7 @@ func NewRefreshTokenRepository(db *gorm.DB) *RefreshTokenRepository {
 }
 
 // Save — dodaje nowy token z przypisanym fingerprintem urządzenia
-func (r *RefreshTokenRepository) Save(userID uint, token string, fingerprint string, duration time.Duration) error {
+func (r *RefreshTokenRepository) Save(userID uuid.UUID, token string, fingerprint string, duration time.Duration) error {
 	rt := model.RefreshToken{
 		UserID:            userID,
 		Token:             token,
@@ -55,7 +56,7 @@ func (r *RefreshTokenRepository) Update(rt *model.RefreshToken) error {
 }
 
 // GetSessionsWithDeviceData — pobiera aktywne sesje wraz z danymi urządzenia (JOIN)
-func (r *RefreshTokenRepository) GetSessionsWithDeviceData(userID uint) ([]userModel.UserSessionDTO, error) {
+func (r *RefreshTokenRepository) GetSessionsWithDeviceData(userID uuid.UUID) ([]userModel.UserSessionDTO, error) {
 	var results []userModel.UserSessionDTO
 
 	// Używamy aliasów (np. as session_id), aby GORM poprawnie zmapował kolumny na pola w DTO
@@ -80,7 +81,7 @@ func (r *RefreshTokenRepository) GetSessionsWithDeviceData(userID uint) ([]userM
 }
 
 // DeleteByID — unieważnia konkretną sesję użytkownika (wylogowanie zdalne)
-func (r *RefreshTokenRepository) DeleteByID(sessionID uint, userID uint) error {
+func (r *RefreshTokenRepository) DeleteByID(sessionID uint, userID uuid.UUID) error {
 	return r.DB.Model(&model.RefreshToken{}).
 		Where("id = ? AND user_id = ?", sessionID, userID).
 		Update("revoked", true).Error
@@ -89,7 +90,7 @@ func (r *RefreshTokenRepository) DeleteByID(sessionID uint, userID uint) error {
 // UpdateFingerprintByUser — aktualizuje fingerprint w refresh_tokens
 // (używane po RegisterDevice, gdy tymczasowy fingerprint staje się docelowy)
 func (r *RefreshTokenRepository) UpdateFingerprintByUser(
-	userID uint,
+	userID uuid.UUID,
 	oldFingerprint string,
 	newFingerprint string,
 ) error {

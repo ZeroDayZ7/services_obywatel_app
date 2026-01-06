@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/pkg/errors"
 	"github.com/zerodayz7/platform/services/auth-service/config"
+	"github.com/zerodayz7/platform/services/auth-service/internal/features/auth/model"
 	authModel "github.com/zerodayz7/platform/services/auth-service/internal/features/auth/model"
 	authRepo "github.com/zerodayz7/platform/services/auth-service/internal/features/auth/repository"
-	"github.com/zerodayz7/platform/services/auth-service/internal/features/users/model"
 	userRepo "github.com/zerodayz7/platform/services/auth-service/internal/features/users/repository"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -30,7 +31,7 @@ func NewAuthService(repo userRepo.UserRepository, refreshRepo authRepo.RefreshTo
 }
 
 // Pobranie użytkownika po ID
-func (s *AuthService) UpdatePassword(userID uint, newPassword string) error {
+func (s *AuthService) UpdatePassword(userID uuid.UUID, newPassword string) error {
 	log := shared.GetLogger()
 
 	// Pobranie użytkownika po ID
@@ -63,7 +64,7 @@ func (s *AuthService) UpdatePassword(userID uint, newPassword string) error {
 
 // CreateAccessToken generuje access token i zwraca sessionID
 // Dodajemy fingerprint jako argument, aby "przypiąć" token do urządzenia
-func (s *AuthService) CreateAccessToken(userID uint, fingerprint string) (accessToken string, sessionID string, err error) {
+func (s *AuthService) CreateAccessToken(userID uuid.UUID, fingerprint string) (accessToken string, sessionID string, err error) {
 	sessionID = shared.GenerateUuid()
 
 	claims := jwt.MapClaims{
@@ -82,12 +83,12 @@ func (s *AuthService) CreateAccessToken(userID uint, fingerprint string) (access
 }
 
 // Opcjonalnie – wygodne metody dla Redis (możesz używać w handlerze)
-func (s *AuthService) CreateSession(userID uint) (string, error) {
+func (s *AuthService) CreateSession(userID uuid.UUID) (string, error) {
 	sessionID := shared.GenerateUuid()
 	return sessionID, nil
 }
 
-func (s *AuthService) CreateRefreshToken(userID uint, fingerprint string) (*authModel.RefreshToken, error) {
+func (s *AuthService) CreateRefreshToken(userID uuid.UUID, fingerprint string) (*authModel.RefreshToken, error) {
 	refreshTTL := config.AppConfig.JWT.RefreshTTL
 
 	token, err := security.GenerateRefreshToken()
@@ -112,7 +113,7 @@ func (s *AuthService) CreateRefreshToken(userID uint, fingerprint string) (*auth
 	return rt, nil
 }
 
-func (s *AuthService) UpdateRefreshTokensFingerprint(userID uint, oldFP, newFP string) error {
+func (s *AuthService) UpdateRefreshTokensFingerprint(userID uuid.UUID, oldFP, newFP string) error {
 	// Delegacja do repozytorium, które już masz zaimplementowane
 	return s.refreshRepo.UpdateFingerprintByUser(userID, oldFP, newFP)
 }
@@ -175,6 +176,17 @@ func (s *AuthService) GetUserByEmail(email string) (*model.User, error) {
 	return u, nil
 }
 
+func (s *AuthService) GetUserByID(id uuid.UUID) (*model.User, error) {
+	u, err := s.repo.GetByID(id) // Musisz dodać GetByID do swojego repozytorium
+	if err != nil {
+		return nil, err
+	}
+	if u == nil {
+		return nil, errors.ErrUserNotFound
+	}
+	return u, nil
+}
+
 // W auth_service.go
 func (s *AuthService) VerifyPassword(user *model.User, password []byte) (bool, error) {
 	return security.VerifyPassword(password, user.Password)
@@ -223,7 +235,7 @@ func (s *AuthService) Register(username, email, rawPassword string) (*model.User
 // RegisterUserDevice przyjmuje czyste dane, nie wie nic o pakiecie validator
 func (s *AuthService) RegisterUserDevice(
 	ctx context.Context,
-	userID uint,
+	userID uuid.UUID,
 	fingerprint string,
 	publicKey string,
 	deviceName string,

@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 
-	authModel "github.com/zerodayz7/platform/services/auth-service/internal/features/auth/model"
-	"github.com/zerodayz7/platform/services/auth-service/internal/features/users/model"
+	"github.com/google/uuid"
+	"github.com/zerodayz7/platform/services/auth-service/internal/features/auth/model"
 	"github.com/zerodayz7/platform/services/auth-service/internal/features/users/repository"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -25,7 +25,7 @@ func (r *MySQLUserRepo) CreateUser(user *model.User) error {
 	return r.db.Create(user).Error
 }
 
-func (r *MySQLUserRepo) GetByID(id uint) (*model.User, error) {
+func (r *MySQLUserRepo) GetByID(id uuid.UUID) (*model.User, error) {
 	var u model.User
 	if err := r.db.First(&u, id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -81,7 +81,7 @@ func (r *MySQLUserRepo) Update(user *model.User) error {
 	return r.db.Save(user).Error
 }
 
-func (r *MySQLUserRepo) SaveDevice(ctx context.Context, device *authModel.UserDevice) error {
+func (r *MySQLUserRepo) SaveDevice(ctx context.Context, device *model.UserDevice) error {
 	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
 		// Klucz unikalny to kombinacja UserID i Fingerprint
 		Columns: []clause.Column{{Name: "user_id"}, {Name: "device_fingerprint"}},

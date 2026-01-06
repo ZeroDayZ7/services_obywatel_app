@@ -42,6 +42,10 @@ func MustInitDB() (*gorm.DB, func()) {
 		panic(err)
 	}
 
+	if err := SeedData(db); err != nil {
+		log.ErrorObj("Failed to seed initial data", err)
+	}
+
 	log.Info("Successfully connected to PostgreSQL")
 	return db, func() { sqlDB.Close() }
 }
