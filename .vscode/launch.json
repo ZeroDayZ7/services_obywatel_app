@@ -14,7 +14,7 @@
       },
       "buildFlags": "-tags=dev",
       "cwd": "${workspaceFolder}/platform/services/gateway",
-      "showLog": true,
+      "showLog": false,
       "output": "${workspaceFolder}/platform/services/gateway/bin/gateway_debug.exe"
     },
     {
@@ -30,7 +30,7 @@
       },
       "buildFlags": "-tags=dev",
       "cwd": "${workspaceFolder}/platform/services/auth-service",
-      "showLog": true,
+      "showLog": false,
       "output": "${workspaceFolder}/platform/services/auth-service/bin/auth_debug.exe"
     },
     {
@@ -46,7 +46,7 @@
       },
       "buildFlags": "-tags=dev",
       "cwd": "${workspaceFolder}/platform/services/citizen-docs",
-      "showLog": true,
+      "showLog": false,
       "output": "${workspaceFolder}/platform/services/citizen-docs/bin/citizen-docs_debug.exe"
     },
     {
@@ -62,7 +62,7 @@
       },
       "buildFlags": "-tags=dev",
       "cwd": "${workspaceFolder}/platform/services/version-service",
-      "showLog": true,
+      "showLog": false,
       "output": "${workspaceFolder}/platform/services/version-service/bin/version_service_debug.exe"
     },
     {
@@ -78,7 +78,7 @@
       },
       "buildFlags": "-tags=dev",
       "cwd": "${workspaceFolder}/platform/services/notification-service",
-      "showLog": true,
+      "showLog": false,
       "output": "${workspaceFolder}/platform/services/notification-service/bin/notification_debug.exe"
     },
     {
@@ -94,7 +94,7 @@
       },
       "buildFlags": "-tags=dev",
       "cwd": "${workspaceFolder}/platform/services/audit-service",
-      "showLog": true,
+      "showLog": false,
       "output": "${workspaceFolder}/platform/services/audit-service/bin/audit_debug.exe"
     }
   ]
