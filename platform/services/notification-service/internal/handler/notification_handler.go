@@ -1,9 +1,8 @@
 package handler
 
 import (
-	"strconv"
-
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/services/notification-service/internal/model"
 	"github.com/zerodayz7/platform/services/notification-service/internal/service"
 )
@@ -16,93 +15,94 @@ func NewNotificationHandler(svc *service.NotificationService) *NotificationHandl
 	return &NotificationHandler{service: svc}
 }
 
-// ListMyNotifications GET /notifications
-// Gateway wstrzykuje X-User-ID po dekodowaniu tokena JWT
-func (h *NotificationHandler) ListMyNotifications(c *fiber.Ctx) error {
-	userIDStr := c.Get("X-User-ID")
+// Funkcja pomocnicza, aby nie powtarzać logiki parsowania UserID
+func (h *NotificationHandler) parseUserID(c *fiber.Ctx) (uuid.UUID, error) {
+	userIDStr := c.Get("X-User-Id")
 	if userIDStr == "" {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "missing user id header"})
+		userIDStr = c.Get("X-User-ID") // Sprawdzamy obie wersje
 	}
+	return uuid.Parse(userIDStr)
+}
 
-	userID, err := strconv.ParseUint(userIDStr, 10, 32)
+// ListMyNotifications GET /notifications
+func (h *NotificationHandler) ListMyNotifications(c *fiber.Ctx) error {
+	userID, err := h.parseUserID(c)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid user id format"})
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid or missing user id"})
 	}
 
-	notifications, err := h.service.ListByUser(uint(userID))
+	notifications, err := h.service.ListByUser(userID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to fetch notifications"})
 	}
-
 	return c.JSON(notifications)
 }
 
 // MarkAsRead PATCH /notifications/:id/read
 func (h *NotificationHandler) MarkAsRead(c *fiber.Ctx) error {
-	id := c.Params("id")
-	if id == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "missing notification id"})
-	}
-
-	// 1. Wyciągamy UserID wstrzyknięte przez Gateway
-	userIDStr := c.Get("X-User-Id")
-	if userIDStr == "" {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized: missing user context"})
-	}
-
-	// 2. Konwersja na uint
-	userID, err := strconv.ParseUint(userIDStr, 10, 32)
+	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid user identity"})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid notification id"})
 	}
 
-	// 3. Przekazujemy oba parametry do serwisu
-	if err := h.service.MarkRead(id, uint(userID)); err != nil {
+	userID, err := h.parseUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid or missing user id"})
+	}
+
+	if err := h.service.MarkRead(id, userID); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to mark as read"})
 	}
-
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
+// MarkAllAsRead PATCH /notifications/read-all
 func (h *NotificationHandler) MarkAllAsRead(c *fiber.Ctx) error {
-	userIDStr := c.Get("X-User-ID")
-	userID, _ := strconv.ParseUint(userIDStr, 10, 32)
-
-	if err := h.service.MarkAllRead(uint(userID)); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to mark all as read"})
+	userID, err := h.parseUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid or missing user id"})
 	}
 
+	if err := h.service.MarkAllRead(userID); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to mark all as read"})
+	}
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
 // MoveToTrash PATCH /notifications/:id/trash
 func (h *NotificationHandler) MoveToTrash(c *fiber.Ctx) error {
-	id := c.Params("id")
-	userIDStr := c.Get("X-User-Id")
-	userID, _ := strconv.ParseUint(userIDStr, 10, 32)
-
-	if err := h.service.MoveToTrash(id, uint(userID)); err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": "failed to move to trash"})
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid notification id"})
 	}
 
+	userID, err := h.parseUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid or missing user id"})
+	}
+
+	if err := h.service.MoveToTrash(id, userID); err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "failed to move to trash"})
+	}
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
 // ClearTrash DELETE /notifications/trash
 func (h *NotificationHandler) ClearTrash(c *fiber.Ctx) error {
-	userIDStr := c.Get("X-User-Id")
-	userID, _ := strconv.ParseUint(userIDStr, 10, 32)
-
-	if err := h.service.ClearTrash(uint(userID)); err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": "failed to clear trash"})
+	userID, err := h.parseUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid or missing user id"})
 	}
 
+	if err := h.service.ClearTrash(userID); err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "failed to clear trash"})
+	}
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
 // SendNotification POST /notifications/send (Wewnętrzne/Admin)
 func (h *NotificationHandler) SendNotification(c *fiber.Ctx) error {
-	var req model.Notification // Używamy modelu bezpośrednio lub dedykowanego DTO
+	var req model.Notification
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid body"})
 	}
@@ -110,48 +110,41 @@ func (h *NotificationHandler) SendNotification(c *fiber.Ctx) error {
 	if err := h.service.Send(&req); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to send notification"})
 	}
-
 	return c.Status(fiber.StatusCreated).JSON(req)
 }
 
 // RestoreFromTrash PATCH /notifications/:id/restore
 func (h *NotificationHandler) RestoreFromTrash(c *fiber.Ctx) error {
-	id := c.Params("id")
-	if id == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "missing notification id"})
-	}
-
-	userIDStr := c.Get("X-User-Id")
-	userID, err := strconv.ParseUint(userIDStr, 10, 32)
+	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid user identity"})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid notification id"})
 	}
 
-	// Wywołujemy serwis, który ustawi deleted_at na null
-	if err := h.service.Restore(id, uint(userID)); err != nil {
+	userID, err := h.parseUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid or missing user id"})
+	}
+
+	if err := h.service.Restore(id, userID); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to restore notification"})
 	}
-
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
 // DeletePermanently DELETE /notifications/:id
 func (h *NotificationHandler) DeletePermanently(c *fiber.Ctx) error {
-	id := c.Params("id")
-	if id == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "missing notification id"})
-	}
-
-	userIDStr := c.Get("X-User-Id")
-	userID, err := strconv.ParseUint(userIDStr, 10, 32)
+	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid user identity"})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid notification id"})
 	}
 
-	// Wywołujemy serwis
-	if err := h.service.DeletePermanently(id, uint(userID)); err != nil {
+	userID, err := h.parseUserID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid or missing user id"})
+	}
+
+	if err := h.service.DeletePermanently(id, userID); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to delete notification permanently"})
 	}
-
 	return c.SendStatus(fiber.StatusNoContent)
 }

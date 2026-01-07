@@ -95,6 +95,11 @@ func (c *Cache) SendAuditLog(ctx context.Context, data any) error {
 	return c.client.SendAuditLog(ctx, data)
 }
 
+func (c *Cache) SendNotification(ctx context.Context, data any) error {
+	// Cache używa swojego wewnętrznego klienta, aby wysłać powiadomienie
+	return c.client.SendNotification(ctx, data)
+}
+
 // UpdateSessionFingerprint - poprawiona wersja z prefixami
 func (c *Cache) UpdateSessionFingerprint(ctx context.Context, sessionID string, newFingerprint string) error {
 	// 1. Pobieramy dane używając c.Get (obsługuje prefixy)
@@ -197,6 +202,30 @@ func (c *Client) SendAuditLog(ctx context.Context, data any) error {
 
 	return c.XAdd(ctx, &goredis.XAddArgs{
 		Stream: "audit_stream",
+		Values: map[string]any{
+			"payload": string(jsonData),
+		},
+	}).Err()
+}
+
+// SendNotification wysyła dane do notification_stream
+func (c *Client) SendNotification(ctx context.Context, data any) error {
+	// Pomijamy bootstrapowe eventy (jeśli potrzebne)
+	if m, ok := data.(map[string]any); ok {
+		if b, exists := m["_bootstrap"]; exists {
+			if isBootstrap, ok := b.(bool); ok && isBootstrap {
+				return nil
+			}
+		}
+	}
+
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+
+	return c.XAdd(ctx, &goredis.XAddArgs{
+		Stream: "notification_stream",
 		Values: map[string]any{
 			"payload": string(jsonData),
 		},
