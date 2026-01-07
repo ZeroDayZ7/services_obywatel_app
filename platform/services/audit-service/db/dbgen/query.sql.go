@@ -7,41 +7,39 @@ package dbgen
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const createEncryptedLog = `-- name: CreateEncryptedLog :exec
-INSERT INTO encrypted_audit_logs (
-    user_id, service_name, action, ip_address, encrypted_data, encrypted_key, status
-) VALUES (
-    $1, $2, $3, $4, $5, $6, $7
-)
+const createLog = `-- name: CreateLog :exec
+INSERT INTO audit_logs (
+    user_id, service_name, action, ip_address, metadata, status
+) VALUES ($1, $2, $3, $4, $5, $6)
 `
 
-type CreateEncryptedLogParams struct {
-	UserID        int64  `json:"user_id"`
-	ServiceName   string `json:"service_name"`
-	Action        string `json:"action"`
-	IpAddress     string `json:"ip_address"`
-	EncryptedData []byte `json:"encrypted_data"`
-	EncryptedKey  []byte `json:"encrypted_key"`
-	Status        string `json:"status"`
+type CreateLogParams struct {
+	UserID      pgtype.UUID `json:"user_id"`
+	ServiceName string      `json:"service_name"`
+	Action      string      `json:"action"`
+	IpAddress   string      `json:"ip_address"`
+	Metadata    []byte      `json:"metadata"`
+	Status      string      `json:"status"`
 }
 
-func (q *Queries) CreateEncryptedLog(ctx context.Context, arg CreateEncryptedLogParams) error {
-	_, err := q.db.Exec(ctx, createEncryptedLog,
+func (q *Queries) CreateLog(ctx context.Context, arg CreateLogParams) error {
+	_, err := q.db.Exec(ctx, createLog,
 		arg.UserID,
 		arg.ServiceName,
 		arg.Action,
 		arg.IpAddress,
-		arg.EncryptedData,
-		arg.EncryptedKey,
+		arg.Metadata,
 		arg.Status,
 	)
 	return err
 }
 
 const getAllLogs = `-- name: GetAllLogs :many
-SELECT id, user_id, service_name, action, ip_address, encrypted_data, encrypted_key, status, created_at FROM encrypted_audit_logs
+SELECT id, user_id, service_name, action, ip_address, metadata, status, created_at FROM audit_logs
 ORDER BY created_at DESC
 LIMIT $1 OFFSET $2
 `
@@ -51,23 +49,22 @@ type GetAllLogsParams struct {
 	Offset int32 `json:"offset"`
 }
 
-func (q *Queries) GetAllLogs(ctx context.Context, arg GetAllLogsParams) ([]EncryptedAuditLog, error) {
+func (q *Queries) GetAllLogs(ctx context.Context, arg GetAllLogsParams) ([]AuditLog, error) {
 	rows, err := q.db.Query(ctx, getAllLogs, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []EncryptedAuditLog
+	var items []AuditLog
 	for rows.Next() {
-		var i EncryptedAuditLog
+		var i AuditLog
 		if err := rows.Scan(
 			&i.ID,
 			&i.UserID,
 			&i.ServiceName,
 			&i.Action,
 			&i.IpAddress,
-			&i.EncryptedData,
-			&i.EncryptedKey,
+			&i.Metadata,
 			&i.Status,
 			&i.CreatedAt,
 		); err != nil {
@@ -82,21 +79,21 @@ func (q *Queries) GetAllLogs(ctx context.Context, arg GetAllLogsParams) ([]Encry
 }
 
 const getLogByID = `-- name: GetLogByID :one
-SELECT id, user_id, service_name, action, ip_address, encrypted_data, encrypted_key, status, created_at FROM encrypted_audit_logs
-WHERE id = $1 LIMIT 1
+SELECT id, user_id, service_name, action, ip_address, metadata, status, created_at FROM audit_logs
+WHERE id = $1
+LIMIT 1
 `
 
-func (q *Queries) GetLogByID(ctx context.Context, id int64) (EncryptedAuditLog, error) {
+func (q *Queries) GetLogByID(ctx context.Context, id int64) (AuditLog, error) {
 	row := q.db.QueryRow(ctx, getLogByID, id)
-	var i EncryptedAuditLog
+	var i AuditLog
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
 		&i.ServiceName,
 		&i.Action,
 		&i.IpAddress,
-		&i.EncryptedData,
-		&i.EncryptedKey,
+		&i.Metadata,
 		&i.Status,
 		&i.CreatedAt,
 	)
@@ -104,28 +101,27 @@ func (q *Queries) GetLogByID(ctx context.Context, id int64) (EncryptedAuditLog, 
 }
 
 const getLogsByAction = `-- name: GetLogsByAction :many
-SELECT id, user_id, service_name, action, ip_address, encrypted_data, encrypted_key, status, created_at FROM encrypted_audit_logs
+SELECT id, user_id, service_name, action, ip_address, metadata, status, created_at FROM audit_logs
 WHERE action = $1
 ORDER BY created_at DESC
 `
 
-func (q *Queries) GetLogsByAction(ctx context.Context, action string) ([]EncryptedAuditLog, error) {
+func (q *Queries) GetLogsByAction(ctx context.Context, action string) ([]AuditLog, error) {
 	rows, err := q.db.Query(ctx, getLogsByAction, action)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []EncryptedAuditLog
+	var items []AuditLog
 	for rows.Next() {
-		var i EncryptedAuditLog
+		var i AuditLog
 		if err := rows.Scan(
 			&i.ID,
 			&i.UserID,
 			&i.ServiceName,
 			&i.Action,
 			&i.IpAddress,
-			&i.EncryptedData,
-			&i.EncryptedKey,
+			&i.Metadata,
 			&i.Status,
 			&i.CreatedAt,
 		); err != nil {
@@ -140,28 +136,27 @@ func (q *Queries) GetLogsByAction(ctx context.Context, action string) ([]Encrypt
 }
 
 const getLogsByUserId = `-- name: GetLogsByUserId :many
-SELECT id, user_id, service_name, action, ip_address, encrypted_data, encrypted_key, status, created_at FROM encrypted_audit_logs
+SELECT id, user_id, service_name, action, ip_address, metadata, status, created_at FROM audit_logs
 WHERE user_id = $1
 ORDER BY created_at DESC
 `
 
-func (q *Queries) GetLogsByUserId(ctx context.Context, userID int64) ([]EncryptedAuditLog, error) {
+func (q *Queries) GetLogsByUserId(ctx context.Context, userID pgtype.UUID) ([]AuditLog, error) {
 	rows, err := q.db.Query(ctx, getLogsByUserId, userID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []EncryptedAuditLog
+	var items []AuditLog
 	for rows.Next() {
-		var i EncryptedAuditLog
+		var i AuditLog
 		if err := rows.Scan(
 			&i.ID,
 			&i.UserID,
 			&i.ServiceName,
 			&i.Action,
 			&i.IpAddress,
-			&i.EncryptedData,
-			&i.EncryptedKey,
+			&i.Metadata,
 			&i.Status,
 			&i.CreatedAt,
 		); err != nil {

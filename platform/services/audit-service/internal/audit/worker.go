@@ -85,12 +85,21 @@ func (w *AuditWorker) Start() {
 			}
 
 			w.logger.Debug("Worker: Raw payload: " + rawPayload)
+			w.logger.DebugMap("Worker: Parsed payload preview", map[string]any{
+				"payload_preview": rawPayload,
+			})
 
 			var msg AuditMessage
 			if err := json.Unmarshal([]byte(rawPayload), &msg); err != nil {
 				w.logger.ErrorObj("Worker: JSON unmarshal failed", err)
 				continue
 			}
+
+			w.logger.DebugMap("Worker: AuditMessage parsed", map[string]any{
+				"user_id": msg.UserID,
+				"service": msg.Service,
+				"action":  msg.Action,
+			})
 
 			if err := w.svc.SaveLog(ctx, msg); err != nil {
 				w.logger.ErrorObj("Worker: SaveLog failed", err)

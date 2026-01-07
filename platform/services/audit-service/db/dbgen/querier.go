@@ -6,14 +6,16 @@ package dbgen
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Querier interface {
-	CreateEncryptedLog(ctx context.Context, arg CreateEncryptedLogParams) error
-	GetAllLogs(ctx context.Context, arg GetAllLogsParams) ([]EncryptedAuditLog, error)
-	GetLogByID(ctx context.Context, id int64) (EncryptedAuditLog, error)
-	GetLogsByAction(ctx context.Context, action string) ([]EncryptedAuditLog, error)
-	GetLogsByUserId(ctx context.Context, userID int64) ([]EncryptedAuditLog, error)
+	CreateLog(ctx context.Context, arg CreateLogParams) error
+	GetAllLogs(ctx context.Context, arg GetAllLogsParams) ([]AuditLog, error)
+	GetLogByID(ctx context.Context, id int64) (AuditLog, error)
+	GetLogsByAction(ctx context.Context, action string) ([]AuditLog, error)
+	GetLogsByUserId(ctx context.Context, userID pgtype.UUID) ([]AuditLog, error)
 }
 
 var _ Querier = (*Queries)(nil)

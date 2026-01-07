@@ -44,3 +44,28 @@ func MustInitDB() (*pgxpool.Pool, func()) {
 		dbPool.Close()
 	}
 }
+
+func EnsureAuditTable(ctx context.Context, db *pgxpool.Pool) error {
+	_, err := db.Exec(ctx, `
+	-- Usuń starą tabelę, jeśli istnieje
+	DROP TABLE IF EXISTS audit_logs;
+
+	-- Tworzymy nową tabelę
+	CREATE TABLE audit_logs (
+		id            BIGSERIAL PRIMARY KEY,
+		user_id       UUID NOT NULL,
+		service_name  VARCHAR(50) NOT NULL,
+		action        VARCHAR(100) NOT NULL,
+		ip_address    VARCHAR(45) NOT NULL,
+		metadata      JSONB NOT NULL,
+		status        VARCHAR(20) NOT NULL,
+		created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+	);
+
+	-- Indeksy dla wydajności
+	CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_logs(user_id);
+	CREATE INDEX IF NOT EXISTS idx_audit_ip ON audit_logs(ip_address);
+	CREATE INDEX IF NOT EXISTS idx_audit_service ON audit_logs(service_name);
+	`)
+	return err
+}

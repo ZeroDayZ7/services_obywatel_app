@@ -8,14 +8,13 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type EncryptedAuditLog struct {
-	ID            int64              `json:"id"`
-	UserID        int64              `json:"user_id"`
-	ServiceName   string             `json:"service_name"`
-	Action        string             `json:"action"`
-	IpAddress     string             `json:"ip_address"`
-	EncryptedData []byte             `json:"encrypted_data"`
-	EncryptedKey  []byte             `json:"encrypted_key"`
-	Status        string             `json:"status"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+type AuditLog struct {
+	ID          int64              `json:"id"`
+	UserID      pgtype.UUID        `json:"user_id"`
+	ServiceName string             `json:"service_name"`
+	Action      string             `json:"action"`
+	IpAddress   string             `json:"ip_address"`
+	Metadata    []byte             `json:"metadata"`
+	Status      string             `json:"status"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }

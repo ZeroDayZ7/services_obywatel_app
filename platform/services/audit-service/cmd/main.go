@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 
 	"github.com/zerodayz7/platform/pkg/redis"
@@ -31,6 +32,13 @@ func main() {
 	// DB
 	db, closeDB := config.MustInitDB()
 	defer closeDB()
+
+	// 🔧 TU: Tworzymy tabelę jeśli jej brak
+	ctx := context.Background()
+	if err := config.EnsureAuditTable(ctx, db); err != nil {
+		log.ErrorObj("Failed to ensure audit table exists", err)
+		return
+	}
 
 	// Dependency Injection
 	container := di.NewContainer(db, redisClient, log)

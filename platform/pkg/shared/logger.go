@@ -82,16 +82,27 @@ func GetLogger() *Logger {
 // convertStructToFields zamienia struct/map na []zap.Field z MASKOWANIEM SEKRETÓW
 func convertStructToFields(obj any) []zap.Field {
 	fields := []zap.Field{}
+
+	// 🔹 Obsługa nil
 	if obj == nil {
+		fields = append(fields, zap.Any("value", nil))
 		return fields
 	}
 
-	// ✅ SPRAWDZAMY CZY JESTEŚMY W TRYBIE DEBUG
-	// Jeśli logger pozwala na Debug, to NIE maskujemy (dla deweloperów)
 	isDev := instance.Core().Enabled(zap.DebugLevel)
 
 	val := reflect.ValueOf(obj)
-	if val.Kind() == reflect.Ptr {
+	if !val.IsValid() {
+		fields = append(fields, zap.Any("value", nil))
+		return fields
+	}
+
+	// Obsługa wskaźników
+	if val.Kind() == reflect.Pointer {
+		if val.IsNil() {
+			fields = append(fields, zap.Any("value", nil))
+			return fields
+		}
 		val = val.Elem()
 	}
 
@@ -102,7 +113,6 @@ func convertStructToFields(obj any) []zap.Field {
 		for _, key := range val.MapKeys() {
 			k := key.String()
 			v := val.MapIndex(key).Interface()
-			// ✅ Maskuj tylko jeśli NIE jesteśmy w trybie Dev
 			if !isDev && isSensitive(k) {
 				fields = append(fields, zap.String(k, "********"))
 			} else {
@@ -113,15 +123,19 @@ func convertStructToFields(obj any) []zap.Field {
 		for i := 0; i < val.NumField(); i++ {
 			field := typ.Field(i)
 			fieldName := field.Name
+			fieldVal := val.Field(i)
+			if !fieldVal.CanInterface() {
+				continue // ⚠️ Pomijamy pola, które nie da się interfejsować
+			}
 
-			// ✅ Maskuj tylko jeśli NIE jesteśmy w trybie Dev
 			if !isDev && isSensitive(fieldName) {
 				fields = append(fields, zap.String(fieldName, "********"))
 			} else {
-				fields = append(fields, zap.Any(fieldName, val.Field(i).Interface()))
+				fields = append(fields, zap.Any(fieldName, fieldVal.Interface()))
 			}
 		}
 	default:
+		// Dla stringów, intów, itp.
 		fields = append(fields, zap.Any("value", obj))
 	}
 

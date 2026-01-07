@@ -180,6 +180,16 @@ func (c *Client) AckStream(ctx context.Context, stream, group, messageID string)
 }
 
 func (c *Client) SendAuditLog(ctx context.Context, data any) error {
+	// Jeśli to mapa i ma _bootstrap, nie wysyłamy
+	if m, ok := data.(map[string]any); ok {
+		if b, exists := m["_bootstrap"]; exists {
+			if isBootstrap, ok := b.(bool); ok && isBootstrap {
+				// Pomijamy wpis
+				return nil
+			}
+		}
+	}
+
 	jsonData, err := json.Marshal(data)
 	if err != nil {
 		return err
@@ -187,7 +197,7 @@ func (c *Client) SendAuditLog(ctx context.Context, data any) error {
 
 	return c.XAdd(ctx, &goredis.XAddArgs{
 		Stream: "audit_stream",
-		Values: map[string]interface{}{
+		Values: map[string]any{
 			"payload": string(jsonData),
 		},
 	}).Err()
