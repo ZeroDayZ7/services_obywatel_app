@@ -10,11 +10,11 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/pkg/errors"
+	"github.com/zerodayz7/platform/pkg/events"
 	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/auth-service/config"
 	"github.com/zerodayz7/platform/services/auth-service/internal/features/auth/service"
-	"github.com/zerodayz7/platform/services/auth-service/internal/shared/utils"
 	"github.com/zerodayz7/platform/services/auth-service/internal/validator"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -31,8 +31,7 @@ func NewAuthHandler(authService *service.AuthService, cache *redis.Cache) *AuthH
 	}
 }
 
-// #region RegisterDevice
-// RegisterDevice obsługuje zapisanie klucza publicznego urządzenia i jego danych
+// #region REGISTER DEVICE
 func (h *AuthHandler) RegisterDevice(c *fiber.Ctx) error {
 	log := shared.GetLogger()
 
@@ -43,23 +42,10 @@ func (h *AuthHandler) RegisterDevice(c *fiber.Ctx) error {
 
 	userIDStr := c.Get("X-User-Id")
 	sessionID := c.Get("X-Session-Id")
-	headerFingerprint := c.Get("X-Device-Fingerprint")
 
 	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
 		return errors.SendAppError(c, errors.ErrInvalidToken)
-	}
-
-	// ==========================================================
-	// 🛡️ WALIDACJA FINGERPRINTU (Nagłówek vs Body)
-	// ==========================================================
-	if headerFingerprint != "" && headerFingerprint != body.DeviceFingerprint {
-		log.WarnMap("Fingerprint mismatch detected", map[string]any{
-			"header": headerFingerprint,
-			"body":   body.DeviceFingerprint,
-			"userId": userID,
-		})
-		return errors.SendAppError(c, errors.ErrVerificationFailed)
 	}
 
 	ctx := c.Context()
@@ -181,24 +167,21 @@ func (h *AuthHandler) RegisterDevice(c *fiber.Ctx) error {
 
 	log.DebugMap("Device registration successful", response)
 
-	metadata := map[string]any{
-		"device_name": string(body.DeviceNameEncrypted),
-		"platform":    string(body.Platform),
-	}
+	emitter := events.NewEmitter(h.cache, "auth-service")
 
-	// Enterprise call:
-	utils.SendEvent(
+	emitter.Emit(
 		ctx,
-		h.cache,
-		userID,
-		"DEVICE_REGISTERED",
-		metadata,
-		clientIP,
-		utils.NotificationOptions{
-			Title:    "Nowe Urządzenie",
-			Priority: "warning",
-			Category: "security",
-		},
+		events.DeviceRegistered,
+		userID.String(),
+		events.WithIP(clientIP),
+		events.WithMetadata(map[string]any{
+			"device":   body.DeviceNameEncrypted,
+			"platform": body.Platform,
+		}),
+		events.WithFlags(events.EventFlags{
+			Audit:  true,
+			Notify: true,
+		}),
 	)
 
 	return c.JSON(response)
@@ -229,9 +212,22 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		return errors.SendAppError(c, errors.ErrInvalidCredentials)
 	}
 
+	if err := h.authService.CanUserLogin(user); err != nil {
+		return errors.SendAppError(c, err)
+	}
+
+	const maxFailedAttempts = 5
+	if user.FailedLoginAttempts >= maxFailedAttempts {
+		log.WarnObj("User exceeded failed login attempts", user.Email)
+		return errors.SendAppError(c, errors.ErrAccountLocked)
+	}
+
 	valid, err := h.authService.VerifyPassword(user, body.Password)
 	if err != nil || !valid {
 		log.WarnObj("Invalid password", user.Email)
+
+		user.FailedLoginAttempts++
+		_ = h.authService.UpdateUserFailedLogin(user.ID, user.FailedLoginAttempts)
 		return errors.SendAppError(c, errors.ErrInvalidCredentials)
 	}
 
@@ -239,10 +235,10 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	if user.TwoFactorEnabled {
 		code := fmt.Sprintf("%06d", shared.RandInt(100000, 999999))
 		hashedCode, _ := bcrypt.GenerateFromPassword([]byte(code), bcrypt.DefaultCost)
-		twoFAToken := shared.GenerateUuidV7() // Zmieniono na V7 dla spójności
+		twoFAToken := shared.GenerateUuidV7()
 
 		session := redis.TwoFASession{
-			UserID:      fmt.Sprint(user.ID), // Konwersja UUID na string dla Redisa
+			UserID:      fmt.Sprint(user.ID),
 			Email:       user.Email,
 			CodeHash:    string(hashedCode),
 			Token:       twoFAToken,
@@ -303,7 +299,7 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	return c.JSON(response)
 }
 
-// #region Verify2FA
+// #region VERIFY 2 FA
 func (h *AuthHandler) Verify2FA(c *fiber.Ctx) error {
 	log := shared.GetLogger()
 
@@ -345,7 +341,7 @@ func (h *AuthHandler) Verify2FA(c *fiber.Ctx) error {
 	// 4. Sprawdzamy limit prób
 	if session.Attempts >= 5 {
 		log.WarnObj("Max 2FA attempts reached", map[string]string{"user_id": session.UserID})
-		return errors.SendAppError(c, errors.ErrInvalid2FACode)
+		return errors.SendAppError(c, errors.Err2FALocked)
 	}
 
 	// 5. Weryfikacja kodu bcryptem
@@ -366,6 +362,20 @@ func (h *AuthHandler) Verify2FA(c *fiber.Ctx) error {
 			"error":  err.Error(),
 		})
 		return errors.SendAppError(c, errors.ErrInternal)
+	}
+
+	user, err := h.authService.GetUserByID(uid)
+	if err != nil || user == nil {
+		return errors.SendAppError(c, errors.ErrInternal)
+	}
+
+	// Aktualizujemy LastLogin i LastIP
+	user.LastLogin = time.Now()
+	user.LastIP = c.IP()
+
+	// Zapisujemy zmiany w bazie poprzez repo w AuthService
+	if err := h.authService.RepoUpdateUser(user); err != nil {
+		log.ErrorObj("Failed to update LastLogin/LastIP", err)
 	}
 
 	// 7. TWORZYMY TOKENY (Przekazujemy uid ORAZ fingerprint)

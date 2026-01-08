@@ -231,3 +231,29 @@ func (c *Client) SendNotification(ctx context.Context, data any) error {
 		},
 	}).Err()
 }
+
+// #region EVENT PUBLISHER
+
+// =========================================
+// ============ EVENT PUBLISHER =============
+// =========================================
+
+// Publish implements events.StreamPublisher
+func (c *Cache) Publish(
+	ctx context.Context,
+	stream string,
+	payload any,
+) error {
+
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+
+	return c.client.XAdd(ctx, &goredis.XAddArgs{
+		Stream: stream,
+		Values: map[string]any{
+			"payload": string(jsonData),
+		},
+	}).Err()
+}

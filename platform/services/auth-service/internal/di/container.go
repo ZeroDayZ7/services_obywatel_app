@@ -7,8 +7,8 @@ import (
 	authService "github.com/zerodayz7/platform/services/auth-service/internal/features/auth/service"
 	userService "github.com/zerodayz7/platform/services/auth-service/internal/features/users/service"
 
-	refRepo "github.com/zerodayz7/platform/services/auth-service/internal/features/auth/repository/mysql"
-	userRepo "github.com/zerodayz7/platform/services/auth-service/internal/features/users/repository/mysql"
+	refRepo "github.com/zerodayz7/platform/services/auth-service/internal/features/auth/repository/db"
+	userRepo "github.com/zerodayz7/platform/services/auth-service/internal/features/users/repository/db"
 
 	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/services/auth-service/config"

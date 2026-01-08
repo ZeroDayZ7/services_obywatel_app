@@ -57,8 +57,12 @@ var (
 	ErrInvalidCredentials  = &AppError{Code: "INVALID_CREDENTIALS", Type: Unauthorized, Message: "Incorrect login data"}
 	ErrUserNotFound        = &AppError{Code: "USER_NOT_FOUND", Type: Unauthorized, Message: "User not found"}
 	ErrEmailIsSendIfExists = &AppError{Code: "EMAIL_IS_SEND_IF_EXISTS", Type: Validation, Message: "If the account exists, a reset code has been sent to the provided email."}
-
-	ErrSessionExpired     = &AppError{Code: "SESSION_EXPIRED", Type: Unauthorized, Message: "Pairing session expired. Please log in again."}
-	ErrVerificationFailed = &AppError{Code: "VERIFICATION_FAILED", Type: Unauthorized, Message: "Device verification failed."}
-	ErrInvalidPairingData = &AppError{Code: "INVALID_PAIRING_DATA", Type: Validation, Message: "Invalid public key or signature format"}
+	ErrAccountLocked       = &AppError{Code: "ACCOUNT_LOCKED", Type: Unauthorized, Message: "Account locked due to too many failed login attempts"}
+	Err2FALocked           = &AppError{Code: "2FA_LOCKED", Type: Validation, Message: "Too many incorrect 2FA attempts. Try again in 15 minutes."}
+	ErrSessionExpired      = &AppError{Code: "SESSION_EXPIRED", Type: Unauthorized, Message: "Pairing session expired. Please log in again."}
+	ErrVerificationFailed  = &AppError{Code: "VERIFICATION_FAILED", Type: Unauthorized, Message: "Device verification failed."}
+	ErrInvalidPairingData  = &AppError{Code: "INVALID_PAIRING_DATA", Type: Validation, Message: "Invalid public key or signature format"}
+	ErrAccountSuspended    = &AppError{Code: "ACCOUNT_SUSPENDED", Type: Unauthorized, Message: "Konto użytkownika jest tymczasowo zawieszone."}
+	ErrAccountBanned       = &AppError{Code: "ACCOUNT_BANNED", Type: Unauthorized, Message: "Konto użytkownika zostało zablokowane."}
+	ErrAccountPending      = &AppError{Code: "ACCOUNT_PENDING", Type: Unauthorized, Message: "Konto użytkownika oczekuje na weryfikację."}
 )

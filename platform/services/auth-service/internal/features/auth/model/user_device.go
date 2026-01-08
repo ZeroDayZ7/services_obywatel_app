@@ -10,6 +10,7 @@ import (
 	"github.com/zerodayz7/platform/pkg/shared" // Rozwiązuje błąd "undefined: shared"
 )
 
+
 type UserDevice struct {
 	ID uuid.UUID `gorm:"type:uuid;primaryKey"`
 

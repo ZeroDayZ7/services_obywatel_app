@@ -16,30 +16,46 @@ const (
 	RoleAdmin UserRole = "admin"
 )
 
-type User struct {
-	// Użycie UUID zamiast uint zwiększa bezpieczeństwo publicznych identyfikatorów
-	ID       uuid.UUID `gorm:"type:uuid;primaryKey"`
-	Username string    `gorm:"size:30;not null;unique"`
-	Email    string    `gorm:"size:100;not null;unique"`
-	Password string    `gorm:"size:128;not null"`
+type UserStatus string
 
-	// RBAC: Kluczowe pole dla Twojego systemu uprawnień
-	Role UserRole `gorm:"type:varchar(20);not null;default:'user'"`
+const (
+	StatusActive    UserStatus = "ACTIVE"    // aktywny – użytkownik może normalnie korzystać z systemu
+	StatusSuspended UserStatus = "SUSPENDED" // zawieszony – konto tymczasowo zablokowane
+	StatusPending   UserStatus = "PENDING"   // oczekujący – np. konto czeka na weryfikację
+	StatusBanned    UserStatus = "BANNED"    // zbanowany – konto trwale zablokowane
+)
 
-	TwoFactorEnabled bool   `gorm:"not null;default:false"`
-	TwoFactorSecret  string `gorm:"size:64"`
+type Permission string
 
-	CreatedAt time.Time      `gorm:"autoCreateTime"`
-	UpdatedAt time.Time      `gorm:"autoUpdateTime"`
-	DeletedAt gorm.DeletedAt `gorm:"index"`
+type UserPermission struct {
+	ID         uuid.UUID  `gorm:"type:uuid;primaryKey"`
+	UserID     uuid.UUID  `gorm:"type:uuid;index"`
+	Permission Permission `gorm:"type:varchar(50);not null"`
+	Scope      string     `gorm:"type:text"`
+	CreatedAt  time.Time
 }
 
-// TO JEST MIEJSCE, GDZIE DZIEJE SIĘ MAGIA:
-func (u *User) BeforeCreate(tx *gorm.DB) (err error) {
-	// Tutaj wywołujemy Twoją funkcję z shared!
-	idStr := shared.GenerateUuidV7()
+type User struct {
+	ID                  uuid.UUID  `gorm:"type:uuid;primaryKey"`
+	Username            string     `gorm:"size:30;not null;unique"`
+	Email               string     `gorm:"size:100;not null;unique"`
+	Password            string     `gorm:"size:128;not null"`
+	Role                UserRole   `gorm:"type:varchar(20);not null;default:'user'"`
+	Status              UserStatus `gorm:"type:varchar(20);not null;default:'ACTIVE'"`
+	FailedLoginAttempts int        `gorm:"not null;default:0"`
+	LastLogin           time.Time
+	PasswordChangedAt   time.Time
+	LastIP              string           `gorm:"size:45"`
+	TwoFactorEnabled    bool             `gorm:"not null;default:false"`
+	TwoFactorSecret     string           `gorm:"size:64"`
+	Permissions         []UserPermission `gorm:"foreignKey:UserID"`
+	CreatedAt           time.Time        `gorm:"autoCreateTime"`
+	UpdatedAt           time.Time        `gorm:"autoUpdateTime"`
+	DeletedAt           gorm.DeletedAt   `gorm:"index"`
+}
 
-	// GORM potrzebuje obiektu typu uuid.UUID, więc parsujemy stringa
+func (u *User) BeforeCreate(tx *gorm.DB) (err error) {
+	idStr := shared.GenerateUuidV7()
 	u.ID, err = uuid.Parse(idStr)
 	return err
 }

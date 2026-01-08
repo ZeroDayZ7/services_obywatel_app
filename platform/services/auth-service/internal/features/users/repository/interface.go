@@ -16,4 +16,5 @@ type UserRepository interface {
 	EmailOrUsernameExists(email, username string) (bool, bool, error)
 	Update(user *model.User) error
 	SaveDevice(ctx context.Context, device *model.UserDevice) error
+	UpdateFailedLogin(userID uuid.UUID, attempts int) error
 }

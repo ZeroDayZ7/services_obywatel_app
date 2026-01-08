@@ -35,6 +35,7 @@ func MustInitDB() (*gorm.DB, func()) {
 	// Migracje modeli
 	if err := db.AutoMigrate(
 		&model.User{},
+		&model.UserPermission{},
 		&model.RefreshToken{},
 		&model.UserDevice{},
 	); err != nil {

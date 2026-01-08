@@ -33,6 +33,8 @@ type RedisConfig struct {
 
 type DBConfig struct {
 	DSN             string
+	AdminDSN        string
+	DBName          string
 	MaxOpenConns    int
 	MaxIdleConns    int
 	ConnMaxLifetime time.Duration
@@ -135,6 +137,8 @@ func LoadConfigGlobal() error {
 		},
 		Database: DBConfig{
 			DSN:             viper.GetString("DATABASE_DSN"),
+			AdminDSN:        viper.GetString("ADMIN_DATABASE_DSN"),
+			DBName:          viper.GetString("DATABASE_NAME"),
 			MaxOpenConns:    viper.GetInt("DB_MAX_OPEN_CONNS"),
 			MaxIdleConns:    viper.GetInt("DB_MAX_IDLE_CONNS"),
 			ConnMaxLifetime: time.Duration(viper.GetInt("DB_CONN_MAX_LIFETIME_MIN")) * time.Minute,

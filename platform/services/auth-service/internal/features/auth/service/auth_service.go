@@ -264,3 +264,26 @@ func (s *AuthService) RegisterUserDevice(
 
 	return nil
 }
+
+func (s *AuthService) UpdateUserFailedLogin(userID uuid.UUID, attempts int) error {
+	return s.repo.UpdateFailedLogin(userID, attempts)
+}
+
+func (s *AuthService) RepoUpdateUser(user *model.User) error {
+	return s.repo.Update(user)
+}
+
+func (s *AuthService) CanUserLogin(user *model.User) *errors.AppError {
+	switch user.Status {
+	case model.StatusSuspended:
+		return errors.ErrAccountSuspended
+	case model.StatusBanned:
+		return errors.ErrAccountBanned
+	case model.StatusPending:
+		return errors.ErrAccountPending
+	case model.StatusActive:
+		return nil
+	default:
+		return errors.ErrInternal
+	}
+}

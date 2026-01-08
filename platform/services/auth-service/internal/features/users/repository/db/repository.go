@@ -1,4 +1,4 @@
-package mysql
+package db
 
 import (
 	"context"
@@ -11,21 +11,21 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-var _ repository.UserRepository = (*MySQLUserRepo)(nil)
+var _ repository.UserRepository = (*UserRepo)(nil)
 
-type MySQLUserRepo struct {
+type UserRepo struct {
 	db *gorm.DB
 }
 
-func NewUserRepository(db *gorm.DB) *MySQLUserRepo {
-	return &MySQLUserRepo{db: db}
+func NewUserRepository(db *gorm.DB) *UserRepo {
+	return &UserRepo{db: db}
 }
 
-func (r *MySQLUserRepo) CreateUser(user *model.User) error {
+func (r *UserRepo) CreateUser(user *model.User) error {
 	return r.db.Create(user).Error
 }
 
-func (r *MySQLUserRepo) GetByID(id uuid.UUID) (*model.User, error) {
+func (r *UserRepo) GetByID(id uuid.UUID) (*model.User, error) {
 	var u model.User
 	if err := r.db.First(&u, id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -36,7 +36,7 @@ func (r *MySQLUserRepo) GetByID(id uuid.UUID) (*model.User, error) {
 	return &u, nil
 }
 
-func (r *MySQLUserRepo) GetByEmail(email string) (*model.User, error) {
+func (r *UserRepo) GetByEmail(email string) (*model.User, error) {
 	var u model.User
 	if err := r.db.Where("email = ?", email).First(&u).Error; err != nil {
 		return nil, err
@@ -44,7 +44,7 @@ func (r *MySQLUserRepo) GetByEmail(email string) (*model.User, error) {
 	return &u, nil
 }
 
-func (r *MySQLUserRepo) EmailExists(email string) (bool, error) {
+func (r *UserRepo) EmailExists(email string) (bool, error) {
 	var count int64
 	if err := r.db.Model(&model.User{}).Where("email = ?", email).Count(&count).Error; err != nil {
 		return false, err
@@ -52,7 +52,7 @@ func (r *MySQLUserRepo) EmailExists(email string) (bool, error) {
 	return count > 0, nil
 }
 
-func (r *MySQLUserRepo) UsernameExists(username string) (bool, error) {
+func (r *UserRepo) UsernameExists(username string) (bool, error) {
 	var count int64
 	if err := r.db.Model(&model.User{}).Where("username = ?", username).Count(&count).Error; err != nil {
 		return false, err
@@ -60,7 +60,7 @@ func (r *MySQLUserRepo) UsernameExists(username string) (bool, error) {
 	return count > 0, nil
 }
 
-func (r *MySQLUserRepo) EmailOrUsernameExists(email, username string) (emailExists, usernameExists bool, err error) {
+func (r *UserRepo) EmailOrUsernameExists(email, username string) (emailExists, usernameExists bool, err error) {
 	var users []model.User
 	if err := r.db.Where("email = ? OR username = ?", email, username).Find(&users).Error; err != nil {
 		return false, false, err
@@ -77,11 +77,11 @@ func (r *MySQLUserRepo) EmailOrUsernameExists(email, username string) (emailExis
 	return
 }
 
-func (r *MySQLUserRepo) Update(user *model.User) error {
+func (r *UserRepo) Update(user *model.User) error {
 	return r.db.Save(user).Error
 }
 
-func (r *MySQLUserRepo) SaveDevice(ctx context.Context, device *model.UserDevice) error {
+func (r *UserRepo) SaveDevice(ctx context.Context, device *model.UserDevice) error {
 	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
 		// Klucz unikalny to kombinacja UserID i Fingerprint
 		Columns: []clause.Column{{Name: "user_id"}, {Name: "device_fingerprint"}},
@@ -94,4 +94,10 @@ func (r *MySQLUserRepo) SaveDevice(ctx context.Context, device *model.UserDevice
 			"last_used_at",
 		}),
 	}).Create(device).Error
+}
+
+func (r *UserRepo) UpdateFailedLogin(userID uuid.UUID, attempts int) error {
+	return r.db.Model(&model.User{}).
+		Where("id = ?", userID).
+		Update("failed_login_attempts", attempts).Error
 }

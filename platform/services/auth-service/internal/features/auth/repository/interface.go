@@ -6,14 +6,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/services/auth-service/internal/features/auth/model"
 
-	// DODAJ TEN IMPORT TUTAJ:
 	userModel "github.com/zerodayz7/platform/services/auth-service/internal/features/users/model"
 )
-
-type UserRepository interface {
-	GetByID(id uuid.UUID) (*model.User, error)
-	Update(user *model.User) error
-}
 
 type RefreshTokenRepository interface {
 	Save(userID uuid.UUID, token string, fingerprint string, ttl time.Duration) error
