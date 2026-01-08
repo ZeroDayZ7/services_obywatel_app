@@ -66,3 +66,10 @@ var (
 	ErrAccountBanned       = &AppError{Code: "ACCOUNT_BANNED", Type: Unauthorized, Message: "Konto użytkownika zostało zablokowane."}
 	ErrAccountPending      = &AppError{Code: "ACCOUNT_PENDING", Type: Unauthorized, Message: "Konto użytkownika oczekuje na weryfikację."}
 )
+
+var (
+	ErrResetSessionNotFound = &AppError{Code: "RESET_SESSION_NOT_FOUND", Type: BadRequest, Message: "Sesja resetowania hasła wygasła lub jest nieprawidłowa."}
+	ErrInvalidResetCode     = &AppError{Code: "INVALID_RESET_CODE", Type: Validation, Message: "Nieprawidłowy kod resetujący."}
+	ErrUntrustedDevice      = &AppError{Code: "UNTRUSTED_DEVICE", Type: Unauthorized, Message: "To urządzenie nie jest zaufane dla tego konta."}
+	ErrInvalidSignature     = &AppError{Code: "INVALID_SIGNATURE", Type: Unauthorized, Message: "Nieprawidłowy podpis bezpieczeństwa."}
+)

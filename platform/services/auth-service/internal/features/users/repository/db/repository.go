@@ -3,9 +3,11 @@ package db
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/services/auth-service/internal/features/auth/model"
+	authModel "github.com/zerodayz7/platform/services/auth-service/internal/features/auth/model"
 	"github.com/zerodayz7/platform/services/auth-service/internal/features/users/repository"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -100,4 +102,28 @@ func (r *UserRepo) UpdateFailedLogin(userID uuid.UUID, attempts int) error {
 	return r.db.Model(&model.User{}).
 		Where("id = ?", userID).
 		Update("failed_login_attempts", attempts).Error
+}
+
+func (r *UserRepo) GetDeviceByFingerprint(ctx context.Context, userID uuid.UUID, fingerprint string) (*authModel.UserDevice, error) {
+	var device authModel.UserDevice
+	// Poprawka: używamy r.db (małe litery, zgodnie z definicją struktury)
+	err := r.db.WithContext(ctx).
+		Where("user_id = ? AND device_fingerprint = ? AND is_active = ?", userID, fingerprint, true).
+		First(&device).Error
+	if err != nil {
+		return nil, err
+	}
+	return &device, nil
+}
+
+func (r *UserRepo) UpdateDeviceStatus(ctx context.Context, deviceID uuid.UUID, publicKey string, deviceName string, isActive bool, isVerified bool) error {
+	return r.db.WithContext(ctx).Model(&authModel.UserDevice{}).
+		Where("id = ?", deviceID).
+		Updates(map[string]interface{}{
+			"public_key":            publicKey,
+			"device_name_encrypted": deviceName,
+			"is_active":             isActive,
+			"is_verified":           isVerified,
+			"last_used_at":          time.Now(),
+		}).Error
 }

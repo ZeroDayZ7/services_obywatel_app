@@ -24,3 +24,4 @@ type RefreshTokenRepository interface {
 		newFingerprint string,
 	) error
 }
+

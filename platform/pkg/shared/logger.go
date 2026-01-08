@@ -165,12 +165,39 @@ func toFields(m map[string]any) []zap.Field {
 	return fields
 }
 
+func (l *Logger) parseArgs(args ...any) []zap.Field {
+	fields := []zap.Field{}
+	for _, arg := range args {
+		switch v := arg.(type) {
+		case zap.Field:
+			fields = append(fields, v)
+		case map[string]any:
+			fields = append(fields, toFields(v)...)
+		default:
+			// Jeśli to struct lub cokolwiek innego, używamy Twojej magii z refleksją
+			fields = append(fields, convertStructToFields(v)...)
+		}
+	}
+	return fields
+}
+
 // --- Metody logowania ---
 
-func (l *Logger) Info(msg string)  { l.Logger.Info(msg) }
-func (l *Logger) Debug(msg string) { l.Logger.Debug(msg) }
-func (l *Logger) Warn(msg string)  { l.Logger.Warn(msg) }
-func (l *Logger) Error(msg string) { l.Logger.Error(msg) }
+func (l *Logger) Info(msg string, args ...any) {
+	l.Logger.Info(msg, l.parseArgs(args...)...)
+}
+
+func (l *Logger) Debug(msg string, args ...any) {
+	l.Logger.Debug(msg, l.parseArgs(args...)...)
+}
+
+func (l *Logger) Warn(msg string, args ...any) {
+	l.Logger.Warn(msg, l.parseArgs(args...)...)
+}
+
+func (l *Logger) Error(msg string, args ...any) {
+	l.Logger.Error(msg, l.parseArgs(args...)...)
+}
 
 func (l *Logger) InfoMap(msg string, m map[string]any)  { l.Logger.Info(msg, toFields(m)...) }
 func (l *Logger) DebugMap(msg string, m map[string]any) { l.Logger.Debug(msg, toFields(m)...) }

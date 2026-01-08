@@ -97,20 +97,32 @@ func (h *AuthHandler) RegisterDevice(c *fiber.Ctx) error {
 	h.cache.Del(ctx, challengeKey)
 	// ==========================================================
 
-	// 2️⃣ Rejestrujemy urządzenie w DB
-	err = h.authService.RegisterUserDevice(
-		ctx,
-		uuid.UUID(userID),
-		body.DeviceFingerprint,
-		body.PublicKey,
-		body.DeviceNameEncrypted,
-		body.Platform,
-		true,
-		clientIP,
-	)
-	if err != nil {
-		log.ErrorObj("RegisterDevice: Service error", err)
-		return errors.SendAppError(c, errors.ErrInternal)
+	existingDevice, err := h.authService.GetDeviceByFingerprint(ctx, userID, body.DeviceFingerprint)
+
+	if err == nil && existingDevice != nil {
+		// Urządzenie znalezione (prawdopodobnie zarejestrowane wcześniej przy resecie z IsActive: false)
+		// Aktywujemy je teraz, bo użytkownik przeszedł weryfikację PIN/Challenge
+		err = h.authService.ActivateDevice(ctx, existingDevice.ID, body.PublicKey, body.DeviceNameEncrypted)
+		if err != nil {
+			log.ErrorObj("Failed to activate existing device", err)
+			return errors.SendAppError(c, errors.ErrInternal)
+		}
+	} else {
+		// Całkowicie nowe urządzenie -> pełna rejestracja
+		err = h.authService.RegisterUserDevice(
+			ctx,
+			userID,
+			body.DeviceFingerprint,
+			body.PublicKey,
+			body.DeviceNameEncrypted,
+			body.Platform,
+			true,
+			clientIP,
+		)
+		if err != nil {
+			log.ErrorObj("RegisterDevice: Service error", err)
+			return errors.SendAppError(c, errors.ErrInternal)
+		}
 	}
 
 	// 3️⃣ Jeśli to pierwsze "prawdziwe" parowanie, aktualizujemy stare Refresh Tokeny

@@ -16,8 +16,14 @@ type ResetCodeVerifyRequest struct {
 }
 
 type ResetPasswordFinalRequest struct {
-	Token       string `json:"token" validate:"required"`        // token z VerifyResetCode
-	NewPassword string `json:"new_password" validate:"required"` // nowe hasło
+	Token       string `json:"reset_token" validate:"required"`
+	Code        string `json:"code" validate:"required,len=6"`
+	NewPassword string `json:"new_password" validate:"required,min=8"`
+	Signature   string `json:"signature" validate:"required"`   // Podpis Ed25519 z Fluttera
+	Fingerprint string `json:"fingerprint" validate:"required"` // SHA256 urządzenia
+	DeviceName  string `json:"device_name"`
+	Platform    string `json:"platform"`
+	PublicKey   string `json:"public_key"`
 }
 
 // ===== Registration & Login =====

@@ -287,3 +287,15 @@ func (s *AuthService) CanUserLogin(user *model.User) *errors.AppError {
 		return errors.ErrInternal
 	}
 }
+
+// internal/features/auth/service/auth_service.go
+
+func (s *AuthService) GetDeviceByFingerprint(ctx context.Context, userID uuid.UUID, fingerprint string) (*authModel.UserDevice, error) {
+	// Zamiast context.Background(), używamy ctx przekazanego z góry (od handlera)
+	return s.repo.GetDeviceByFingerprint(ctx, userID, fingerprint)
+}
+
+func (s *AuthService) ActivateDevice(ctx context.Context, deviceID uuid.UUID, publicKey string, deviceName string) error {
+	// Po poprawnym PIN i Challenge, urządzenie jest i aktywne, i zweryfikowane
+	return s.repo.UpdateDeviceStatus(ctx, deviceID, publicKey, deviceName, true, true)
+}

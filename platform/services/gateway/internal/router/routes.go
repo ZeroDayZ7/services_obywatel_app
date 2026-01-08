@@ -20,19 +20,22 @@ func SetupRoutes(app *fiber.App, container *di.Container) {
 	health.RegisterRoutes(app, checker)
 
 	// --- PUBLICZNE PROXY ---
-	// Przekazujemy 'container' do każdej funkcji
 	app.Post("/auth/login", ReverseProxy(container, "http://localhost:8082"))
 	app.Post("/auth/2fa-verify", ReverseProxy(container, "http://localhost:8082"))
 	app.Post("/auth/refresh", ReverseProxy(container, "http://localhost:8082"))
 
-	// --- ZABEZPIECZONE PROXY (Wymaga JWT) ---
-	// Te endpointy automatycznie dodadzą X-User-Id do nagłówka
+	// --- ZABEZPIECZONE PROXY ---
 	app.Post("/auth/register-device", ReverseProxySecure(container, "http://localhost:8082"))
 	app.Post("/auth/logout", ReverseProxySecure(container, "http://localhost:8082"))
 
+	// --- RESET HASŁA ---
+	app.Post("/auth/reset/send", ReverseProxy(container, "http://localhost:8082"))
+	app.Post("/auth/reset/verify", ReverseProxy(container, "http://localhost:8082"))
+	app.Post("/auth/reset/final", ReverseProxy(container, "http://localhost:8082"))
+
 	app.All("/notifications*", ReverseProxySecure(container, "http://localhost:8084"))
 
-	// SESJE (do ekranu we Flutterze)
+	// SESJE
 	app.Get("/user/sessions", ReverseProxySecure(container, "http://localhost:8082"))
 	app.Post("/user/sessions/terminate", ReverseProxySecure(container, "http://localhost:8082"))
 

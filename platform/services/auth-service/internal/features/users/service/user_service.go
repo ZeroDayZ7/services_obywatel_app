@@ -53,3 +53,5 @@ func (s *UserService) RevokeSession(userIDStr string, sessionIDStr string) error
 	// userID to już uuid.UUID, więc nie musisz go rzutować
 	return s.refreshRepo.DeleteByID(uint(sessionID), userID)
 }
+
+
