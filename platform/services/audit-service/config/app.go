@@ -8,18 +8,29 @@ import (
 	"github.com/zerodayz7/platform/pkg/shared"
 )
 
-func NewAuditApp() *fiber.App {
-	app := fiber.New(fiber.Config{
-		TrustedProxies:        []string{"127.0.0.1", "::1"},
-		BodyLimit:             AppConfig.Server.BodyLimitMB * 1024 * 1024,
-		ReadTimeout:           AppConfig.Server.ReadTimeout,
-		WriteTimeout:          AppConfig.Server.WriteTimeout,
-		IdleTimeout:           AppConfig.Server.IdleTimeout,
-		DisableStartupMessage: true,
-		EnableIPValidation:    true,
-		ServerHeader:          AppConfig.Server.ServerHeader,
-		ErrorHandler:          server.ErrorHandler(),
-	})
+func NewAuditApp(cfg ServerConfig) *fiber.App {
+
+	cfgFiber := fiber.Config{
+		AppName:       cfg.AppName,
+		ServerHeader:  cfg.ServerHeader,
+		Prefork:       cfg.Prefork,
+		CaseSensitive: cfg.CaseSensitive,
+		StrictRouting: cfg.StrictRouting,
+		IdleTimeout:   cfg.IdleTimeout,
+		ReadTimeout:   cfg.ReadTimeout,
+		WriteTimeout:  cfg.WriteTimeout,
+
+		ProxyHeader:             fiber.HeaderXForwardedFor,
+		EnableTrustedProxyCheck: true,
+		TrustedProxies:          []string{"127.0.0.1", "::1"},
+		BodyLimit:               cfg.BodyLimitMB * 1024 * 1024,
+		DisableStartupMessage:   true,
+		EnableIPValidation:      true,
+
+		ErrorHandler: server.ErrorHandler(),
+	}
+
+	app := fiber.New(cfgFiber)
 
 	// Middleware
 	app.Use(requestid.New())

@@ -29,7 +29,7 @@ func main() {
 	defer redisClient.Close()
 
 	// DB
-	db, closeDB := config.MustInitDB()
+	db, closeDB := config.MustInitDB(config.AppConfig.Database)
 	defer closeDB()
 
 	// Dependency Injection
@@ -48,8 +48,10 @@ func main() {
 	server.SetupGracefulShutdown(app, closeDB, config.AppConfig.Shutdown)
 
 	address := "0.0.0.0:" + config.AppConfig.Server.Port
-	log.InfoObj("Auth-Server listening", map[string]any{"address": address})
-
+	log.InfoObj("Server started", map[string]any{
+		"app":     config.AppConfig.Server.AppName,
+		"address": address,
+	})
 	// Start serwera
 	if err := app.Listen(address); err != nil {
 		log.ErrorObj("Failed to start server", err)

@@ -43,17 +43,11 @@ type DBConfig struct {
 	ConnMaxLifetime time.Duration
 }
 
-type RateLimitConfig struct {
-	Max    int
-	Window time.Duration
-}
-
 type Config struct {
 	Server    ServerConfig
 	Redis     RedisConfig
 	Session   SessionConfig
 	Database  DBConfig
-	RateLimit RateLimitConfig
 	CORSAllow string
 	Shutdown  time.Duration
 	JWT       JWTConfig
@@ -95,10 +89,6 @@ func LoadConfigGlobal() error {
 	viper.SetDefault("REDIS_PASSWORD", "")
 	viper.SetDefault("REDIS_DB", 0)
 
-	// Rate limiting
-	viper.SetDefault("RATE_LIMIT_MAX", 100)
-	viper.SetDefault("RATE_LIMIT_WINDOW_SEC", 60)
-
 	// Shutdown
 	viper.SetDefault("SHUTDOWN_TIMEOUT_SEC", 5)
 
@@ -108,7 +98,6 @@ func LoadConfigGlobal() error {
 	viper.SetDefault("JWT_ACCESS_TTL_MIN", 15)
 	viper.SetDefault("JWT_REFRESH_TTL_DAYS", 7)
 
-	// Session TTL (dla Redis sesji)
 	// Session defaults
 	viper.SetDefault("REDIS_SESSION_PREFIX", "session:")
 	viper.SetDefault("REDIS_SESSION_TTL_MIN", 60)
@@ -150,10 +139,6 @@ func LoadConfigGlobal() error {
 			MaxIdleConns:    viper.GetInt("DB_MAX_IDLE_CONNS"),
 			ConnMaxLifetime: time.Duration(viper.GetInt("DB_CONN_MAX_LIFETIME_MIN")) * time.Minute,
 		},
-		RateLimit: RateLimitConfig{
-			Max:    viper.GetInt("RATE_LIMIT_MAX"),
-			Window: time.Duration(viper.GetInt("RATE_LIMIT_WINDOW_SEC")) * time.Second,
-		},
 		Shutdown: time.Duration(viper.GetInt("SHUTDOWN_TIMEOUT_SEC")) * time.Second,
 		JWT: JWTConfig{
 			AccessSecret:  viper.GetString("JWT_ACCESS_SECRET"),
@@ -163,6 +148,6 @@ func LoadConfigGlobal() error {
 		},
 	}
 
-	log.Info("Auth-Service - Configuration loaded")
+	log.Info("Configuration loaded")
 	return nil
 }

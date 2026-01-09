@@ -9,6 +9,11 @@ import (
 	"github.com/zerodayz7/platform/pkg/shared"
 )
 
+type SessionConfig struct {
+	Prefix string
+	TTL    time.Duration
+}
+
 type ServerConfig struct {
 	AppName       string
 	Port          string
@@ -38,16 +43,11 @@ type DBConfig struct {
 	ConnMaxLifetime time.Duration
 }
 
-type RateLimitConfig struct {
-	Max    int
-	Window time.Duration
-}
-
 type Config struct {
 	Server     ServerConfig
 	Redis      RedisConfig
+	Session    SessionConfig
 	Database   DBConfig
-	RateLimit  RateLimitConfig
 	CORSAllow  string
 	Shutdown   time.Duration
 	SessionTTL time.Duration
@@ -82,15 +82,12 @@ func LoadConfigGlobal() error {
 	viper.SetDefault("REDIS_PASSWORD", "")
 	viper.SetDefault("REDIS_DB", 0)
 
-	// Rate limiting
-	viper.SetDefault("RATE_LIMIT_MAX", 100)
-	viper.SetDefault("RATE_LIMIT_WINDOW_SEC", 60)
-
 	// Shutdown
 	viper.SetDefault("SHUTDOWN_TIMEOUT_SEC", 5)
 
-	// Session TTL (dla Redis sesji)
-	viper.SetDefault("SessionTTL_MIN", 15)
+	// Session defaults
+	viper.SetDefault("REDIS_SESSION_PREFIX", "session:")
+	viper.SetDefault("REDIS_SESSION_TTL_MIN", 60)
 
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
@@ -119,20 +116,19 @@ func LoadConfigGlobal() error {
 			Password: viper.GetString("REDIS_PASSWORD"),
 			DB:       viper.GetInt("REDIS_DB"),
 		},
+		Session: SessionConfig{
+			Prefix: viper.GetString("REDIS_SESSION_PREFIX"),
+			TTL:    time.Duration(viper.GetInt("REDIS_SESSION_TTL_MIN")) * time.Minute,
+		},
 		Database: DBConfig{
 			DSN:             viper.GetString("DATABASE_DSN"),
 			MaxOpenConns:    viper.GetInt("DB_MAX_OPEN_CONNS"),
 			MaxIdleConns:    viper.GetInt("DB_MAX_IDLE_CONNS"),
 			ConnMaxLifetime: time.Duration(viper.GetInt("DB_CONN_MAX_LIFETIME_MIN")) * time.Minute,
 		},
-		RateLimit: RateLimitConfig{
-			Max:    viper.GetInt("RATE_LIMIT_MAX"),
-			Window: time.Duration(viper.GetInt("RATE_LIMIT_WINDOW_SEC")) * time.Second,
-		},
-		Shutdown:   time.Duration(viper.GetInt("SHUTDOWN_TIMEOUT_SEC")) * time.Second,
-		SessionTTL: time.Duration(viper.GetInt("SessionTTL_MIN")) * time.Minute,
+		Shutdown: time.Duration(viper.GetInt("SHUTDOWN_TIMEOUT_SEC")) * time.Second,
 	}
 
-	log.Info("Audit-Service - Configuration loaded")
+	log.Info("Configuration loaded")
 	return nil
 }

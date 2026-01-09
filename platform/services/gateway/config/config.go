@@ -154,6 +154,6 @@ func LoadConfigGlobal() error {
 		},
 	}
 
-	log.Info("Gateway - Configuration loaded")
+	log.Info("Configuration loaded")
 	return nil
 }

@@ -30,7 +30,7 @@ func main() {
 	defer redisClient.Close()
 
 	// DB
-	db, closeDB := config.MustInitDB()
+	db, closeDB := config.MustInitDB(config.AppConfig.Database)
 	defer closeDB()
 
 	// 🔧 TU: Tworzymy tabelę jeśli jej brak
@@ -47,7 +47,7 @@ func main() {
 	go container.AuditWorker.Start()
 
 	// Fiber
-	app := config.NewAuditApp()
+	app := config.NewAuditApp(config.AppConfig.Server)
 
 	// 1. Health
 	router.SetupHealthRoutes(app)
@@ -62,7 +62,10 @@ func main() {
 	server.SetupGracefulShutdown(app, closeDB, config.AppConfig.Shutdown)
 
 	address := "0.0.0.0:" + config.AppConfig.Server.Port
-	log.InfoObj("Audit-Server listening", map[string]any{"address": address})
+	log.InfoObj("Server started", map[string]any{
+		"app":     config.AppConfig.Server.AppName,
+		"address": address,
+	})
 
 	// Start serwera
 	if err := app.Listen(address); err != nil {

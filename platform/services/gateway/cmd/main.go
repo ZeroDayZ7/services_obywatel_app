@@ -48,8 +48,10 @@ func main() {
 
 	// Log start
 	address := "0.0.0.0:" + config.AppConfig.Server.Port
-	log.InfoObj("Gateway-Server listening", map[string]any{"address": address})
-
+	log.InfoObj("Server started", map[string]any{
+		"app":     config.AppConfig.Server.AppName,
+		"address": address,
+	})
 	// Start serwera
 	if err := app.Listen(address); err != nil {
 		log.ErrorObj("Failed to start server", err)

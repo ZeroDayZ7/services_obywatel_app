@@ -9,6 +9,11 @@ import (
 	"github.com/zerodayz7/platform/pkg/shared"
 )
 
+type SessionConfig struct {
+	Prefix string
+	TTL    time.Duration
+}
+
 type ServerConfig struct {
 	AppName       string
 	Port          string
@@ -46,14 +51,14 @@ type RateLimitConfig struct {
 }
 
 type Config struct {
-	Server     ServerConfig
-	Redis      RedisConfig
-	Database   DBConfig
-	RateLimit  RateLimitConfig
-	CORSAllow  string
-	Shutdown   time.Duration
-	JWT        JWTConfig
-	SessionTTL time.Duration
+	Server    ServerConfig
+	Redis     RedisConfig
+	Session   SessionConfig
+	Database  DBConfig
+	RateLimit RateLimitConfig
+	CORSAllow string
+	Shutdown  time.Duration
+	JWT       JWTConfig
 }
 
 type JWTConfig struct {
@@ -105,8 +110,9 @@ func LoadConfigGlobal() error {
 	viper.SetDefault("JWT_ACCESS_TTL_MIN", 15)
 	viper.SetDefault("JWT_REFRESH_TTL_DAYS", 7)
 
-	// Session TTL (dla Redis sesji)
-	viper.SetDefault("SessionTTL_MIN", 15)
+	// Session defaults
+	viper.SetDefault("REDIS_SESSION_PREFIX", "session:")
+	viper.SetDefault("REDIS_SESSION_TTL_MIN", 60)
 
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
@@ -135,6 +141,10 @@ func LoadConfigGlobal() error {
 			Password: viper.GetString("REDIS_PASSWORD"),
 			DB:       viper.GetInt("REDIS_DB"),
 		},
+		Session: SessionConfig{
+			Prefix: viper.GetString("REDIS_SESSION_PREFIX"),
+			TTL:    time.Duration(viper.GetInt("REDIS_SESSION_TTL_MIN")) * time.Minute,
+		},
 		Database: DBConfig{
 			DSN:             viper.GetString("DATABASE_DSN"),
 			AdminDSN:        viper.GetString("ADMIN_DATABASE_DSN"),
@@ -154,9 +164,8 @@ func LoadConfigGlobal() error {
 			AccessTTL:     time.Duration(viper.GetInt("JWT_ACCESS_TTL_MIN")) * time.Minute,
 			RefreshTTL:    time.Duration(viper.GetInt("JWT_REFRESH_TTL_DAYS")) * 24 * time.Hour,
 		},
-		SessionTTL: time.Duration(viper.GetInt("SessionTTL_MIN")) * time.Minute,
 	}
 
-	log.Info("notification-Service - Configuration loaded")
+	log.Info("Configuration loaded")
 	return nil
 }

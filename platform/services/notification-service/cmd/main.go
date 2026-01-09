@@ -12,22 +12,17 @@ import (
 )
 
 func main() {
-	// ================================
-	// 🔹 Logger
-	// ================================
+
+	// Logger
 	log := shared.InitLogger(os.Getenv("ENV"))
 
-	// ================================
-	// 🔹 Load Config
-	// ================================
+	// Load Config
 	if err := config.LoadConfigGlobal(); err != nil {
 		log.ErrorObj("Config load failed", err)
 		return
 	}
 
-	// ================================
-	// 🔹 Redis
-	// ================================
+	// Redis
 	redisClient, err := redis.New(redis.Config(config.AppConfig.Redis))
 	if err != nil {
 		log.ErrorObj("Redis init failed", err)
@@ -35,41 +30,31 @@ func main() {
 	}
 	defer redisClient.Close()
 
-	// ================================
-	// 🔹 Database
-	// ================================
-	db, closeDB := config.MustInitDB()
+	// Database
+	db, closeDB := config.MustInitDB(config.AppConfig.Database)
 	defer closeDB()
 
-	// ================================
-	// 🔹 Dependency Injection
-	// ================================
+	// Dependency Injection
 	container := di.NewContainer(db, redisClient, log)
 
-	// ================================
-	// 🔹 Start Notification Worker w tle
-	// ================================
+	// Start Notification Worker w tle
 	go container.Workers.NotificationWorker.Start()
 
-	// ================================
-	// 🔹 Fiber App
-	// ================================
+	// Fiber App
 	app := config.NewNotificationApp(config.AppConfig.Server)
 
 	// Routes
 	router.SetupRoutes(app, container.Handlers.NotificationHandler)
 
-	// ================================
-	// 🔹 Graceful Shutdown
-	// ================================
+	// Graceful Shutdown
 	server.SetupGracefulShutdown(app, closeDB, config.AppConfig.Shutdown)
+	// Start Server
 
-	// ================================
-	// 🔹 Start Server
-	// ================================
 	address := "0.0.0.0:" + config.AppConfig.Server.Port
-	log.InfoObj("notification-Server listening", map[string]any{"address": address})
-
+	log.InfoObj("Server started", map[string]any{
+		"app":     config.AppConfig.Server.AppName,
+		"address": address,
+	})
 	if err := app.Listen(address); err != nil {
 		log.ErrorObj("Failed to start server", err)
 	}

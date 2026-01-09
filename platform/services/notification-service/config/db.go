@@ -11,9 +11,8 @@ import (
 )
 
 // MustInitDB inicjalizuje połączenie z PostgreSQL i wykonuje migracje
-func MustInitDB() (*gorm.DB, func()) {
+func MustInitDB(cfg DBConfig) (*gorm.DB, func()) {
 	log := shared.GetLogger()
-	cfg := AppConfig.Database
 
 	db, err := gorm.Open(postgres.Open(cfg.DSN), &gorm.Config{})
 	if err != nil {
