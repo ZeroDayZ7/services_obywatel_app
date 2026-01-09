@@ -12,8 +12,10 @@ import (
 	"github.com/zerodayz7/platform/pkg/events"
 	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/shared"
+	"github.com/zerodayz7/platform/services/auth-service/internal/features/auth/http"
 	"github.com/zerodayz7/platform/services/auth-service/internal/features/auth/service"
 	"github.com/zerodayz7/platform/services/auth-service/internal/validator"
+
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -79,7 +81,7 @@ func (h *ResetHandler) SendResetCode(c *fiber.Ctx) error {
 	// TODO: wyślij kod mailem/SMS
 	// h.authService.SendResetCodeEmail(user.Email, code)
 
-	response := validator.ResetSendResponse{
+	response := http.ResetSendResponse{
 		Success:    true,
 		ResetToken: token,
 	}
@@ -157,7 +159,7 @@ func (h *ResetHandler) VerifyResetCode(c *fiber.Ctx) error {
 	log.DebugObj("Code verified, saving session with challenge", session.Challenge)
 	h.cache.Set(c.Context(), key, updated, 5*time.Minute)
 
-	response := validator.ResetVerifyResponse{
+	response := http.ResetVerifyResponse{
 		Success:    true,
 		ResetToken: session.Token,
 		UserID:     session.UserID,
@@ -301,7 +303,7 @@ func (h *ResetHandler) ResetPassword(c *fiber.Ctx) error {
 		"user_id": userUUID,
 	})
 
-	return c.JSON(validator.ResetFinalResponse{
+	return c.JSON(http.ResetFinalResponse{
 		Success: true,
 	})
 }

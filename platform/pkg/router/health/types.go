@@ -1,10 +1,6 @@
 package health
 
-import (
-	"time"
-
-	"github.com/gofiber/fiber/v2"
-)
+import "time"
 
 type HealthResponse struct {
 	Status  string            `json:"status"`
@@ -14,9 +10,8 @@ type HealthResponse struct {
 	Checks  map[string]string `json:"checks"`
 }
 
-func (c *Checker) Handler(ctx *fiber.Ctx) error {
-	checks := c.RunChecks()
-
+// NewResponse to pomocnik do tworzenia odpowiedzi
+func NewResponse(service, version string, checks map[string]string) HealthResponse {
 	status := "ok"
 	for _, v := range checks {
 		if v != "ok" {
@@ -25,13 +20,11 @@ func (c *Checker) Handler(ctx *fiber.Ctx) error {
 		}
 	}
 
-	resp := HealthResponse{
+	return HealthResponse{
 		Status:  status,
-		Service: c.Service,
-		Version: c.Version,
+		Service: service,
+		Version: version,
 		Time:    time.Now().UTC().Format(time.RFC3339),
 		Checks:  checks,
 	}
-
-	return ctx.JSON(resp)
 }

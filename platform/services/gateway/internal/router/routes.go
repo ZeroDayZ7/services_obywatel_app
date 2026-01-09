@@ -2,9 +2,10 @@ package router
 
 import (
 	"github.com/gofiber/fiber/v2"
+	"github.com/zerodayz7/platform/pkg/router"
+	"github.com/zerodayz7/platform/pkg/router/health"
 	"github.com/zerodayz7/platform/services/gateway/config"
 	"github.com/zerodayz7/platform/services/gateway/internal/di"
-	"github.com/zerodayz7/platform/services/gateway/internal/router/health"
 )
 
 func SetupRoutes(app *fiber.App, container *di.Container) {
@@ -43,5 +44,5 @@ func SetupRoutes(app *fiber.App, container *di.Container) {
 	app.All("/documents/*", ReverseProxySecure(container, "http://localhost:8083"))
 	app.All("/users/*", ReverseProxy(container, "http://users-service:3000"))
 
-	SetupFallbackHandlers(app)
+	router.SetupFallbackHandlers(app)
 }

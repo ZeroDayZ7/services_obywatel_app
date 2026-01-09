@@ -13,14 +13,17 @@ type Container struct {
 	HTTPClient *http.Client
 }
 
-// Przyjmujemy surowe wartości, aby di nie musiało importować configu
 func NewContainer(
 	redisClient *redis.Client,
-	cache *redis.Cache,
+	sessionPrefix string,
+	sessionTTL time.Duration,
 	requestTimeout time.Duration,
 	maxIdleConns int,
 	maxIdlePerHost int,
 ) *Container {
+
+	cache := redis.NewCache(redisClient, sessionPrefix, sessionTTL)
+
 	return &Container{
 		Redis: redisClient,
 		Cache: cache,
@@ -30,7 +33,6 @@ func NewContainer(
 				MaxIdleConns:        maxIdleConns,
 				MaxIdleConnsPerHost: maxIdlePerHost,
 				IdleConnTimeout:     90 * time.Second,
-				DisableCompression:  false,
 			},
 		},
 	}

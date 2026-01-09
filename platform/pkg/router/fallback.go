@@ -1,6 +1,8 @@
 package router
 
 import (
+	"github.com/zerodayz7/platform/pkg/errors"
+
 	"github.com/zerodayz7/platform/pkg/shared"
 
 	"github.com/gofiber/fiber/v2"
@@ -14,12 +16,13 @@ func SetupFallbackHandlers(app *fiber.App) {
 
 	app.Use(func(c *fiber.Ctx) error {
 		log := shared.GetLogger()
-		log.WarnMap("404 - not found", map[string]any{
-			"path":   c.Path(),
-			"method": c.Method(),
+		log.WarnMap("404 Not Found", map[string]any{
+			"path":      c.Path(),
+			"method":    c.Method(),
+			"ip":        c.IP(),
+			"userAgent": c.Get("User-Agent"),
+			"requestID": c.Locals("requestid"),
 		})
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "Not found",
-		})
+		return errors.SendAppError(c, errors.ErrNotFound)
 	})
 }

@@ -4,17 +4,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"gorm.io/gorm" // Rozwiązuje błąd "undefined: gorm"
+	"gorm.io/gorm"
 
-	// Zastąp poniższą ścieżkę faktyczną ścieżką z Twojego go.mod
-	"github.com/zerodayz7/platform/pkg/shared" // Rozwiązuje błąd "undefined: shared"
+	"github.com/zerodayz7/platform/pkg/shared"
 )
 
-
 type UserDevice struct {
-	ID uuid.UUID `gorm:"type:uuid;primaryKey"`
-
-	// Klucz obcy (UUID) i unikalny indeks złożony
+	ID                uuid.UUID `gorm:"type:uuid;primaryKey"`
 	UserID            uuid.UUID `gorm:"type:uuid;not null;uniqueIndex:idx_user_device"`
 	DeviceFingerprint string    `gorm:"size:128;not null;uniqueIndex:idx_user_device"`
 
@@ -26,11 +22,10 @@ type UserDevice struct {
 
 	LastUsedAt time.Time      `gorm:"autoUpdateTime"`
 	CreatedAt  time.Time      `gorm:"autoCreateTime"`
-	DeletedAt  gorm.DeletedAt `gorm:"index"` // Opcjonalnie: wsparcie dla Soft Delete
+	DeletedAt  gorm.DeletedAt `gorm:"index"`
 	LastIp     string         `gorm:"size:45"`
 }
 
-// BeforeCreate automatycznie generuje UUID v7 przed zapisem do bazy
 func (ud *UserDevice) BeforeCreate(tx *gorm.DB) (err error) {
 	idStr := shared.GenerateUuidV7()
 	ud.ID, err = uuid.Parse(idStr)

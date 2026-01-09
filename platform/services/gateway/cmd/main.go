@@ -28,12 +28,10 @@ func main() {
 	}
 	defer redisClient.Close()
 
-	// Cache wrapper bez TTL
-	cache := redis.NewCache(redisClient, "session:", 0)
-
 	container := di.NewContainer(
 		redisClient,
-		cache,
+		"session:",
+		0,
 		config.AppConfig.Proxy.RequestTimeout,
 		config.AppConfig.Proxy.MaxIdleConns,
 		config.AppConfig.Proxy.MaxIdleConnsPerHost,

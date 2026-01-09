@@ -4,6 +4,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/gofiber/fiber/v2/middleware/requestid"
+	"github.com/zerodayz7/platform/pkg/server"
 	"github.com/zerodayz7/platform/pkg/shared"
 )
 
@@ -20,6 +21,7 @@ func NewDocsApp() *fiber.App {
 		DisableStartupMessage: true,
 		EnableIPValidation:    true,
 		TrustedProxies:        []string{"127.0.0.1", "::1"},
+		ErrorHandler:          server.ErrorHandler(),
 	})
 
 	// Middleware podstawowe

@@ -66,6 +66,7 @@ func newErr(code string, errType ErrorType, msg string) *AppError {
 
 // --- Uniwersalne błędy ---
 var (
+	ErrNotFound            = newErr("NOT_FOUND", NotFound, "Zasób nie został znaleziony.")
 	ErrInternal            = newErr("SERVER_ERROR", Internal, "Internal server error")
 	ErrInvalidJSON         = newErr("INVALID_JSON", BadRequest, "Invalid JSON in request body")
 	ErrValidationFailed    = newErr("VALIDATION_FAILED", Validation, "Request validation failed")

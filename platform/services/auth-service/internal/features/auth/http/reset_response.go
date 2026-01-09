@@ -1,4 +1,4 @@
-package validator
+package http
 
 // ResetSendResponse zwraca token sesji po wysłaniu maila (Krok 1)
 type ResetSendResponse struct {

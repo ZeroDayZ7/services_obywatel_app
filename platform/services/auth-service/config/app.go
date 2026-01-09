@@ -4,6 +4,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/gofiber/fiber/v2/middleware/requestid"
+	"github.com/zerodayz7/platform/pkg/server"
 	"github.com/zerodayz7/platform/pkg/shared"
 )
 
@@ -17,6 +18,7 @@ func NewAuthApp() *fiber.App {
 		DisableStartupMessage: true,
 		EnableIPValidation:    true,
 		ServerHeader:          AppConfig.Server.ServerHeader,
+		ErrorHandler:          server.ErrorHandler(),
 	})
 
 	// Middleware

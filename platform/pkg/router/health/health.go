@@ -6,7 +6,5 @@ import (
 )
 
 func RegisterRoutes(app *fiber.App, checker *Checker) {
-	healthGroup := app.Group("/health")
-	healthGroup.Use(shared.NewLimiter("health"))
-	healthGroup.Get("/", checker.Handler)
+	app.Get("/health", shared.NewLimiter("health"), checker.Handler)
 }

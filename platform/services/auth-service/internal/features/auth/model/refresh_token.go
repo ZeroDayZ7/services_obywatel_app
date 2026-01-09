@@ -9,12 +9,8 @@ import (
 )
 
 type RefreshToken struct {
-	// Zmieniamy na UUID v7 dla spójności
-	ID uuid.UUID `gorm:"type:uuid;primaryKey"`
-
-	// UserID musi być UUID, aby pasował do User.ID
-	UserID uuid.UUID `gorm:"type:uuid;not null;index"`
-
+	ID                uuid.UUID `gorm:"type:uuid;primaryKey"`
+	UserID            uuid.UUID `gorm:"type:uuid;not null;index"`
 	Token             string    `gorm:"size:64;not null;uniqueIndex"`
 	DeviceFingerprint string    `gorm:"size:128;not null"`
 	ExpiresAt         time.Time `gorm:"not null"`

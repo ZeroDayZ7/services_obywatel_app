@@ -4,11 +4,11 @@ import (
 	"os"
 
 	"github.com/zerodayz7/platform/pkg/redis"
+	"github.com/zerodayz7/platform/pkg/server"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/auth-service/config"
 	"github.com/zerodayz7/platform/services/auth-service/internal/di"
 	"github.com/zerodayz7/platform/services/auth-service/internal/router"
-	"github.com/zerodayz7/platform/services/auth-service/internal/server"
 )
 
 func main() {
@@ -39,12 +39,7 @@ func main() {
 	app := config.NewAuthApp()
 
 	// Routes
-	router.SetupRoutes(
-		app,
-		container.Handlers.AuthHandler,
-		container.Handlers.ResetHandler,
-		container.Handlers.UserHandler,
-	)
+	router.SetupRoutes(app, container)
 	// Graceful shutdown
 	server.SetupGracefulShutdown(app, closeDB, config.AppConfig.Shutdown)
 

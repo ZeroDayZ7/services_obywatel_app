@@ -1,27 +1,27 @@
 package router
 
 import (
+	"github.com/gofiber/fiber/v2"
+	"github.com/zerodayz7/platform/pkg/router"
+	"github.com/zerodayz7/platform/pkg/router/health"
+	"github.com/zerodayz7/platform/services/auth-service/config"
+	"github.com/zerodayz7/platform/services/auth-service/internal/di"
 	authRoutes "github.com/zerodayz7/platform/services/auth-service/internal/features/auth/router"
 	userRoutes "github.com/zerodayz7/platform/services/auth-service/internal/features/users/router"
-
-	authHandler "github.com/zerodayz7/platform/services/auth-service/internal/features/auth/handler"
-	resetHandler "github.com/zerodayz7/platform/services/auth-service/internal/features/auth/handler"
-	userHandler "github.com/zerodayz7/platform/services/auth-service/internal/features/users/handler"
-
-	"github.com/gofiber/fiber/v2"
 )
 
-func SetupRoutes(
-	app *fiber.App,
-	authH *authHandler.AuthHandler,
-	resetH *resetHandler.ResetHandler,
-	userH *userHandler.UserHandler,
-) {
-	SetupHealthRoutes(app)
+func SetupRoutes(app *fiber.App, container *di.Container) {
+	checker := &health.Checker{
+		Redis:     container.Redis.Client,
+		Service:   config.AppConfig.Server.AppName,
+		Version:   config.AppConfig.Server.AppVersion,
+		Upstreams: nil,
+	}
 
-	// auth z reset handlerem
-	authRoutes.SetupAuthRoutes(app, authH, resetH)
+	health.RegisterRoutes(app, checker)
 
-	userRoutes.SetupUserRoutes(app, userH)
-	SetupFallbackHandlers(app)
+	authRoutes.SetupAuthRoutes(app, container.Handlers.AuthHandler, container.Handlers.ResetHandler)
+	userRoutes.SetupUserRoutes(app, container.Handlers.UserHandler)
+
+	router.SetupFallbackHandlers(app)
 }

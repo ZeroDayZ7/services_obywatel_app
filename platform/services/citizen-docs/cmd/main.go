@@ -3,12 +3,12 @@ package main
 import (
 	"os"
 
+	"github.com/zerodayz7/platform/pkg/server"
 	"github.com/zerodayz7/platform/pkg/shared"
 
 	"github.com/zerodayz7/platform/services/citizen-docs/config"
 	"github.com/zerodayz7/platform/services/citizen-docs/internal/di"
 	"github.com/zerodayz7/platform/services/citizen-docs/internal/router"
-	"github.com/zerodayz7/platform/services/citizen-docs/internal/server"
 )
 
 func main() {
