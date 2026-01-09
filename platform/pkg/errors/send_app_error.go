@@ -5,6 +5,12 @@ import (
 )
 
 func SendAppError(c *fiber.Ctx, err *AppError) error {
+
+	if err.Type == Internal {
+		c.Context().Logger().Printf("[ERROR] Internal: %v", err.Message)
+	} else {
+		c.Context().Logger().Printf("[WARN] %s: %v", err.Type, err.Message)
+	}
 	statusMap := map[ErrorType]int{
 		Validation:   fiber.StatusBadRequest,
 		Unauthorized: fiber.StatusUnauthorized,

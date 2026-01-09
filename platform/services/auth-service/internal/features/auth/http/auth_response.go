@@ -24,13 +24,19 @@ type RegisterDeviceResponse struct {
 	Message      string         `json:"message"`
 	AccessToken  string         `json:"access_token"`
 	RefreshToken string         `json:"refresh_token"`
+	IsTrusted    bool           `json:"is_trusted"`
 	User         DeviceUserData `json:"user"`
+	Rbac         map[string]any `json:"rbac"`
 }
 
 // DeviceUserData represents a subset of user information included in device registration.
 type DeviceUserData struct {
-	UserID string   `json:"user_id"`
-	Roles  []string `json:"roles"`
+	UserID      string   `json:"user_id"`
+	Email       string   `json:"email"`
+	DisplayName string   `json:"display_name"`
+	Role        string   `json:"role"`
+	LastLogin   string   `json:"last_login"`
+	Roles       []string `json:"roles"`
 }
 
 // RefreshResponse defines the new security tokens issued during a refresh cycle.

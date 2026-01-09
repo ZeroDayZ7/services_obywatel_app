@@ -50,6 +50,7 @@ func ReverseProxy(container *di.Container, target string) fiber.Handler {
 }
 
 // ReverseProxySecure - przekazuje request, dodaje ID użytkownika i usuwa Auth
+// ReverseProxySecure - przekazuje request, wstrzykuje tożsamość użytkownika i dba o nagłówki urządzenia
 func ReverseProxySecure(container *di.Container, target string) fiber.Handler {
 	log := shared.GetLogger()
 	return func(c *fiber.Ctx) error {
@@ -58,13 +59,23 @@ func ReverseProxySecure(container *di.Container, target string) fiber.Handler {
 			return err
 		}
 
-		// Kopiujemy nagłówki (Content-Type itp.)
-		if ct := c.Get("Content-Type"); ct != "" {
-			req.Header.Set("Content-Type", ct)
+		// 1. Definiujemy nagłówki, które MUSZĄ zostać przekazane z aplikacji Flutter
+		allowedHeaders := []string{
+			"Content-Type",
+			"Accept",
+			"User-Agent",
+			"X-Device-Fingerprint", // Kluczowe dla rejestracji/weryfikacji urządzenia
+			"X-Request-Id",         // Pozwala łączyć logi Gatewaya z Auth-Service
 		}
-		req.Header.Set("Accept", c.Get("Accept", "*/*"))
 
-		// Wstrzykujemy tożsamość użytkownika z contextu (Locals)
+		for _, h := range allowedHeaders {
+			if val := c.Get(h); val != "" {
+				req.Header.Set(h, val)
+			}
+		}
+
+		// 2. Wstrzykujemy tożsamość użytkownika z contextu (Locals)
+		// Te dane pochodzą z Twojego middleware JWT/Auth na Gatewayu
 		if uid := c.Locals("userID"); uid != nil {
 			req.Header.Set("X-User-Id", fmt.Sprintf("%v", uid))
 		}
@@ -72,11 +83,14 @@ func ReverseProxySecure(container *di.Container, target string) fiber.Handler {
 			req.Header.Set("X-Session-Id", fmt.Sprintf("%v", sid))
 		}
 
+		// 3. Przekazujemy IP klienta
 		userIP := c.IP()
 		req.Header.Set("X-Forwarded-For", userIP)
 		req.Header.Set("X-Real-IP", userIP)
 
-		// Ważne: usuwamy token, backend ufa nagłówkowi X-User-Id
+		// 4. Bezpieczeństwo: usuwamy oryginalny token Authorization.
+		// Backend (auth-service) powinien ufać nagłówkowi X-User-Id,
+		// bo Gateway już zweryfikował token.
 		req.Header.Del("Authorization")
 
 		return executeProxyRequest(c, container, req, log)

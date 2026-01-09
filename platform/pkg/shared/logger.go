@@ -1,6 +1,7 @@
 package shared
 
 import (
+	"fmt"
 	"os"
 	"reflect"
 	"strings"
@@ -30,12 +31,27 @@ func InitLogger(env string) *Logger {
 			consoleLevel = zapcore.DebugLevel
 		}
 
+		// consoleEncoderConfig := zapcore.EncoderConfig{
+		// 	MessageKey:  "msg",
+		// 	LevelKey:    "level",
+		// 	TimeKey:     "time",
+		// 	EncodeTime:  zapcore.ISO8601TimeEncoder,
+		// 	EncodeLevel: zapcore.CapitalColorLevelEncoder,
+		// }
+
 		consoleEncoderConfig := zapcore.EncoderConfig{
-			MessageKey:  "msg",
-			LevelKey:    "level",
-			TimeKey:     "time",
-			EncodeTime:  zapcore.ISO8601TimeEncoder,
-			EncodeLevel: zapcore.CapitalColorLevelEncoder,
+			MessageKey:     "msg",
+			LevelKey:       "level",
+			TimeKey:        "time",
+			NameKey:        "logger",
+			CallerKey:      "caller",
+			FunctionKey:    zapcore.OmitKey,
+			StacktraceKey:  "stacktrace",
+			LineEnding:     zapcore.DefaultLineEnding,
+			EncodeLevel:    zapcore.CapitalColorLevelEncoder,
+			EncodeTime:     zapcore.ISO8601TimeEncoder,
+			EncodeDuration: zapcore.StringDurationEncoder,
+			EncodeCaller:   zapcore.ShortCallerEncoder,
 		}
 
 		// Rdzeń dla Konsoli
@@ -174,6 +190,12 @@ func toFields(m map[string]any) []zap.Field {
 	for k, v := range m {
 		if isSensitive(k) {
 			fields = append(fields, zap.String(k, "********"))
+			continue
+		}
+
+		// Jeśli wartością jest kolejna mapa, spłaszczamy ją lub logujemy jako Any
+		if v == nil {
+			fields = append(fields, zap.String(k, "null"))
 		} else {
 			fields = append(fields, zap.Any(k, v))
 		}
@@ -223,3 +245,56 @@ func (l *Logger) InfoObj(msg string, obj any)  { l.Logger.Info(msg, convertStruc
 func (l *Logger) DebugObj(msg string, obj any) { l.Logger.Debug(msg, convertStructToFields(obj)...) }
 func (l *Logger) WarnObj(msg string, obj any)  { l.Logger.Warn(msg, convertStructToFields(obj)...) }
 func (l *Logger) ErrorObj(msg string, obj any) { l.Logger.Error(msg, convertStructToFields(obj)...) }
+
+func (l *Logger) DebugPretty(msg string, m map[string]any) {
+	l.Logger.Debug(msg, toFields(m)...)
+}
+
+func (l *Logger) DebugEmpty(msg string, key string) {
+	l.Logger.Debug(msg, zap.String(key, "NULL/EMPTY ∅"))
+}
+
+// Dodaj to do shared/logger.go
+func (l *Logger) DebugResponse(msg string, res any) {
+	if !l.Core().Enabled(zap.DebugLevel) {
+		return
+	}
+
+	fmt.Printf("\n\x1b[35m--- [DEBUG] Outgoing Response ---\x1b[0m\n")
+	fmt.Printf("Message: %s\n", msg)
+
+	fields := convertStructToFields(res)
+	for _, f := range fields {
+		fmt.Printf("  \x1b[32m%s\x1b[0m:", f.Key)
+		l.printValue(f, 1) // 1 to poziom wcięcia
+	}
+	fmt.Printf("\x1b[35m---------------------------------\x1b[0m\n\n")
+}
+
+// Pomocnicza metoda do ładnego wypisywania zagnieżdżonych danych
+func (l *Logger) printValue(f zap.Field, indent int) {
+	spaces := strings.Repeat("  ", indent)
+
+	switch f.Type {
+	case zapcore.StringType:
+		fmt.Printf(" %v\n", f.String)
+	case zapcore.BoolType:
+		fmt.Printf(" %v\n", f.Integer == 1)
+	case zapcore.InlineMarshalerType, zapcore.ObjectMarshalerType:
+		// Jeśli to zagnieżdżony obiekt
+		fmt.Printf("\n")
+		if subFields, ok := f.Interface.([]zap.Field); ok {
+			for _, sf := range subFields {
+				fmt.Printf("%s\x1b[36m%s\x1b[0m:", spaces+"  ", sf.Key)
+				l.printValue(sf, indent+1)
+			}
+		}
+	default:
+		// Dla map i innych
+		if f.Interface == nil {
+			fmt.Printf(" null\n")
+		} else {
+			fmt.Printf(" %v\n", f.Interface)
+		}
+	}
+}

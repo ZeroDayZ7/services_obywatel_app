@@ -172,8 +172,17 @@ func (h *AuthHandler) RegisterDevice(c *fiber.Ctx) error {
 	})
 
 	userData := http.DeviceUserData{
-		UserID: user.ID.String(),
-		Roles:  []string{"USER", "ADMIN"},
+		UserID:      user.ID.String(),
+		Email:       user.Email,
+		DisplayName: user.Username,
+		Role:        "USER",
+		LastLogin:   time.Now().Format(time.RFC3339),
+		Roles:       []string{"USER"},
+	}
+
+	rbacData := map[string]any{
+		"roles":       []string{"USER", "ADMIN"},
+		"permissions": []string{},
 	}
 
 	response := http.RegisterDeviceResponse{
@@ -181,13 +190,12 @@ func (h *AuthHandler) RegisterDevice(c *fiber.Ctx) error {
 		Message:      "Device registered",
 		AccessToken:  newAccessToken,
 		RefreshToken: refreshToken.Token,
+		IsTrusted:    true,
 		User:         userData,
+		Rbac:         rbacData,
 	}
 
-	log.DebugMap("Device registration successful", map[string]any{
-		"userId": userID,
-		"fpt":    body.DeviceFingerprint,
-	})
+	log.DebugResponse("Device registration success", response)
 
 	emitter := events.NewEmitter(h.cache, "auth-service")
 

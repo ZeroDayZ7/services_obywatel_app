@@ -193,10 +193,7 @@ func (s *AuthService) GetUserByEmail(ctx context.Context, email string) (*model.
 	return u, nil
 }
 
-func (s *AuthService) GetUserByID(
-	ctx context.Context,
-	id uuid.UUID,
-) (*model.User, error) {
+func (s *AuthService) GetUserByID(ctx context.Context, id uuid.UUID) (*model.User, error) {
 	u, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
@@ -285,21 +282,15 @@ func (s *AuthService) RegisterUserDevice(
 	return nil
 }
 
-// Ta nazwa musi się zgadzać z tym, co wywołujesz w Handlerze!
 func (s *AuthService) IncrementUserFailedLogin(userID uuid.UUID) error {
-	// Tu wywołujemy repozytorium - nazwa musi być taka jak w UserRepository Interface
 	return s.repo.IncrementFailedLogin(userID)
 }
 
-// Przy okazji dodaj to, przyda się po poprawnym loginie
 func (s *AuthService) ResetUserFailedLogin(userID uuid.UUID) error {
 	return s.repo.ResetFailedLogin(userID)
 }
 
-func (s *AuthService) RepoUpdateUser(
-	ctx context.Context,
-	user *model.User,
-) error {
+func (s *AuthService) RepoUpdateUser(ctx context.Context, user *model.User) error {
 	return s.repo.Update(ctx, user)
 }
 
@@ -318,14 +309,10 @@ func (s *AuthService) CanUserLogin(user *model.User) *errors.AppError {
 	}
 }
 
-// internal/features/auth/service/auth_service.go
-
 func (s *AuthService) GetDeviceByFingerprint(ctx context.Context, userID uuid.UUID, fingerprint string) (*authModel.UserDevice, error) {
-	// Zamiast context.Background(), używamy ctx przekazanego z góry (od handlera)
 	return s.repo.GetDeviceByFingerprint(ctx, userID, fingerprint)
 }
 
 func (s *AuthService) ActivateDevice(ctx context.Context, deviceID uuid.UUID, publicKey string, deviceName string) error {
-	// Po poprawnym PIN i Challenge, urządzenie jest i aktywne, i zweryfikowane
 	return s.repo.UpdateDeviceStatus(ctx, deviceID, publicKey, deviceName, true, true)
 }
