@@ -27,7 +27,6 @@ func NewDocsApp() *fiber.App {
 	// Middleware podstawowe
 	app.Use(requestid.New())
 	app.Use(recover.New())
-	app.Use(shared.FiberLoggerMiddleware())
 	app.Use(shared.NewLimiter("global"))
 	app.Use(shared.RequestLoggerMiddleware())
 

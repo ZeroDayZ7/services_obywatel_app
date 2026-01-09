@@ -43,7 +43,6 @@ func NewGatewayApp(
 	// Middleware
 	app.Use(requestid.New())
 	app.Use(recover.New())
-	app.Use(shared.FiberLoggerMiddleware())
 	app.Use(helmet.New(HelmetConfig()))
 	app.Use(cors.New(CorsConfig()))
 	app.Use(shared.NewLimiter("global"))

@@ -35,7 +35,6 @@ func NewAuthApp(cfg ServerConfig) *fiber.App {
 	// Middleware
 	app.Use(requestid.New())
 	app.Use(recover.New())
-	app.Use(shared.FiberLoggerMiddleware())
 	app.Use(shared.NewLimiter("global"))
 	app.Use(shared.RequestLoggerMiddleware())
 

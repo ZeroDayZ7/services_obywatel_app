@@ -1,41 +1,104 @@
 package shared
 
 import (
-	"io"
-	"os"
+	"fmt"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
-	fiberlogger "github.com/gofiber/fiber/v2/middleware/logger"
-	"gopkg.in/natefinch/lumberjack.v2"
+	"go.uber.org/zap"
 )
 
-func FiberLoggerMiddleware() fiber.Handler {
-
-	logFile := &lumberjack.Logger{
-		Filename:   "./logs/http.log",
-		MaxSize:    10,   // MB
-		MaxBackups: 5,    // number of backups
-		MaxAge:     7,    // day
-		Compress:   true, // compression
+func RequestLoggerMiddleware() fiber.Handler {
+	allowedHeaders := []string{
+		// "Content-Type",
+		"User-Agent",
+		"X-Device-Fingerprint",
+		"Authorization",
+		"X-Request-Id",
+		"Accept-Language",
+		// "Host",
+		// "Content-Length",
+		"X-Forwarded-For",
+		"X-Real-Ip",
 	}
 
-	multiWriter := io.MultiWriter(os.Stdout, logFile)
+	return func(c *fiber.Ctx) error {
+		start := time.Now()
+		log := GetLogger()
+		isDev := log.Core().Enabled(zap.DebugLevel)
 
-	format := "${pid} | ${locals:requestid} | ${status} | ${latency} | ${ip} | ${method} | ${path}\n"
-	timeFormat := "2006-01-02 15:04:05.000"
+		// 1. Wyciąganie Body
+		var body any
+		if c.Method() == fiber.MethodPost || c.Method() == fiber.MethodPut || c.Method() == fiber.MethodPatch {
+			_ = c.BodyParser(&body)
+		}
 
-	loggerConfig := fiberlogger.Config{
-		Output:     multiWriter,
-		TimeFormat: timeFormat,
-		Format:     format,
-		TimeZone:   "Europe/Warsaw",
-		// Callback after each log, such as sending 5xx to Slack
-		Done: func(c *fiber.Ctx, logBytes []byte) {
-			if c.Response().StatusCode() >= 500 {
-				// reporter.SendToSlack(logBytes)
+		if isDev {
+			fmt.Printf("\n--- [DEBUG] Incoming Request ---\n")
+			fmt.Printf("Method: %s\nPath:   %s\n", c.Method(), c.Path())
+
+			if body != nil {
+				fmt.Printf("Body:\n")
+				if bodyMap, ok := body.(map[string]any); ok {
+					for k, v := range bodyMap {
+						// MASKOWANIE SEKRETÓW W KONSOLI
+						displayValue := v
+						if isSensitive(k) {
+							displayValue = "********"
+						}
+						fmt.Printf("  %s: %v\n", k, displayValue)
+					}
+				} else {
+					fmt.Printf("  %+v\n", body)
+				}
 			}
-		},
-	}
 
-	return fiberlogger.New(loggerConfig)
+			fmt.Printf("Headers:\n")
+			for _, h := range allowedHeaders {
+				val := c.Get(h)
+
+				if h == "X-Request-Id" && val == "" {
+					if rid := c.Locals("requestid"); rid != nil {
+						val = fmt.Sprintf("%v", rid)
+					}
+				}
+
+				if val != "" {
+					fmt.Printf("  %s: %s\n", h, val)
+				}
+			}
+			fmt.Printf("-------------------------------\n\n")
+		}
+
+		// Kontynuacja zapytania
+		err := c.Next()
+
+		// Obliczenie czasu trwania zapytania
+		latency := time.Since(start)
+
+		// log (Strukturalny)
+		if isDev {
+			// W DEV logujemy wszystko na DEBUG (z body i czasem)
+			log.Debug("Request processed",
+				zap.String("method", c.Method()),
+				zap.String("path", c.Path()),
+				zap.Int("status", c.Response().StatusCode()),
+				zap.String("latency", latency.String()),
+				zap.Any("request_id", c.Locals("requestid")),
+				body,
+			)
+		} else {
+			// Na PROD logujemy tylko Info (bez Body dla oszczędności, ale ze statusem i czasem)
+			log.Info("Request completed",
+				zap.String("method", c.Method()),
+				zap.String("path", c.Path()),
+				zap.Int("status", c.Response().StatusCode()),
+				zap.String("latency", latency.String()),
+				zap.Any("request_id", c.Locals("requestid")),
+				zap.String("ip", c.IP()),
+			)
+		}
+
+		return err
+	}
 }

@@ -89,8 +89,6 @@ func convertStructToFields(obj any) []zap.Field {
 		return fields
 	}
 
-	isDev := instance.Core().Enabled(zap.DebugLevel)
-
 	val := reflect.ValueOf(obj)
 	if !val.IsValid() {
 		fields = append(fields, zap.Any("value", nil))
@@ -113,8 +111,12 @@ func convertStructToFields(obj any) []zap.Field {
 		for _, key := range val.MapKeys() {
 			k := key.String()
 			v := val.MapIndex(key).Interface()
-			if !isDev && isSensitive(k) {
+
+			if isSensitive(k) {
 				fields = append(fields, zap.String(k, "********"))
+			} else if childMap, ok := v.(map[string]any); ok {
+				childFields := convertStructToFields(childMap)
+				fields = append(fields, zap.Any(k, childFields))
 			} else {
 				fields = append(fields, zap.Any(k, v))
 			}
@@ -125,10 +127,10 @@ func convertStructToFields(obj any) []zap.Field {
 			fieldName := field.Name
 			fieldVal := val.Field(i)
 			if !fieldVal.CanInterface() {
-				continue // ⚠️ Pomijamy pola, które nie da się interfejsować
+				continue
 			}
 
-			if !isDev && isSensitive(fieldName) {
+			if isSensitive(fieldName) {
 				fields = append(fields, zap.String(fieldName, "********"))
 			} else {
 				fields = append(fields, zap.Any(fieldName, fieldVal.Interface()))
@@ -145,18 +147,32 @@ func convertStructToFields(obj any) []zap.Field {
 // isSensitive sprawdza, czy nazwa pola sugeruje dane wrażliwe
 func isSensitive(name string) bool {
 	n := strings.ToLower(name)
-	return strings.Contains(n, "password") ||
-		strings.Contains(n, "token") ||
-		strings.Contains(n, "secret") ||
-		strings.Contains(n, "code")
+
+	// Lista słów, które oznaczają dane wrażliwe
+	sensitiveKeys := []string{
+		"password",
+		"token",
+		"secret",
+		"code",
+		"authorization",
+		"credential",
+		"apikey",
+	}
+
+	for _, key := range sensitiveKeys {
+		if strings.Contains(n, key) {
+			return true
+		}
+	}
+
+	return false
 }
 
 // --- Helper konwertujący mapy na zap.Fields (również z maskowaniem) ---
 func toFields(m map[string]any) []zap.Field {
-	isDev := instance.Core().Enabled(zap.DebugLevel)
 	fields := make([]zap.Field, 0, len(m))
 	for k, v := range m {
-		if !isDev && isSensitive(k) {
+		if isSensitive(k) {
 			fields = append(fields, zap.String(k, "********"))
 		} else {
 			fields = append(fields, zap.Any(k, v))
@@ -174,7 +190,6 @@ func (l *Logger) parseArgs(args ...any) []zap.Field {
 		case map[string]any:
 			fields = append(fields, toFields(v)...)
 		default:
-			// Jeśli to struct lub cokolwiek innego, używamy Twojej magii z refleksją
 			fields = append(fields, convertStructToFields(v)...)
 		}
 	}
