@@ -30,15 +30,15 @@ func main() {
 
 	container := di.NewContainer(
 		redisClient,
-		"session:",
-		0,
+		config.AppConfig.Session.Prefix,
+		config.AppConfig.Session.TTL,
 		config.AppConfig.Proxy.RequestTimeout,
 		config.AppConfig.Proxy.MaxIdleConns,
 		config.AppConfig.Proxy.MaxIdleConnsPerHost,
 	)
 
 	// 5. Fiber app (config importuje di - to jest ok)
-	app := config.NewGatewayApp(container)
+	app := config.NewGatewayApp(config.AppConfig.Server, container)
 
 	// Routes
 	router.SetupRoutes(app, container)

@@ -14,10 +14,9 @@ import (
 )
 
 func NewGatewayApp(
+	cfg ServerConfig,
 	container *di.Container,
 ) *fiber.App {
-
-	cfg := AppConfig.Server
 
 	cfgFiber := fiber.Config{
 		AppName:       cfg.AppName,

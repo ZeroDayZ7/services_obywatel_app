@@ -17,6 +17,11 @@ type ProxyConfig struct {
 	RequestTimeout      time.Duration
 }
 
+type SessionConfig struct {
+	Prefix string
+	TTL    time.Duration
+}
+
 type ServerConfig struct {
 	AppName       string
 	Port          string
@@ -49,6 +54,7 @@ type JWTConfig struct {
 type Config struct {
 	Server    ServerConfig
 	Redis     RedisConfig
+	Session   SessionConfig
 	Proxy     ProxyConfig
 	CORSAllow string
 	Shutdown  time.Duration
@@ -98,6 +104,10 @@ func LoadConfigGlobal() error {
 	viper.SetDefault("PROXY_MAX_IDLE_CONNS_PER_HOST", 20)
 	viper.SetDefault("PROXY_REQUEST_TIMEOUT_SEC", 30)
 
+	// Session defaults
+	viper.SetDefault("REDIS_SESSION_PREFIX", "session:")
+	viper.SetDefault("REDIS_SESSION_TTL_MIN", 60)
+
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
 			log.ErrorObj("Error loading .env", err)
@@ -125,6 +135,10 @@ func LoadConfigGlobal() error {
 			Port:     viper.GetString("REDIS_PORT"),
 			Password: viper.GetString("REDIS_PASSWORD"),
 			DB:       viper.GetInt("REDIS_DB"),
+		},
+		Session: SessionConfig{
+			Prefix: viper.GetString("REDIS_SESSION_PREFIX"),
+			TTL:    time.Duration(viper.GetInt("REDIS_SESSION_TTL_MIN")) * time.Minute,
 		},
 		CORSAllow: viper.GetString("CORS_ALLOW_ORIGINS"),
 		Shutdown:  time.Duration(viper.GetInt("SHUTDOWN_TIMEOUT_SEC")) * time.Second,

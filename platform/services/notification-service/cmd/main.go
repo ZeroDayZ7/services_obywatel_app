@@ -49,15 +49,15 @@ func main() {
 	// ================================
 	// 🔹 Start Notification Worker w tle
 	// ================================
-	go container.NotificationWorker.Start()
+	go container.Workers.NotificationWorker.Start()
 
 	// ================================
 	// 🔹 Fiber App
 	// ================================
-	app := config.NewNotificationApp()
+	app := config.NewNotificationApp(config.AppConfig.Server)
 
 	// Routes
-	router.SetupRoutes(app, container.NotificationHandler)
+	router.SetupRoutes(app, container.Handlers.NotificationHandler)
 
 	// ================================
 	// 🔹 Graceful Shutdown

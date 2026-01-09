@@ -1,8 +1,9 @@
 package di
 
 import (
+	"time"
+
 	"github.com/zerodayz7/platform/pkg/redis"
-	"github.com/zerodayz7/platform/services/auth-service/config"
 	"gorm.io/gorm"
 )
 
@@ -14,17 +15,22 @@ type Container struct {
 	Cache    *redis.Cache
 }
 
-func NewContainer(db *gorm.DB, redisClient *redis.Client) *Container {
+func NewContainer(
+	db *gorm.DB,
+	redisClient *redis.Client,
+	sessionPrefix string,
+	sessionTTL time.Duration,
+) *Container {
 	repos := NewRepositories(db)
 	services := NewServices(repos)
 
 	cache := redis.NewCache(
 		redisClient,
-		redis.SessionPrefix,
-		config.AppConfig.SessionTTL,
+		sessionPrefix,
+		sessionTTL,
 	)
 
-	handlers := NewHandlers(services, cache)
+	handlers := NewHandlers(services, cache, sessionTTL)
 
 	return &Container{
 		Repos:    repos,

@@ -2,39 +2,28 @@ package di
 
 import (
 	"github.com/zerodayz7/platform/pkg/redis"
-	notificationHandler "github.com/zerodayz7/platform/services/notification-service/internal/handler"
-	"github.com/zerodayz7/platform/services/notification-service/internal/notification"
-	notificationRepo "github.com/zerodayz7/platform/services/notification-service/internal/repository/database"
-	notificationService "github.com/zerodayz7/platform/services/notification-service/internal/service"
-
 	"github.com/zerodayz7/platform/pkg/shared"
 	"gorm.io/gorm"
 )
 
 type Container struct {
-	NotificationHandler *notificationHandler.NotificationHandler
-	NotificationWorker  *notification.NotificationWorker
-	Redis               *redis.Client
-	Logger              *shared.Logger
+	Handlers *Handlers
+	Workers  *Workers
+	Redis    *redis.Client
+	Logger   *shared.Logger
 }
 
 func NewContainer(db *gorm.DB, redisClient *redis.Client, log *shared.Logger) *Container {
-	// repo
-	notificationRepository := notificationRepo.NewNotificationRepository(db)
+	repos := NewRepositories(db)
+	services := NewServices(repos)
 
-	// serwis
-	notificationSvc := notificationService.NewNotificationService(notificationRepository)
-
-	// handler
-	handler := notificationHandler.NewNotificationHandler(notificationSvc)
-
-	// worker
-	worker := notification.NewNotificationWorker(redisClient, notificationSvc, log)
+	handlers := NewHandlers(services)
+	workers := NewWorkers(redisClient, services, log)
 
 	return &Container{
-		NotificationHandler: handler,
-		NotificationWorker:  worker,
-		Redis:               redisClient,
-		Logger:              log,
+		Handlers: handlers,
+		Workers:  workers,
+		Redis:    redisClient,
+		Logger:   log,
 	}
 }

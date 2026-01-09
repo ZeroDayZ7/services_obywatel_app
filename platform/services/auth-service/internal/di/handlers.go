@@ -1,6 +1,8 @@
 package di
 
 import (
+	"time"
+
 	authHandler "github.com/zerodayz7/platform/services/auth-service/internal/features/auth/handler"
 	userHandler "github.com/zerodayz7/platform/services/auth-service/internal/features/users/handler"
 
@@ -13,9 +15,9 @@ type Handlers struct {
 	UserHandler  *userHandler.UserHandler
 }
 
-func NewHandlers(services *Services, cache *redis.Cache) *Handlers {
+func NewHandlers(services *Services, cache *redis.Cache, sessionTTL time.Duration) *Handlers {
 	return &Handlers{
-		AuthHandler:  authHandler.NewAuthHandler(services.AuthService, cache),
+		AuthHandler:  authHandler.NewAuthHandler(services.AuthService, cache, sessionTTL),
 		ResetHandler: authHandler.NewResetHandler(services.AuthService, cache),
 		UserHandler:  userHandler.NewUserHandler(services.UserService),
 	}

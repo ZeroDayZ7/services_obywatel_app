@@ -23,12 +23,14 @@ import (
 type AuthHandler struct {
 	authService *service.AuthService
 	cache       *redis.Cache
+	sessionTTL  time.Duration
 }
 
-func NewAuthHandler(authService *service.AuthService, cache *redis.Cache) *AuthHandler {
+func NewAuthHandler(authService *service.AuthService, cache *redis.Cache, sessionTTL time.Duration) *AuthHandler {
 	return &AuthHandler{
 		authService: authService,
 		cache:       cache,
+		sessionTTL:  sessionTTL,
 	}
 }
 
@@ -294,7 +296,7 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	}
 
 	// 5. Zapis sesji w Redis (Używamy .String() dla identyfikatora użytkownika)
-	if err := h.cache.SetSession(c.Context(), sessionID, fmt.Sprint(user.ID), fingerprint, config.AppConfig.SessionTTL); err != nil {
+	if err := h.cache.SetSession(c.Context(), sessionID, fmt.Sprint(user.ID), fingerprint, h.sessionTTL); err != nil {
 		log.ErrorObj("Failed to save session in Redis", err)
 		return errors.SendAppError(c, errors.ErrInternal)
 	}
@@ -410,7 +412,7 @@ func (h *AuthHandler) Verify2FA(c *fiber.Ctx) error {
 	}
 
 	// 8. ZAPISUJEMY SESJĘ W REDIS
-	if err := h.cache.SetSession(c.Context(), sessionID, session.UserID, fingerprint, config.AppConfig.SessionTTL); err != nil {
+	if err := h.cache.SetSession(c.Context(), sessionID, session.UserID, fingerprint, h.sessionTTL); err != nil {
 		log.ErrorObj("Failed to set session in Redis", err)
 		return errors.SendAppError(c, errors.ErrInternal)
 	}
@@ -472,7 +474,7 @@ func (h *AuthHandler) RefreshToken(c *fiber.Ctx) error {
 
 	// 4. Tworzymy NOWĄ sesję w Redis
 	// To SID wlatuje do JWT, a Gateway sprawdzi to przy następnym żądaniu
-	if err := h.cache.SetSession(c.Context(), sessionID, userIDStr, fingerprint, config.AppConfig.SessionTTL); err != nil {
+	if err := h.cache.SetSession(c.Context(), sessionID, userIDStr, fingerprint, h.sessionTTL); err != nil {
 		log.ErrorObj("Failed to save session in Redis", err)
 		return errors.SendAppError(c, errors.ErrInternal)
 	}

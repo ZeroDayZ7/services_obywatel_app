@@ -15,7 +15,11 @@
       "**/bin": true,
       "**/LICENSE": true,
       "**/go.sum": true,
-      // "**/README.md": true,
+      "**/go.mod": true,
+      "**/go.work.sum": true,
+      "**/.gitignore": true,
+      "**/README.md": true,
+      "**/.env.dev": true,
     },
 
     "search.exclude": {

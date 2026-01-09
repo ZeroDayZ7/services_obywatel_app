@@ -33,10 +33,14 @@ func main() {
 	defer closeDB()
 
 	// Dependency Injection
-	container := di.NewContainer(db, redisClient)
-
+	container := di.NewContainer(
+		db,
+		redisClient,
+		config.AppConfig.Session.Prefix,
+		config.AppConfig.Session.TTL,
+	)
 	// Fiber
-	app := config.NewAuthApp()
+	app := config.NewAuthApp(config.AppConfig.Server)
 
 	// Routes
 	router.SetupRoutes(app, container)
