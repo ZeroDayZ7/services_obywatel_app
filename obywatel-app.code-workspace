@@ -18,7 +18,7 @@
       "**/go.mod": true,
       "**/go.work.sum": true,
       "**/.gitignore": true,
-      "**/README.md": true,
+      // "**/README.md": true,
       "**/.env.dev": true,
     },
 
