@@ -1,7 +1,7 @@
 package service
 
 import (
-	"time"
+	"context"
 
 	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/services/notification-service/internal/model"
@@ -16,49 +16,35 @@ func NewNotificationService(repo *mysql.NotificationRepository) *NotificationSer
 	return &NotificationService{repo: repo}
 }
 
-// Send tworzy powiadomienie z pełnymi danymi spójnymi z Flutterem
-func (s *NotificationService) Send(n *model.Notification) error {
-	// POPRAWKA 1: Sprawdzamy czy UUID jest "zerowy" (uuid.Nil) zamiast ""
-	if n.ID == uuid.Nil {
-		// POPRAWKA 2: Przypisujemy czysty uuid.UUID zamiast .String()
-		n.ID = uuid.New()
-	}
-
-	n.IsRead = false
-	n.CreatedAt = time.Now()
-	n.UpdatedAt = time.Now()
-
-	return s.repo.Create(n)
+func (s *NotificationService) Send(ctx context.Context, n *model.Notification) error {
+	// Logika ID i dat została przeniesiona do model.BeforeCreate
+	return s.repo.Create(ctx, n)
 }
 
-// ListByUser pobiera listę dla konkretnego użytkownika
-func (s *NotificationService) ListByUser(userID uuid.UUID) ([]model.Notification, error) {
-	return s.repo.GetByUserID(userID)
+func (s *NotificationService) ListByUser(ctx context.Context, userID uuid.UUID) ([]model.Notification, error) {
+	return s.repo.GetByUserID(ctx, userID)
 }
 
-func (s *NotificationService) MarkAllRead(userID uuid.UUID) error {
-	return s.repo.MarkAllAsRead(userID)
+func (s *NotificationService) MarkAllRead(ctx context.Context, userID uuid.UUID) error {
+	return s.repo.MarkAllAsRead(ctx, userID)
 }
 
-// POPRAWIONE: Teraz przyjmuje userID i przekazuje je do repozytorium
-func (s *NotificationService) MarkRead(id uuid.UUID, userID uuid.UUID) error {
-	return s.repo.MarkAsRead(id, userID)
+func (s *NotificationService) MarkRead(ctx context.Context, id uuid.UUID, userID uuid.UUID) error {
+	return s.repo.MarkAsRead(ctx, id, userID)
 }
 
-// MoveToTrash - Soft Delete (przeniesienie do kosza)
-func (s *NotificationService) MoveToTrash(id uuid.UUID, userID uuid.UUID) error {
-	return s.repo.MoveToTrash(id, userID)
+func (s *NotificationService) MoveToTrash(ctx context.Context, id uuid.UUID, userID uuid.UUID) error {
+	return s.repo.MoveToTrash(ctx, id, userID)
 }
 
-// ClearTrash - Hard Delete (opróżnienie kosza)
-func (s *NotificationService) ClearTrash(userID uuid.UUID) error {
-	return s.repo.HardDeleteTrash(userID)
+func (s *NotificationService) ClearTrash(ctx context.Context, userID uuid.UUID) error {
+	return s.repo.HardDeleteTrash(ctx, userID)
 }
 
-func (s *NotificationService) Restore(id uuid.UUID, userID uuid.UUID) error {
-	return s.repo.RestoreFromTrash(id, userID)
+func (s *NotificationService) Restore(ctx context.Context, id uuid.UUID, userID uuid.UUID) error {
+	return s.repo.RestoreFromTrash(ctx, id, userID)
 }
 
-func (s *NotificationService) DeletePermanently(id uuid.UUID, userID uuid.UUID) error {
-	return s.repo.DeletePermanently(id, userID)
+func (s *NotificationService) DeletePermanently(ctx context.Context, id uuid.UUID, userID uuid.UUID) error {
+	return s.repo.DeletePermanently(ctx, id, userID)
 }

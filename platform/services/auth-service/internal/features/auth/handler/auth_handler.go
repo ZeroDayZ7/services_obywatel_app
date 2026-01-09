@@ -14,6 +14,7 @@ import (
 	"github.com/zerodayz7/platform/pkg/events"
 	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/shared"
+	"github.com/zerodayz7/platform/pkg/utils"
 	"github.com/zerodayz7/platform/services/auth-service/config"
 	"github.com/zerodayz7/platform/services/auth-service/internal/features/auth/http"
 	"github.com/zerodayz7/platform/services/auth-service/internal/features/auth/service"
@@ -47,10 +48,9 @@ func (h *AuthHandler) RegisterDevice(c *fiber.Ctx) error {
 		return errors.SendAppError(c, errors.ErrInternal)
 	}
 
-	userIDStr := c.Get("X-User-Id")
 	sessionID := c.Get("X-Session-Id")
 
-	userID, err := uuid.Parse(userIDStr)
+	userID, err := utils.GetUserID(c)
 	if err != nil {
 		return errors.SendAppError(c, errors.ErrInvalidToken)
 	}

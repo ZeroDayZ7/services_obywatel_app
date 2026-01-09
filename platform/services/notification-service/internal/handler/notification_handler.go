@@ -1,8 +1,12 @@
 package handler
 
 import (
+	"context"
+	"time"
+
 	"github.com/gofiber/fiber/v2"
-	"github.com/google/uuid"
+	"github.com/zerodayz7/platform/pkg/errors"
+	"github.com/zerodayz7/platform/pkg/utils"
 	"github.com/zerodayz7/platform/services/notification-service/internal/model"
 	"github.com/zerodayz7/platform/services/notification-service/internal/service"
 )
@@ -15,136 +19,146 @@ func NewNotificationHandler(svc *service.NotificationService) *NotificationHandl
 	return &NotificationHandler{service: svc}
 }
 
-// Funkcja pomocnicza, aby nie powtarzać logiki parsowania UserID
-func (h *NotificationHandler) parseUserID(c *fiber.Ctx) (uuid.UUID, error) {
-	userIDStr := c.Get("X-User-Id")
-	if userIDStr == "" {
-		userIDStr = c.Get("X-User-ID") // Sprawdzamy obie wersje
-	}
-	return uuid.Parse(userIDStr)
-}
-
-// ListMyNotifications GET /notifications
+// Przykład z pełnym komentarzem dla zrozumienia mechanizmu:
 func (h *NotificationHandler) ListMyNotifications(c *fiber.Ctx) error {
-	userID, err := h.parseUserID(c)
+	userID, err := utils.GetUserID(c)
 	if err != nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid or missing user id"})
+		return errors.SendAppError(c, errors.ErrInvalidToken)
 	}
 
-	notifications, err := h.service.ListByUser(userID)
+	// 1. DZIEDZICZYMY z c.Context() (jeśli klient rozłączy, my kończymy pracę)
+	// 2. NAKŁADAMY limit czasu (jeśli baza muli powyżej 5s, my kończymy pracę)
+	ctx, cancel := context.WithTimeout(c.Context(), 5*time.Second)
+	defer cancel()
+
+	notifications, err := h.service.ListByUser(ctx, userID)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to fetch notifications"})
+		return errors.SendAppError(c, errors.ErrInternal)
 	}
 	return c.JSON(notifications)
 }
 
-// MarkAsRead PATCH /notifications/:id/read
 func (h *NotificationHandler) MarkAsRead(c *fiber.Ctx) error {
-	id, err := uuid.Parse(c.Params("id"))
+	id, err := utils.ParseUUID(c, "id")
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid notification id"})
+		return errors.SendAppError(c, errors.ErrInvalidRequest)
 	}
 
-	userID, err := h.parseUserID(c)
+	userID, err := utils.GetUserID(c)
 	if err != nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid or missing user id"})
+		return errors.SendAppError(c, errors.ErrInvalidToken)
 	}
 
-	if err := h.service.MarkRead(id, userID); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to mark as read"})
+	ctx, cancel := context.WithTimeout(c.Context(), 3*time.Second)
+	defer cancel()
+
+	if err := h.service.MarkRead(ctx, id, userID); err != nil {
+		return errors.SendAppError(c, errors.ErrInternal)
 	}
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
-// MarkAllAsRead PATCH /notifications/read-all
 func (h *NotificationHandler) MarkAllAsRead(c *fiber.Ctx) error {
-	userID, err := h.parseUserID(c)
+	userID, err := utils.GetUserID(c)
 	if err != nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid or missing user id"})
+		return errors.SendAppError(c, errors.ErrInvalidToken)
 	}
 
-	if err := h.service.MarkAllRead(userID); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to mark all as read"})
+	ctx, cancel := context.WithTimeout(c.Context(), 10*time.Second)
+	defer cancel()
+
+	if err := h.service.MarkAllRead(ctx, userID); err != nil {
+		return errors.SendAppError(c, errors.ErrInternal)
 	}
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
-// MoveToTrash PATCH /notifications/:id/trash
 func (h *NotificationHandler) MoveToTrash(c *fiber.Ctx) error {
-	id, err := uuid.Parse(c.Params("id"))
+	id, err := utils.ParseUUID(c, "id")
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid notification id"})
+		return errors.SendAppError(c, errors.ErrInvalidRequest)
 	}
 
-	userID, err := h.parseUserID(c)
+	userID, err := utils.GetUserID(c)
 	if err != nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid or missing user id"})
+		return errors.SendAppError(c, errors.ErrInvalidToken)
 	}
 
-	if err := h.service.MoveToTrash(id, userID); err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": "failed to move to trash"})
+	ctx, cancel := context.WithTimeout(c.Context(), 3*time.Second)
+	defer cancel()
+
+	if err := h.service.MoveToTrash(ctx, id, userID); err != nil {
+		return errors.SendAppError(c, errors.ErrInternal)
 	}
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
-// ClearTrash DELETE /notifications/trash
 func (h *NotificationHandler) ClearTrash(c *fiber.Ctx) error {
-	userID, err := h.parseUserID(c)
+	userID, err := utils.GetUserID(c)
 	if err != nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid or missing user id"})
+		return errors.SendAppError(c, errors.ErrInvalidToken)
 	}
 
-	if err := h.service.ClearTrash(userID); err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": "failed to clear trash"})
+	ctx, cancel := context.WithTimeout(c.Context(), 15*time.Second)
+	defer cancel()
+
+	if err := h.service.ClearTrash(ctx, userID); err != nil {
+		return errors.SendAppError(c, errors.ErrInternal)
 	}
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
-// SendNotification POST /notifications/send (Wewnętrzne/Admin)
 func (h *NotificationHandler) SendNotification(c *fiber.Ctx) error {
 	var req model.Notification
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid body"})
+		return errors.SendAppError(c, errors.ErrInvalidJSON)
 	}
 
-	if err := h.service.Send(&req); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to send notification"})
+	ctx, cancel := context.WithTimeout(c.Context(), 5*time.Second)
+	defer cancel()
+
+	if err := h.service.Send(ctx, &req); err != nil {
+		return errors.SendAppError(c, errors.ErrInternal)
 	}
 	return c.Status(fiber.StatusCreated).JSON(req)
 }
 
-// RestoreFromTrash PATCH /notifications/:id/restore
 func (h *NotificationHandler) RestoreFromTrash(c *fiber.Ctx) error {
-	id, err := uuid.Parse(c.Params("id"))
+	id, err := utils.ParseUUID(c, "id")
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid notification id"})
+		return errors.SendAppError(c, errors.ErrInvalidRequest)
 	}
 
-	userID, err := h.parseUserID(c)
+	userID, err := utils.GetUserID(c)
 	if err != nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid or missing user id"})
+		return errors.SendAppError(c, errors.ErrInvalidToken)
 	}
 
-	if err := h.service.Restore(id, userID); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to restore notification"})
+	ctx, cancel := context.WithTimeout(c.Context(), 3*time.Second)
+	defer cancel()
+
+	if err := h.service.Restore(ctx, id, userID); err != nil {
+		return errors.SendAppError(c, errors.ErrInternal)
 	}
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
-// DeletePermanently DELETE /notifications/:id
 func (h *NotificationHandler) DeletePermanently(c *fiber.Ctx) error {
-	id, err := uuid.Parse(c.Params("id"))
+	id, err := utils.ParseUUID(c, "id")
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid notification id"})
+		return errors.SendAppError(c, errors.ErrInvalidRequest)
 	}
 
-	userID, err := h.parseUserID(c)
+	userID, err := utils.GetUserID(c)
 	if err != nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid or missing user id"})
+		return errors.SendAppError(c, errors.ErrInvalidToken)
 	}
 
-	if err := h.service.DeletePermanently(id, userID); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to delete notification permanently"})
+	ctx, cancel := context.WithTimeout(c.Context(), 5*time.Second)
+	defer cancel()
+
+	if err := h.service.DeletePermanently(ctx, id, userID); err != nil {
+		return errors.SendAppError(c, errors.ErrInternal)
 	}
 	return c.SendStatus(fiber.StatusNoContent)
 }

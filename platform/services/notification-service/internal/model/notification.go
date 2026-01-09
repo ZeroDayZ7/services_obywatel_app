@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/zerodayz7/platform/pkg/shared" // import Twojego pakietu
 	"gorm.io/gorm"
 )
 
@@ -11,10 +12,10 @@ type Notification struct {
 	ID        uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
 	UserID    uuid.UUID      `gorm:"type:uuid;index" json:"userId"`
 	Title     string         `gorm:"type:varchar(255)" json:"title"`
-	Content   string         `gorm:"type:text" json:"content"`         // Zmienione z Message
-	Priority  string         `gorm:"type:varchar(20)" json:"priority"` // info, success, warning, error
-	Category  string         `gorm:"type:varchar(50)" json:"category"` // payments, security, itp.
-	IsRead    bool           `gorm:"default:false" json:"isRead"`      // camelCase dla Fluttera
+	Content   string         `gorm:"type:text" json:"content"`
+	Priority  string         `gorm:"type:varchar(20)" json:"priority"`
+	Category  string         `gorm:"type:varchar(50)" json:"category"`
+	IsRead    bool           `gorm:"default:false" json:"isRead"`
 	CreatedAt time.Time      `json:"createdAt"`
 	UpdatedAt time.Time      `json:"updatedAt"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
@@ -31,7 +32,10 @@ type NotificationEvent struct {
 
 func (n *Notification) BeforeCreate(tx *gorm.DB) (err error) {
 	if n.ID == uuid.Nil {
-		n.ID = uuid.New()
+		n.ID = shared.MustGenerateUuidV7()
 	}
-	return
+	now := time.Now().UTC()
+	n.CreatedAt = now
+	n.UpdatedAt = now
+	return nil
 }

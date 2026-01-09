@@ -1,7 +1,7 @@
-package database
+package mysql
 
 import (
-	"time"
+	"context"
 
 	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/services/notification-service/internal/model"
@@ -16,51 +16,57 @@ func NewNotificationRepository(db *gorm.DB) *NotificationRepository {
 	return &NotificationRepository{db: db}
 }
 
-func (r *NotificationRepository) Create(notification *model.Notification) error {
-	return r.db.Create(notification).Error
+// Używamy db.WithContext(ctx), aby GORM wiedział o timeoutach i przerwanych połączeniach
+
+func (r *NotificationRepository) Create(ctx context.Context, n *model.Notification) error {
+	return r.db.WithContext(ctx).Create(n).Error
 }
 
-func (r *NotificationRepository) GetByUserID(userID uuid.UUID) ([]model.Notification, error) {
+func (r *NotificationRepository) GetByUserID(ctx context.Context, userID uuid.UUID) ([]model.Notification, error) {
 	var notifications []model.Notification
-	// Pobieramy tylko te, które NIE są w koszu (GORM automatycznie obsłuży deleted_at IS NULL)
-	err := r.db.Where("user_id = ?", userID).Order("created_at desc").Find(&notifications).Error
+	err := r.db.WithContext(ctx).
+		Where("user_id = ? AND deleted_at IS NULL", userID).
+		Order("created_at DESC").
+		Find(&notifications).Error
 	return notifications, err
 }
 
-// POPRAWIONE: Dodano userID dla bezpieczeństwa
-func (r *NotificationRepository) MarkAsRead(id uuid.UUID, userID uuid.UUID) error {
-	return r.db.Model(&model.Notification{}).
+func (r *NotificationRepository) MarkAsRead(ctx context.Context, id uuid.UUID, userID uuid.UUID) error {
+	return r.db.WithContext(ctx).
+		Model(&model.Notification{}).
 		Where("id = ? AND user_id = ?", id, userID).
 		Update("is_read", true).Error
 }
 
-func (r *NotificationRepository) MarkAllAsRead(userID uuid.UUID) error {
-	return r.db.Model(&model.Notification{}).
-		Where("user_id = ? AND is_read = ? AND deleted_at IS NULL", userID, false).
+func (r *NotificationRepository) MarkAllAsRead(ctx context.Context, userID uuid.UUID) error {
+	return r.db.WithContext(ctx).
+		Model(&model.Notification{}).
+		Where("user_id = ? AND is_read = ?", userID, false).
 		Update("is_read", true).Error
 }
 
-func (r *NotificationRepository) MoveToTrash(id uuid.UUID, userID uuid.UUID) error {
-	return r.db.Model(&model.Notification{}).
+func (r *NotificationRepository) MoveToTrash(ctx context.Context, id uuid.UUID, userID uuid.UUID) error {
+	return r.db.WithContext(ctx).
+		Model(&model.Notification{}).
 		Where("id = ? AND user_id = ?", id, userID).
-		Update("deleted_at", time.Now()).Error
+		Update("deleted_at", gorm.Expr("NOW()")).Error
 }
 
-func (r *NotificationRepository) HardDeleteTrash(userID uuid.UUID) error {
-	return r.db.Unscoped().
-		Where("user_id = ? AND deleted_at IS NOT NULL", userID).
-		Delete(&model.Notification{}).Error
-}
-
-func (r *NotificationRepository) RestoreFromTrash(id uuid.UUID, userID uuid.UUID) error {
-	return r.db.Model(&model.Notification{}).Unscoped().
+func (r *NotificationRepository) RestoreFromTrash(ctx context.Context, id uuid.UUID, userID uuid.UUID) error {
+	return r.db.WithContext(ctx).
+		Model(&model.Notification{}).
 		Where("id = ? AND user_id = ?", id, userID).
 		Update("deleted_at", nil).Error
 }
 
-// Repository w Go
-func (r *NotificationRepository) DeletePermanently(id uuid.UUID, userID uuid.UUID) error {
-	return r.db.Unscoped().
+func (r *NotificationRepository) HardDeleteTrash(ctx context.Context, userID uuid.UUID) error {
+	return r.db.WithContext(ctx).
+		Where("user_id = ? AND deleted_at IS NOT NULL", userID).
+		Delete(&model.Notification{}).Error
+}
+
+func (r *NotificationRepository) DeletePermanently(ctx context.Context, id uuid.UUID, userID uuid.UUID) error {
+	return r.db.WithContext(ctx).
 		Where("id = ? AND user_id = ?", id, userID).
 		Delete(&model.Notification{}).Error
 }

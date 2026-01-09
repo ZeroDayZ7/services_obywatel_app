@@ -5,9 +5,9 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/pkg/errors"
 	"github.com/zerodayz7/platform/pkg/shared"
+	"github.com/zerodayz7/platform/pkg/utils"
 	"github.com/zerodayz7/platform/services/auth-service/internal/features/users/http"
 	"github.com/zerodayz7/platform/services/auth-service/internal/features/users/service"
 )
@@ -28,8 +28,7 @@ func (h *UserHandler) GetSessions(c *fiber.Ctx) error {
 	log := shared.GetLogger()
 
 	// 2. Autoryzacja (UserID z middleware)
-	userIDStr := c.Get("X-User-Id")
-	userID, err := uuid.Parse(userIDStr)
+	userID, err := utils.GetUserID(c)
 	if err != nil {
 		return errors.SendAppError(c, errors.ErrInvalidToken)
 	}
@@ -64,8 +63,7 @@ func (h *UserHandler) TerminateSession(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(c.UserContext(), 3*time.Second)
 	defer cancel()
 
-	userIDStr := c.Get("X-User-Id")
-	userID, err := uuid.Parse(userIDStr)
+	userID, err := utils.GetUserID(c)
 	if err != nil {
 		return errors.SendAppError(c, errors.ErrInvalidToken)
 	}

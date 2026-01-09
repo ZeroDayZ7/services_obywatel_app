@@ -4,8 +4,8 @@ import (
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/pkg/shared"
+	"github.com/zerodayz7/platform/pkg/utils"
 )
 
 type AuditHandler struct {
@@ -55,7 +55,7 @@ func (h *AuditHandler) ListUserLogs(c *fiber.Ctx) error {
 	idParam := c.Params("id")
 	h.logger.DebugMap("Received request for user logs", map[string]any{"user_id_param": idParam})
 
-	uID, err := uuid.Parse(idParam)
+	uID, err := utils.ParseUUID(c, "id")
 	if err != nil {
 		h.logger.WarnMap("Invalid UUID format in request", map[string]any{"input": idParam})
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid user uuid format"})
