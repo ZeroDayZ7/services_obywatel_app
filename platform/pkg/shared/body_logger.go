@@ -27,7 +27,7 @@ func RequestLoggerMiddleware() fiber.Handler {
 
 		// Logujemy nagłówki osobno
 		for k, v := range headers {
-			log.InfoObj("Header", map[string]any{
+			log.Info("Header", map[string]any{
 				"key":   k,
 				"value": v,
 			})

@@ -51,7 +51,7 @@ func main() {
 	// Start Server
 
 	address := "0.0.0.0:" + config.AppConfig.Server.Port
-	log.InfoObj("Server started", map[string]any{
+	log.Info("Server started", map[string]any{
 		"app":     config.AppConfig.Server.AppName,
 		"address": address,
 	})
