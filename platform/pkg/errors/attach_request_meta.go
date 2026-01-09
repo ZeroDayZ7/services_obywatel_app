@@ -1,32 +1,38 @@
 package errors
 
-import "github.com/gofiber/fiber/v2"
+import (
+	"maps"
+
+	"github.com/gofiber/fiber/v2"
+)
 
 func AttachRequestMeta(c *fiber.Ctx, err *AppError, keysToInclude ...string) {
-	if err.Meta == nil {
-		err.Meta = make(map[string]any)
+	// KLUCZOWE: Tworzymy kopię mapy, aby nie modyfikować globalnego błędu
+	newMeta := maps.Clone(err.Meta)
+	if newMeta == nil {
+		newMeta = make(map[string]any)
 	}
 
 	for _, key := range keysToInclude {
 		switch key {
 		case "requestID":
 			if val := c.Locals("requestid"); val != nil {
-				err.Meta["requestID"] = val
+				newMeta["requestID"] = val
 			}
 		case "ip":
-			err.Meta["ip"] = c.IP()
+			newMeta["ip"] = c.IP()
 		case "method":
-			err.Meta["method"] = c.Method()
+			newMeta["method"] = c.Method()
 		case "path":
-			err.Meta["path"] = c.Path()
+			newMeta["path"] = c.Path()
 		default:
-
 			var body map[string]any
 			if parseErr := c.BodyParser(&body); parseErr == nil {
 				if v, ok := body[key]; ok {
-					err.Meta[key] = v
+					newMeta[key] = v
 				}
 			}
 		}
 	}
+	err.Meta = newMeta
 }

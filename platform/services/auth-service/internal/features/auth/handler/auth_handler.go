@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
@@ -35,6 +36,9 @@ func NewAuthHandler(authService *service.AuthService, cache *redis.Cache) *AuthH
 func (h *AuthHandler) RegisterDevice(c *fiber.Ctx) error {
 	log := shared.GetLogger()
 
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
 	body, ok := c.Locals("validatedBody").(validator.RegisterDeviceRequest)
 	if !ok {
 		return errors.SendAppError(c, errors.ErrInternal)
@@ -47,8 +51,6 @@ func (h *AuthHandler) RegisterDevice(c *fiber.Ctx) error {
 	if err != nil {
 		return errors.SendAppError(c, errors.ErrInvalidToken)
 	}
-
-	ctx := c.Context()
 
 	// 2. Sprawdzamy obecny stan sesji
 	var oldFingerprint string
@@ -146,7 +148,10 @@ func (h *AuthHandler) RegisterDevice(c *fiber.Ctx) error {
 	}
 
 	// 1. Pobieramy pełne dane użytkownika (żeby mieć imię, role itp.)
-	user, err := h.authService.GetUserByID(userID)
+	user, err := h.authService.GetUserByID(
+		c.Context(),
+		userID,
+	)
 	if err != nil {
 		log.ErrorObj("User not found during registration", err)
 		return errors.SendAppError(c, errors.ErrInternal)
@@ -201,6 +206,8 @@ func (h *AuthHandler) RegisterDevice(c *fiber.Ctx) error {
 
 // #region LOGIN
 func (h *AuthHandler) Login(c *fiber.Ctx) error {
+	ctx, cancel := context.WithTimeout(c.UserContext(), 2*time.Second)
+	defer cancel()
 	log := shared.GetLogger()
 
 	// 1. Pobieramy body (używając Twojego validatora)
@@ -218,7 +225,7 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	}()
 
 	// 2. Pobieramy użytkownika (serwis zwraca model z ID typu uuid.UUID)
-	user, err := h.authService.GetUserByEmail(body.Email)
+	user, err := h.authService.GetUserByEmail(ctx, body.Email)
 	if err != nil {
 		log.WarnObj("User not found", body.Email)
 		return errors.SendAppError(c, errors.ErrInvalidCredentials)
@@ -376,8 +383,11 @@ func (h *AuthHandler) Verify2FA(c *fiber.Ctx) error {
 		return errors.SendAppError(c, errors.ErrInternal)
 	}
 
-	user, err := h.authService.GetUserByID(uid)
-	if err != nil || user == nil {
+	user, err := h.authService.GetUserByID(
+		c.Context(),
+		uid,
+	)
+	if err != nil {
 		return errors.SendAppError(c, errors.ErrInternal)
 	}
 
@@ -386,7 +396,10 @@ func (h *AuthHandler) Verify2FA(c *fiber.Ctx) error {
 	user.LastIP = c.IP()
 
 	// Zapisujemy zmiany w bazie poprzez repo w AuthService
-	if err := h.authService.RepoUpdateUser(user); err != nil {
+	if err := h.authService.RepoUpdateUser(
+		c.Context(),
+		user,
+	); err != nil {
 		log.ErrorObj("Failed to update LastLogin/LastIP", err)
 	}
 

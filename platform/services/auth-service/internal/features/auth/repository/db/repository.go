@@ -5,9 +5,12 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/services/auth-service/internal/features/auth/model"
+	repository "github.com/zerodayz7/platform/services/auth-service/internal/features/auth/repository"
 	userModel "github.com/zerodayz7/platform/services/auth-service/internal/features/users/model"
 	"gorm.io/gorm"
 )
+
+var _ repository.RefreshTokenRepository = (*RefreshTokenRepository)(nil)
 
 type RefreshTokenRepository struct {
 	DB *gorm.DB
@@ -18,17 +21,9 @@ func NewRefreshTokenRepository(db *gorm.DB) *RefreshTokenRepository {
 }
 
 // Save — dodaje nowy token z przypisanym fingerprintem urządzenia
-func (r *RefreshTokenRepository) Save(userID uuid.UUID, token string, fingerprint string, duration time.Duration) error {
-	rt := model.RefreshToken{
-		UserID:            userID,
-		Token:             token,
-		DeviceFingerprint: fingerprint,
-		ExpiresAt:         time.Now().Add(duration),
-		Revoked:           false,
-	}
-	return r.DB.Create(&rt).Error
+func (r *RefreshTokenRepository) Save(rt *model.RefreshToken) error {
+	return r.DB.Create(rt).Error
 }
-
 func (r *RefreshTokenRepository) Get(token string) (*model.RefreshToken, error) {
 	var rt model.RefreshToken
 	err := r.DB.Where("token = ? AND revoked = false AND expires_at > ?", token, time.Now()).First(&rt).Error

@@ -1,8 +1,6 @@
 package repository
 
 import (
-	"time"
-
 	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/services/auth-service/internal/features/auth/model"
 
@@ -10,7 +8,7 @@ import (
 )
 
 type RefreshTokenRepository interface {
-	Save(userID uuid.UUID, token string, fingerprint string, ttl time.Duration) error
+	Save(rt *model.RefreshToken) error
 	Get(token string) (*model.RefreshToken, error)
 	Revoke(token string) error
 	GetByToken(token string) (*model.RefreshToken, error)
@@ -24,4 +22,3 @@ type RefreshTokenRepository interface {
 		newFingerprint string,
 	) error
 }
-

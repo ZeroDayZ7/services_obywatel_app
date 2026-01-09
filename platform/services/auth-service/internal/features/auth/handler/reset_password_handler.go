@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -43,11 +44,13 @@ type ResetSession struct {
 // #region SEND RESET CODE
 // 1️⃣ Wyślij kod resetu
 func (h *ResetHandler) SendResetCode(c *fiber.Ctx) error {
+	ctx, cancel := context.WithTimeout(c.UserContext(), 2*time.Second)
+	defer cancel()
 	log := shared.GetLogger()
 	body := c.Locals("validatedBody").(validator.ResetPasswordRequest)
 
 	// Pobranie użytkownika po emailu z pola Value
-	user, err := h.authService.GetUserByEmail(body.Value)
+	user, err := h.authService.GetUserByEmail(ctx, body.Value)
 	if err != nil {
 		log.WarnObj("User not found", body.Value)
 		// użycie naszego AppError zamiast ręcznego JSON-a
@@ -265,11 +268,13 @@ func (h *ResetHandler) ResetPassword(c *fiber.Ctx) error {
 	}
 
 	// 4. Finalizacja: Zmiana hasła w bazie danych
-	if err := h.authService.UpdatePassword(userUUID, body.NewPassword); err != nil {
+	if err := h.authService.UpdatePassword(
+		c.Context(),
+		userUUID,
+		body.NewPassword,
+	); err != nil {
 		log.ErrorObj("Failed to update password", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to update password",
-		})
+		return errors.SendAppError(c, errors.ErrInternal)
 	}
 
 	// 5. Sprzątanie i Eventy

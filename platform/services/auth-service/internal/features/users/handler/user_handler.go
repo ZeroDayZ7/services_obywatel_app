@@ -15,11 +15,9 @@ type UserHandler struct {
 
 func NewUserHandler(
 	userService *service.UserService,
-	authRepo authRepo.RefreshTokenRepository,
 ) *UserHandler {
 	return &UserHandler{
 		userService: userService,
-		authRepo:    authRepo,
 	}
 }
 

@@ -14,14 +14,19 @@ func ValidateBody[T any]() fiber.Handler {
 		}
 
 		if errs := ValidateStruct(*body); len(errs) > 0 {
-			meta := make(map[string]any)
-			for k, v := range errs {
-				meta[k] = v
+			appErr := errors.ErrValidationFailed
+			finalErr := &errors.AppError{
+				Code:    appErr.Code,
+				Type:    appErr.Type,
+				Message: appErr.Message,
+				Meta:    make(map[string]any),
 			}
 
-			appErr := errors.ErrValidationFailed
-			appErr.Meta = meta
-			return errors.SendAppError(c, appErr)
+			for k, v := range errs {
+				finalErr.Meta[k] = v
+			}
+
+			return errors.SendAppError(c, finalErr)
 		}
 
 		c.Locals("validatedBody", *body)

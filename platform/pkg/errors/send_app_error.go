@@ -11,6 +11,7 @@ func SendAppError(c *fiber.Ctx, err *AppError) error {
 		NotFound:     fiber.StatusNotFound,
 		Internal:     fiber.StatusInternalServerError,
 		BadRequest:   fiber.StatusBadRequest,
+		Timeout:      fiber.StatusGatewayTimeout,
 	}
 
 	status, ok := statusMap[err.Type]

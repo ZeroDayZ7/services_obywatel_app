@@ -27,20 +27,29 @@ func (r *UserRepo) CreateUser(user *model.User) error {
 	return r.db.Create(user).Error
 }
 
-func (r *UserRepo) GetByID(id uuid.UUID) (*model.User, error) {
+func (r *UserRepo) GetByID(
+	ctx context.Context,
+	id uuid.UUID,
+) (*model.User, error) {
 	var u model.User
-	if err := r.db.First(&u, id).Error; err != nil {
+
+	if err := r.db.
+		WithContext(ctx).
+		First(&u, id).
+		Error; err != nil {
+
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
 		return nil, err
 	}
+
 	return &u, nil
 }
 
-func (r *UserRepo) GetByEmail(email string) (*model.User, error) {
+func (r *UserRepo) GetByEmail(ctx context.Context, email string) (*model.User, error) {
 	var u model.User
-	if err := r.db.Where("email = ?", email).First(&u).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("email = ?", email).First(&u).Error; err != nil {
 		return nil, err
 	}
 	return &u, nil
@@ -79,8 +88,10 @@ func (r *UserRepo) EmailOrUsernameExists(email, username string) (emailExists, u
 	return
 }
 
-func (r *UserRepo) Update(user *model.User) error {
-	return r.db.Save(user).Error
+func (r *UserRepo) Update(
+	ctx context.Context,
+	user *model.User) error {
+	return r.db.WithContext(ctx).Save(user).Error
 }
 
 func (r *UserRepo) SaveDevice(ctx context.Context, device *model.UserDevice) error {

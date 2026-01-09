@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"time"
 
@@ -31,11 +33,15 @@ func NewAuthService(repo userRepo.UserRepository, refreshRepo authRepo.RefreshTo
 }
 
 // Pobranie użytkownika po ID
-func (s *AuthService) UpdatePassword(userID uuid.UUID, newPassword string) error {
+func (s *AuthService) UpdatePassword(
+	ctx context.Context,
+	userID uuid.UUID,
+	newPassword string,
+) error {
 	log := shared.GetLogger()
 
 	// Pobranie użytkownika po ID
-	user, err := s.repo.GetByID(userID)
+	user, err := s.repo.GetByID(ctx, userID)
 	if err != nil {
 		log.ErrorMap("GetByID failed", map[string]any{"userID": userID, "error": err.Error()})
 		return err
@@ -53,7 +59,7 @@ func (s *AuthService) UpdatePassword(userID uuid.UUID, newPassword string) error
 
 	// Aktualizacja hasła w bazie
 	user.Password = hashed
-	if err := s.repo.Update(user); err != nil {
+	if err := s.repo.Update(ctx, user); err != nil {
 		log.ErrorMap("Update user failed", map[string]any{"userID": userID, "error": err.Error()})
 		return err
 	}
@@ -91,24 +97,35 @@ func (s *AuthService) CreateSession(userID uuid.UUID) (string, error) {
 func (s *AuthService) CreateRefreshToken(userID uuid.UUID, fingerprint string) (*authModel.RefreshToken, error) {
 	refreshTTL := config.AppConfig.JWT.RefreshTTL
 
-	token, err := security.GenerateRefreshToken()
+	// 1. Generujemy surowy, losowy token (64 znaki)
+	rawToken, err := security.GenerateRefreshToken()
 	if err != nil {
 		return nil, err
 	}
 
+	// 2. Hashujemy surowy token za pomocą SHA-256
+	// Robimy to, aby w bazie nie było widać "hasła" sesji
+	hash := sha256.Sum256([]byte(rawToken))
+	hashedTokenHex := hex.EncodeToString(hash[:])
+
+	// 3. Tworzymy obiekt do zapisu w DB (z zahashowanym tokenem)
 	rt := &authModel.RefreshToken{
 		UserID:            userID,
-		Token:             token,
+		Token:             hashedTokenHex,
 		DeviceFingerprint: fingerprint,
 		Revoked:           false,
 		CreatedAt:         time.Now(),
 		ExpiresAt:         time.Now().Add(refreshTTL),
 	}
 
-	// WAŻNE: Dodajemy fingerprint do argumentów Save
-	if err := s.refreshRepo.Save(userID, token, fingerprint, refreshTTL); err != nil {
+	// 4. Zapisujemy w bazie danych
+	if err := s.refreshRepo.Save(rt); err != nil {
 		return nil, err
 	}
+
+	// 5. Nadpisujemy pole Token surową wartością PRZED zwróceniem do Handlera
+	// Dzięki temu Handler wyśle do Fluttera "SECRET_123", a nie "HASH_456"
+	rt.Token = rawToken
 
 	return rt, nil
 }
@@ -165,8 +182,8 @@ func (s *AuthService) IsEmailOrUsernameExists(email, username string) (bool, boo
 	return existsEmail, existsUsername, nil
 }
 
-func (s *AuthService) GetUserByEmail(email string) (*model.User, error) {
-	u, err := s.repo.GetByEmail(email)
+func (s *AuthService) GetUserByEmail(ctx context.Context, email string) (*model.User, error) {
+	u, err := s.repo.GetByEmail(ctx, email)
 	if err != nil {
 		return nil, err
 	}
@@ -176,8 +193,11 @@ func (s *AuthService) GetUserByEmail(email string) (*model.User, error) {
 	return u, nil
 }
 
-func (s *AuthService) GetUserByID(id uuid.UUID) (*model.User, error) {
-	u, err := s.repo.GetByID(id) // Musisz dodać GetByID do swojego repozytorium
+func (s *AuthService) GetUserByID(
+	ctx context.Context,
+	id uuid.UUID,
+) (*model.User, error) {
+	u, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -269,8 +289,11 @@ func (s *AuthService) UpdateUserFailedLogin(userID uuid.UUID, attempts int) erro
 	return s.repo.UpdateFailedLogin(userID, attempts)
 }
 
-func (s *AuthService) RepoUpdateUser(user *model.User) error {
-	return s.repo.Update(user)
+func (s *AuthService) RepoUpdateUser(
+	ctx context.Context,
+	user *model.User,
+) error {
+	return s.repo.Update(ctx, user)
 }
 
 func (s *AuthService) CanUserLogin(user *model.User) *errors.AppError {
