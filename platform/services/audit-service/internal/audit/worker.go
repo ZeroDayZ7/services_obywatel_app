@@ -14,6 +14,8 @@ const (
 	auditStream   = "audit_stream"
 	auditGroup    = "audit_service_group"
 	auditConsumer = "worker_1"
+	batchSize     = 100
+	batchTimeout  = 500 * time.Millisecond
 )
 
 type AuditWorker struct {
@@ -33,7 +35,6 @@ func NewAuditWorker(r *redis.Client, s *AuditService, l *shared.Logger) *AuditWo
 func (w *AuditWorker) Start() {
 	ctx := context.Background()
 
-	// 🔐 BOOTSTRAP: zapewnij istnienie grupy (i streama)
 	if err := w.ensureRedisInfrastructure(ctx); err != nil {
 		w.logger.ErrorObj("Worker: failed to bootstrap redis infra", err)
 		return
@@ -42,26 +43,23 @@ func (w *AuditWorker) Start() {
 	w.logger.Info("Audit Worker: Listening for events...")
 
 	for {
-		entries, err := w.redis.ReadStream(
+		entries, err := w.redis.ReadStreamBatch(
 			ctx,
 			auditStream,
 			auditGroup,
 			auditConsumer,
+			batchSize,
+			batchTimeout,
 		)
-
 		if err != nil {
-			// 🔥 KLUCZ: SAMO-NAPRAWA
 			if strings.Contains(err.Error(), "NOGROUP") {
 				w.logger.Warn("Worker: consumer group missing, recreating...")
-
 				if err := w.ensureRedisInfrastructure(ctx); err != nil {
 					w.logger.ErrorObj("Worker: failed to recreate redis infra", err)
 					time.Sleep(5 * time.Second)
 				}
-
 				continue
 			}
-
 			w.logger.ErrorObj("Worker: Redis error", err)
 			time.Sleep(5 * time.Second)
 			continue
@@ -71,11 +69,10 @@ func (w *AuditWorker) Start() {
 			continue
 		}
 
-		for _, entry := range entries {
-			w.logger.InfoMap("Worker: Received entry", map[string]any{
-				"id": entry.ID,
-			})
+		var batch []AuditMessage
+		var ackIDs []string
 
+		for _, entry := range entries {
 			rawPayload, ok := entry.Values["payload"].(string)
 			if !ok {
 				w.logger.WarnMap("Worker: payload missing or invalid", map[string]any{
@@ -84,40 +81,36 @@ func (w *AuditWorker) Start() {
 				continue
 			}
 
-			w.logger.Debug("Worker: Raw payload: " + rawPayload)
-			w.logger.DebugMap("Worker: Parsed payload preview", map[string]any{
-				"payload_preview": rawPayload,
-			})
-
 			var msg AuditMessage
 			if err := json.Unmarshal([]byte(rawPayload), &msg); err != nil {
 				w.logger.ErrorObj("Worker: JSON unmarshal failed", err)
 				continue
 			}
 
-			w.logger.DebugMap("Worker: AuditMessage parsed", map[string]any{
-				"user_id": msg.UserID,
-				"service": msg.Service,
-				"action":  msg.Action,
-			})
-
-			if err := w.svc.SaveLog(ctx, msg); err != nil {
-				w.logger.ErrorObj("Worker: SaveLog failed", err)
-				continue
-			}
-
-			if err := w.redis.AckStream(
-				ctx,
-				auditStream,
-				auditGroup,
-				entry.ID,
-			); err != nil {
-				w.logger.ErrorObj("Worker: ACK failed", err)
-				continue
-			}
-
-			w.logger.Info("Worker: Log processed and ACKed: " + entry.ID)
+			batch = append(batch, msg)
+			ackIDs = append(ackIDs, entry.ID)
 		}
+
+		if len(batch) == 0 {
+			continue
+		}
+
+		// 🔥 Zapis batchem do DB
+		if err := w.svc.SaveLogsBatch(ctx, batch); err != nil {
+			w.logger.ErrorObj("Worker: SaveLogsBatch failed", err)
+			continue
+		}
+
+		// 🔥 ACK batchem w Redisie
+		if err := w.redis.AckStreamBatch(ctx, auditStream, auditGroup, ackIDs); err != nil {
+			w.logger.ErrorObj("Worker: AckStreamBatch failed", err)
+			continue
+		}
+
+		w.logger.InfoMap("Worker: Batch processed", map[string]any{
+			"batch_count": len(batch),
+			"ack_count":   len(ackIDs),
+		})
 	}
 }
 
@@ -126,15 +119,15 @@ func (w *AuditWorker) Start() {
 // =======================================================
 
 func (w *AuditWorker) ensureRedisInfrastructure(ctx context.Context) error {
-	// 1️⃣ Wymuś istnienie streama (XADD noop)
-	if err := w.redis.SendAuditLog(ctx, map[string]any{
+	// Wymuś istnienie streama (XADD noop)
+	if err := w.redis.SendAuditLog(ctx, auditStream, map[string]any{
 		"_bootstrap": true,
 		"_ts":        time.Now().Unix(),
 	}); err != nil {
 		return err
 	}
 
-	// 2️⃣ Zapewnij istnienie consumer group
+	// Zapewnij istnienie consumer group
 	if err := w.redis.EnsureGroup(ctx, auditStream, auditGroup); err != nil {
 		return err
 	}

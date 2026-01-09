@@ -3,7 +3,6 @@ package redis
 import (
 	"context"
 	"encoding/json"
-	"strings"
 	"time"
 
 	goredis "github.com/redis/go-redis/v9"
@@ -90,17 +89,12 @@ func (c *Cache) Exists(ctx context.Context, key string) (bool, error) {
 	return n > 0, err
 }
 
-func (c *Cache) SendAuditLog(ctx context.Context, data any) error {
-	// Cache używa swojego wewnętrznego klienta, aby wysłać log
-	return c.client.SendAuditLog(ctx, data)
-}
-
 func (c *Cache) SendNotification(ctx context.Context, data any) error {
 	// Cache używa swojego wewnętrznego klienta, aby wysłać powiadomienie
 	return c.client.SendNotification(ctx, data)
 }
 
-// UpdateSessionFingerprint - poprawiona wersja z prefixami
+// UpdateSessionFingerpriEnsureGroupnt - poprawiona wersja z prefixami
 func (c *Cache) UpdateSessionFingerprint(ctx context.Context, sessionID string, newFingerprint string) error {
 	// 1. Pobieramy dane używając c.Get (obsługuje prefixy)
 	data, err := c.Get(ctx, sessionID)
@@ -171,41 +165,9 @@ func (c *Client) ReadStream(
 	return res[0].Messages, nil
 }
 
-func (c *Client) EnsureGroup(ctx context.Context, stream, group string) error {
-	err := c.XGroupCreateMkStream(ctx, stream, group, "0").Err()
-	if err != nil && !strings.Contains(err.Error(), "BUSYGROUP") {
-		return err
-	}
-	return nil
-}
-
 // AckStream potwierdza przetworzenie wiadomości (XAck)
 func (c *Client) AckStream(ctx context.Context, stream, group, messageID string) error {
 	return c.XAck(ctx, stream, group, messageID).Err()
-}
-
-func (c *Client) SendAuditLog(ctx context.Context, data any) error {
-	// Jeśli to mapa i ma _bootstrap, nie wysyłamy
-	if m, ok := data.(map[string]any); ok {
-		if b, exists := m["_bootstrap"]; exists {
-			if isBootstrap, ok := b.(bool); ok && isBootstrap {
-				// Pomijamy wpis
-				return nil
-			}
-		}
-	}
-
-	jsonData, err := json.Marshal(data)
-	if err != nil {
-		return err
-	}
-
-	return c.XAdd(ctx, &goredis.XAddArgs{
-		Stream: "audit_stream",
-		Values: map[string]any{
-			"payload": string(jsonData),
-		},
-	}).Err()
 }
 
 // SendNotification wysyła dane do notification_stream
@@ -239,12 +201,7 @@ func (c *Client) SendNotification(ctx context.Context, data any) error {
 // =========================================
 
 // Publish implements events.StreamPublisher
-func (c *Cache) Publish(
-	ctx context.Context,
-	stream string,
-	payload any,
-) error {
-
+func (c *Cache) Publish(ctx context.Context, stream string, payload any) error {
 	jsonData, err := json.Marshal(payload)
 	if err != nil {
 		return err
@@ -256,4 +213,27 @@ func (c *Cache) Publish(
 			"payload": string(jsonData),
 		},
 	}).Err()
+}
+
+func (c *Cache) Verify2FAAttempt(ctx context.Context, key string, maxAttempts int, ttl time.Duration) (string, error) {
+	_, err := c.client.Eval(
+		ctx,
+		verify2FAScript,
+		[]string{key},
+		"", // kod weryfikujesz w Go
+		maxAttempts,
+		int(ttl.Seconds()),
+	).Result()
+
+	if err != nil {
+		if err.Error() == "NOT_FOUND" {
+			return "not_found", nil
+		}
+		if err.Error() == "LOCKED" {
+			return "locked", nil
+		}
+		return "", err
+	}
+
+	return "attempt_updated", nil
 }

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"github.com/gofiber/contrib/otelfiber/v2"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/compress"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -41,6 +42,7 @@ func NewGatewayApp(
 	app := fiber.New(cfgFiber)
 
 	// Middleware
+	app.Use(otelfiber.Middleware())
 	app.Use(requestid.New())
 	app.Use(recover.New())
 	app.Use(helmet.New(HelmetConfig()))

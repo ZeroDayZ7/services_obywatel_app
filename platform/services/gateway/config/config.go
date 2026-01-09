@@ -10,6 +10,12 @@ import (
 	"github.com/zerodayz7/platform/pkg/shared"
 )
 
+type OTELConfig struct {
+	Enabled     bool
+	Endpoint    string
+	ServiceName string
+}
+
 type ProxyConfig struct {
 	MaxIdleConns        int
 	IdleConnTimeout     time.Duration
@@ -59,6 +65,7 @@ type Config struct {
 	CORSAllow string
 	Shutdown  time.Duration
 	JWT       JWTConfig
+	OTEL      OTELConfig
 }
 
 var AppConfig Config
@@ -108,6 +115,11 @@ func LoadConfigGlobal() error {
 	viper.SetDefault("REDIS_SESSION_PREFIX", "session:")
 	viper.SetDefault("REDIS_SESSION_TTL_MIN", 60)
 
+	//OTL
+	viper.SetDefault("OTEL_ENABLED", true)
+	viper.SetDefault("OTEL_ENDPOINT", "http://localhost:4318/v1/traces")
+	viper.SetDefault("OTEL_SERVICE_NAME", "gateway")
+
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
 			log.ErrorObj("Error loading .env", err)
@@ -146,11 +158,17 @@ func LoadConfigGlobal() error {
 			AccessSecret:  viper.GetString("JWT_ACCESS_SECRET"),
 			RefreshSecret: viper.GetString("JWT_REFRESH_SECRET"),
 		},
+
 		Proxy: ProxyConfig{
 			MaxIdleConns:        viper.GetInt("PROXY_MAX_IDLE_CONNS"),
 			IdleConnTimeout:     time.Duration(viper.GetInt("PROXY_IDLE_CONN_TIMEOUT_SEC")) * time.Second,
 			MaxIdleConnsPerHost: viper.GetInt("PROXY_MAX_IDLE_CONNS_PER_HOST"),
 			RequestTimeout:      time.Duration(viper.GetInt("PROXY_REQUEST_TIMEOUT_SEC")) * time.Second,
+		},
+		OTEL: OTELConfig{
+			Enabled:     viper.GetBool("OTEL_ENABLED"),
+			Endpoint:    viper.GetString("OTEL_ENDPOINT"),
+			ServiceName: viper.GetString("OTEL_SERVICE_NAME"),
 		},
 	}
 

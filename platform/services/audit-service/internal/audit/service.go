@@ -81,6 +81,15 @@ func (s *AuditService) GetLogByID(ctx context.Context, id int64) (dbgen.AuditLog
 	return s.queries.GetLogByID(ctx, id)
 }
 
+func (s *AuditService) SaveLogsBatch(ctx context.Context, logs []AuditMessage) error {
+	for _, log := range logs {
+		if err := s.SaveLog(ctx, log); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // Pomocnik do konwersji string -> pgtype.UUID
 func toUUID(s string) (pgtype.UUID, error) {
 	var u pgtype.UUID

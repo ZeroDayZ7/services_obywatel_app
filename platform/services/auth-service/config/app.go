@@ -1,6 +1,7 @@
 package config
 
 import (
+	"github.com/gofiber/contrib/otelfiber/v2"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/gofiber/fiber/v2/middleware/requestid"
@@ -33,6 +34,7 @@ func NewAuthApp(cfg ServerConfig) *fiber.App {
 	app := fiber.New(cfgFiber)
 
 	// Middleware
+	app.Use(otelfiber.Middleware())
 	app.Use(requestid.New())
 	app.Use(recover.New())
 	app.Use(shared.NewLimiter("global"))

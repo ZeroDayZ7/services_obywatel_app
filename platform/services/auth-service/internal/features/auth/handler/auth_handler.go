@@ -284,7 +284,7 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 
 		log.DebugMap("Generated 2FA code", map[string]any{
 			"email": body.Email,
-			"code":  code,
+			"test":  code,
 			"token": twoFAToken,
 		})
 
@@ -367,22 +367,37 @@ func (h *AuthHandler) Verify2FA(c *fiber.Ctx) error {
 		return errors.SendAppError(c, errors.ErrInternal)
 	}
 
-	// 4. Sprawdzamy limit prób
-	if session.Attempts >= 5 {
-		log.WarnObj("Max 2FA attempts reached", map[string]string{"user_id": session.UserID})
-		return errors.SendAppError(c, errors.Err2FALocked)
-	}
-
 	// 5. Weryfikacja kodu bcryptem
 	if err := bcrypt.CompareHashAndPassword([]byte(session.CodeHash), body.Code); err != nil {
-		session.Attempts++
-		updated, _ := json.Marshal(session)
-		h.cache.Set(c.Context(), key, updated, 5*time.Minute)
-		return errors.SendAppError(c, errors.ErrInvalid2FACode)
+
+		status, err := h.cache.Verify2FAAttempt(
+			c.Context(),
+			key,
+			5,
+			5*time.Minute,
+		)
+		if err != nil {
+			log.ErrorObj("Verify2FAAttempt failed", err)
+			return errors.SendAppError(c, errors.ErrInternal)
+		}
+
+		switch status {
+		case "locked":
+			return errors.SendAppError(c, errors.Err2FALocked)
+		case "not_found":
+			return errors.SendAppError(c, errors.ErrInvalidCredentials)
+		case "attempt_updated":
+			return errors.SendAppError(c, errors.ErrInvalid2FACode)
+		default:
+			log.ErrorMap("Unknown 2FA status", map[string]any{"status": status})
+			return errors.SendAppError(c, errors.ErrInternal)
+		}
 	}
 
 	// 6. Usuwamy sesję 2FA po sukcesie
-	h.cache.Del(c.Context(), key)
+	if err := h.cache.Del(c.Context(), key); err != nil {
+		log.WarnObj("Failed to cleanup 2FA session", err)
+	}
 
 	uid, err := uuid.Parse(session.UserID)
 	if err != nil {

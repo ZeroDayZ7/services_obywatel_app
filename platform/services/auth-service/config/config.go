@@ -9,6 +9,12 @@ import (
 	"github.com/zerodayz7/platform/pkg/shared"
 )
 
+type OTELConfig struct {
+	Enabled     bool
+	Endpoint    string
+	ServiceName string
+}
+
 type SessionConfig struct {
 	Prefix string
 	TTL    time.Duration
@@ -51,6 +57,7 @@ type Config struct {
 	CORSAllow string
 	Shutdown  time.Duration
 	JWT       JWTConfig
+	OTEL      OTELConfig
 }
 
 type JWTConfig struct {
@@ -102,6 +109,11 @@ func LoadConfigGlobal() error {
 	viper.SetDefault("REDIS_SESSION_PREFIX", "session:")
 	viper.SetDefault("REDIS_SESSION_TTL_MIN", 60)
 
+	//OTL
+	viper.SetDefault("OTEL_ENABLED", true)
+	viper.SetDefault("OTEL_ENDPOINT", "http://localhost:4318/v1/traces")
+	viper.SetDefault("OTEL_SERVICE_NAME", "auth")
+
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
 			log.ErrorObj("Error loading .env", err)
@@ -145,6 +157,11 @@ func LoadConfigGlobal() error {
 			RefreshSecret: viper.GetString("JWT_REFRESH_SECRET"),
 			AccessTTL:     time.Duration(viper.GetInt("JWT_ACCESS_TTL_MIN")) * time.Minute,
 			RefreshTTL:    time.Duration(viper.GetInt("JWT_REFRESH_TTL_DAYS")) * 24 * time.Hour,
+		},
+		OTEL: OTELConfig{
+			Enabled:     viper.GetBool("OTEL_ENABLED"),
+			Endpoint:    viper.GetString("OTEL_ENDPOINT"),
+			ServiceName: viper.GetString("OTEL_SERVICE_NAME"),
 		},
 	}
 

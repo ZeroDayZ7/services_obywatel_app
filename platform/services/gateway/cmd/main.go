@@ -6,13 +6,13 @@ import (
 	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/server"
 	"github.com/zerodayz7/platform/pkg/shared"
+	"github.com/zerodayz7/platform/pkg/telemetry"
 	"github.com/zerodayz7/platform/services/gateway/config"
 	"github.com/zerodayz7/platform/services/gateway/internal/di"
 	"github.com/zerodayz7/platform/services/gateway/internal/router"
 )
 
 func main() {
-	// Inicjalizacja loggera
 	log := shared.InitLogger(os.Getenv("ENV"))
 
 	// Config
@@ -20,6 +20,13 @@ func main() {
 		log.ErrorObj("Config load failed", err)
 		return
 	}
+
+	// OTP
+	cleanup := telemetry.InitTracer(
+		config.AppConfig.Server.AppName,
+		config.AppConfig.OTEL.Endpoint,
+	)
+	defer cleanup()
 
 	// Redis – z nowego pkg
 	redisClient, err := redis.New(redis.Config(config.AppConfig.Redis))
