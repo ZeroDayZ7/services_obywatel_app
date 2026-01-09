@@ -16,7 +16,8 @@ type UserRepository interface {
 	EmailOrUsernameExists(email, username string) (bool, bool, error)
 	Update(ctx context.Context, user *model.User) error
 	SaveDevice(ctx context.Context, device *model.UserDevice) error
-	UpdateFailedLogin(userID uuid.UUID, attempts int) error
+	IncrementFailedLogin(userID uuid.UUID) error
+	ResetFailedLogin(userID uuid.UUID) error
 
 	GetDeviceByFingerprint(ctx context.Context, userID uuid.UUID, fingerprint string) (*model.UserDevice, error)
 	UpdateDeviceStatus(ctx context.Context, deviceID uuid.UUID, publicKey string, deviceName string, isActive bool, isVerified bool) error

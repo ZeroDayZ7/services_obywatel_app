@@ -250,8 +250,7 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	if err != nil || !valid {
 		log.WarnObj("Invalid password", user.Email)
 
-		user.FailedLoginAttempts++
-		_ = h.authService.UpdateUserFailedLogin(user.ID, user.FailedLoginAttempts)
+		_ = h.authService.IncrementUserFailedLogin(user.ID)
 		return errors.SendAppError(c, errors.ErrInvalidCredentials)
 	}
 

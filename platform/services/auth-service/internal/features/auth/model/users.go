@@ -42,7 +42,7 @@ type User struct {
 	Password            string     `gorm:"size:128;not null"`
 	Role                UserRole   `gorm:"type:varchar(20);not null;default:'user'"`
 	Status              UserStatus `gorm:"type:varchar(20);not null;default:'ACTIVE'"`
-	FailedLoginAttempts int        `gorm:"not null;default:0"`
+	FailedLoginAttempts int8       `gorm:"not null;default:0"`
 	LastLogin           time.Time
 	PasswordChangedAt   time.Time
 	LastIP              string           `gorm:"size:45"`

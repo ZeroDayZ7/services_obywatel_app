@@ -285,8 +285,15 @@ func (s *AuthService) RegisterUserDevice(
 	return nil
 }
 
-func (s *AuthService) UpdateUserFailedLogin(userID uuid.UUID, attempts int) error {
-	return s.repo.UpdateFailedLogin(userID, attempts)
+// Ta nazwa musi się zgadzać z tym, co wywołujesz w Handlerze!
+func (s *AuthService) IncrementUserFailedLogin(userID uuid.UUID) error {
+	// Tu wywołujemy repozytorium - nazwa musi być taka jak w UserRepository Interface
+	return s.repo.IncrementFailedLogin(userID)
+}
+
+// Przy okazji dodaj to, przyda się po poprawnym loginie
+func (s *AuthService) ResetUserFailedLogin(userID uuid.UUID) error {
+	return s.repo.ResetFailedLogin(userID)
 }
 
 func (s *AuthService) RepoUpdateUser(

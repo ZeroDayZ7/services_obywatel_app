@@ -27,10 +27,7 @@ func (r *UserRepo) CreateUser(user *model.User) error {
 	return r.db.Create(user).Error
 }
 
-func (r *UserRepo) GetByID(
-	ctx context.Context,
-	id uuid.UUID,
-) (*model.User, error) {
+func (r *UserRepo) GetByID(ctx context.Context, id uuid.UUID) (*model.User, error) {
 	var u model.User
 
 	if err := r.db.
@@ -88,9 +85,7 @@ func (r *UserRepo) EmailOrUsernameExists(email, username string) (emailExists, u
 	return
 }
 
-func (r *UserRepo) Update(
-	ctx context.Context,
-	user *model.User) error {
+func (r *UserRepo) Update(ctx context.Context, user *model.User) error {
 	return r.db.WithContext(ctx).Save(user).Error
 }
 
@@ -109,10 +104,17 @@ func (r *UserRepo) SaveDevice(ctx context.Context, device *model.UserDevice) err
 	}).Create(device).Error
 }
 
-func (r *UserRepo) UpdateFailedLogin(userID uuid.UUID, attempts int) error {
+func (r *UserRepo) IncrementFailedLogin(userID uuid.UUID) error {
+	// Używamy gorm.Expr dla bezpieczeństwa (atomowość)
 	return r.db.Model(&model.User{}).
 		Where("id = ?", userID).
-		Update("failed_login_attempts", attempts).Error
+		Update("failed_login_attempts", gorm.Expr("failed_login_attempts + ?", 1)).Error
+}
+
+func (r *UserRepo) ResetFailedLogin(userID uuid.UUID) error {
+	return r.db.Model(&model.User{}).
+		Where("id = ?", userID).
+		Update("failed_login_attempts", 0).Error
 }
 
 func (r *UserRepo) GetDeviceByFingerprint(ctx context.Context, userID uuid.UUID, fingerprint string) (*authModel.UserDevice, error) {
