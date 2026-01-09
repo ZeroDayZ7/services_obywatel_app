@@ -15,6 +15,7 @@ import (
 	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/auth-service/config"
+	"github.com/zerodayz7/platform/services/auth-service/internal/features/auth/http"
 	"github.com/zerodayz7/platform/services/auth-service/internal/features/auth/service"
 	"github.com/zerodayz7/platform/services/auth-service/internal/validator"
 	"golang.org/x/crypto/bcrypt"
@@ -170,21 +171,23 @@ func (h *AuthHandler) RegisterDevice(c *fiber.Ctx) error {
 		"fpt":    body.DeviceFingerprint,
 	})
 
-	// 3. Budujemy paczkę UserData
-	userData := fiber.Map{
-		"user_id": user.ID.String(),
-		"roles":   []string{"USER", "ADMIN"},
+	userData := http.DeviceUserData{
+		UserID: user.ID.String(),
+		Roles:  []string{"USER", "ADMIN"},
 	}
 
-	response := fiber.Map{
-		"success":       true,
-		"message":       "Device registered",
-		"access_token":  newAccessToken,
-		"refresh_token": refreshToken.Token,
-		"user":          userData,
+	response := http.RegisterDeviceResponse{
+		Success:      true,
+		Message:      "Device registered",
+		AccessToken:  newAccessToken,
+		RefreshToken: refreshToken.Token,
+		User:         userData,
 	}
 
-	log.DebugMap("Device registration successful", response)
+	log.DebugMap("Device registration successful", map[string]any{
+		"userId": userID,
+		"fpt":    body.DeviceFingerprint,
+	})
 
 	emitter := events.NewEmitter(h.cache, "auth-service")
 
@@ -275,16 +278,18 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 			return errors.SendAppError(c, errors.ErrInternal)
 		}
 
+		response := http.LoginResponse{
+			TwoFARequired: true,
+			TwoFAToken:    twoFAToken,
+		}
+
 		log.DebugMap("Generated 2FA code", map[string]any{
 			"email": body.Email,
 			"code":  code,
 			"token": twoFAToken,
 		})
 
-		return c.JSON(fiber.Map{
-			"2fa_required": true,
-			"two_fa_token": twoFAToken,
-		})
+		return c.JSON(response)
 	}
 
 	// 4. Generowanie Tokenów (Używamy user.ID bezpośrednio jako uuid.UUID)
@@ -307,21 +312,25 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		return errors.SendAppError(c, errors.ErrInternal)
 	}
 
-	// 6. Odpowiedź do Fluttera
-	response := fiber.Map{
-		"2fa_required":  false,
-		"access_token":  accessToken,
-		"refresh_token": refreshToken.Token,
-		"user_id":       fmt.Sprint(user.ID),
-		"expires_at":    refreshToken.ExpiresAt,
+	// 6. Przygotowanie odpowiedzi dla Fluttera
+	response := http.LoginResponse{
+		TwoFARequired: false,
+		AccessToken:   accessToken,
+		RefreshToken:  refreshToken.Token,
+		UserID:        fmt.Sprint(user.ID),
+		ExpiresAt:     refreshToken.ExpiresAt.Unix(),
 	}
 
 	log.InfoMap("Login response successful", map[string]any{"user": user.Email})
+
+	// Wysyłka gotowej struktury
 	return c.JSON(response)
 }
 
 // #region VERIFY 2 FA
 func (h *AuthHandler) Verify2FA(c *fiber.Ctx) error {
+	// ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	// defer cancel()
 	log := shared.GetLogger()
 
 	// 1. Pobieramy body z Locals (walidowane przez middleware)
@@ -420,19 +429,24 @@ func (h *AuthHandler) Verify2FA(c *fiber.Ctx) error {
 	challenge := shared.GenerateUuid()
 	h.cache.Set(c.Context(), fmt.Sprintf("challenge:%d", uid), challenge, 5*time.Minute)
 
-	response := fiber.Map{
-		"success":      true,
-		"access_token": accessToken,
-		"challenge":    challenge,
-		"is_trusted":   false,
+	response := http.Verify2FAResponse{
+		Success:     true,
+		AccessToken: accessToken,
+		Challenge:   challenge,
+		IsTrusted:   false,
 	}
 
-	log.InfoMap("2FA verification successful", response)
+	log.InfoMap("2FA verification successful", map[string]any{
+		"user_id": uid,
+		"token":   sessionID,
+	})
 	return c.JSON(response)
 }
 
 // #region REFRESH TOKEN
 func (h *AuthHandler) RefreshToken(c *fiber.Ctx) error {
+	// ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	// defer cancel()
 	body := c.Locals("validatedBody").(validator.RefreshTokenRequest)
 	log := shared.GetLogger()
 
@@ -480,11 +494,11 @@ func (h *AuthHandler) RefreshToken(c *fiber.Ctx) error {
 	}
 
 	// 5. Odpowiedź JSON
-	response := fiber.Map{
-		"access_token":  accessToken,
-		"refresh_token": rt.Token,
-		"user_id":       userIDStr,
-		"expires_at":    time.Now().Add(config.AppConfig.JWT.AccessTTL).Unix(),
+	response := http.RefreshResponse{
+		AccessToken:  accessToken,
+		RefreshToken: rt.Token,
+		UserID:       userIDStr,
+		ExpiresAt:    time.Now().Add(config.AppConfig.JWT.AccessTTL).Unix(),
 	}
 
 	log.InfoMap("Token refreshed successfully", map[string]any{
@@ -542,23 +556,24 @@ func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 		log.InfoObj("Session deleted from Redis", sessionID)
 	}
 
-	// Tworzymy odpowiedź
-	response := fiber.Map{
-		"message": "Logged out successfully",
+	response := http.LogoutResponse{
+		Message: "Logged out successfully",
 	}
 
-	// Dodawanie kolejnych pól w razie potrzeby
-	// response["user_id"] = userID
-	// response["events"] = []string{"refresh_token_revoked", "session_deleted"}
+	log.InfoMap("Logout successful", map[string]any{
+		"user_id":    userID,
+		"session_id": sessionID,
+	})
 
-	// Zwracamy odpowiedź
 	return c.JSON(response)
 }
 
 // #region REGISTER
 func (h *AuthHandler) Register(c *fiber.Ctx) error {
+	log := shared.GetLogger()
 	body := c.Locals("validatedBody").(validator.RegisterRequest)
 
+	// Próba rejestracji użytkownika
 	user, err := h.authService.Register(body.Username, body.Email, body.Password)
 	if err != nil {
 		if appErr, ok := err.(*errors.AppError); ok {
@@ -568,8 +583,16 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 		return errors.ErrInternal
 	}
 
-	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
-		"success": true,
-		"user":    user,
+	// Przygotowanie minimalistycznej odpowiedzi DTO
+	response := http.RegisterResponse{
+		Success: true,
+	}
+
+	// Logujemy fakt rejestracji (zachowując ID w logach serwera dla audytu)
+	log.InfoMap("User account created successfully", map[string]any{
+		"email":   user.Email,
+		"user_id": user.ID,
 	})
+
+	return c.Status(fiber.StatusCreated).JSON(response)
 }

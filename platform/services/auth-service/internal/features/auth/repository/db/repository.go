@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"time"
 
 	"github.com/google/uuid"
@@ -50,12 +51,11 @@ func (r *RefreshTokenRepository) Update(rt *model.RefreshToken) error {
 	return r.DB.Save(rt).Error
 }
 
-// GetSessionsWithDeviceData — pobiera aktywne sesje wraz z danymi urządzenia (JOIN)
-func (r *RefreshTokenRepository) GetSessionsWithDeviceData(userID uuid.UUID) ([]userModel.UserSessionDTO, error) {
+func (r *RefreshTokenRepository) GetSessionsWithDeviceData(ctx context.Context, userID uuid.UUID) ([]userModel.UserSessionDTO, error) {
 	var results []userModel.UserSessionDTO
 
-	// Używamy aliasów (np. as session_id), aby GORM poprawnie zmapował kolumny na pola w DTO
-	err := r.DB.Table("refresh_tokens").
+	err := r.DB.WithContext(ctx).
+		Table("refresh_tokens").
 		Select(`
 			refresh_tokens.id as session_id, 
 			user_devices.device_name_encrypted, 
@@ -64,20 +64,17 @@ func (r *RefreshTokenRepository) GetSessionsWithDeviceData(userID uuid.UUID) ([]
 			user_devices.last_used_at, 
 			refresh_tokens.device_fingerprint as fingerprint
 		`).
-		// Łączymy tabele po dwóch kluczach dla pewności: fingerprint i user_id
 		Joins("JOIN user_devices ON user_devices.device_fingerprint = refresh_tokens.device_fingerprint AND user_devices.user_id = refresh_tokens.user_id").
-		// Pobieramy tylko te sesje, które nie wygasły i nie zostały unieważnione
 		Where("refresh_tokens.user_id = ? AND refresh_tokens.revoked = ? AND refresh_tokens.expires_at > ?", userID, false, time.Now()).
-		// Sortujemy, aby najnowsze sesje były na górze
 		Order("refresh_tokens.created_at DESC").
 		Scan(&results).Error
 
 	return results, err
 }
 
-// DeleteByID — unieważnia konkretną sesję użytkownika (wylogowanie zdalne)
-func (r *RefreshTokenRepository) DeleteByID(sessionID uint, userID uuid.UUID) error {
-	return r.DB.Model(&model.RefreshToken{}).
+func (r *RefreshTokenRepository) DeleteByID(ctx context.Context, sessionID uint, userID uuid.UUID) error {
+	return r.DB.WithContext(ctx).
+		Model(&model.RefreshToken{}).
 		Where("id = ? AND user_id = ?", sessionID, userID).
 		Update("revoked", true).Error
 }

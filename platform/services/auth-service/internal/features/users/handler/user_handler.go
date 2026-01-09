@@ -1,118 +1,87 @@
 package handler
 
 import (
+	"context"
+	"time"
+
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
+	"github.com/zerodayz7/platform/pkg/errors"
 	"github.com/zerodayz7/platform/pkg/shared"
-	authRepo "github.com/zerodayz7/platform/services/auth-service/internal/features/auth/repository"
+	"github.com/zerodayz7/platform/services/auth-service/internal/features/users/http"
 	"github.com/zerodayz7/platform/services/auth-service/internal/features/users/service"
 )
 
 type UserHandler struct {
 	userService *service.UserService
-	authRepo    authRepo.RefreshTokenRepository
 }
 
-func NewUserHandler(
-	userService *service.UserService,
-) *UserHandler {
-	return &UserHandler{
-		userService: userService,
-	}
+func NewUserHandler(userService *service.UserService) *UserHandler {
+	return &UserHandler{userService: userService}
 }
 
 // GET /user/sessions
 func (h *UserHandler) GetSessions(c *fiber.Ctx) error {
+	// 1. Context i Logger
+	ctx, cancel := context.WithTimeout(c.UserContext(), 3*time.Second)
+	defer cancel()
 	log := shared.GetLogger()
 
+	// 2. Autoryzacja (UserID z middleware)
 	userIDStr := c.Get("X-User-Id")
-	if userIDStr == "" {
-		log.Warn("GetSessions: missing X-User-Id header")
-		return c.Status(fiber.StatusUnauthorized).
-			JSON(fiber.Map{"error": "missing user id"})
-	}
-
 	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
-		log.WarnObj("GetSessions: invalid user id format", userIDStr)
-		return c.Status(fiber.StatusBadRequest).
-			JSON(fiber.Map{
-				"error": "invalid user id format",
-				"code":  "INVALID_UUID",
-			})
+		return errors.SendAppError(c, errors.ErrInvalidToken)
 	}
 
-	log.DebugMap("GetSessions: fetching sessions", map[string]any{
-		"user_id": userID,
-	})
-
-	sessions, err := h.authRepo.GetSessionsWithDeviceData(uuid.UUID(userID))
+	// 3. Wywołanie serwisu
+	sessions, err := h.userService.GetSessions(ctx, userID)
 	if err != nil {
-		log.ErrorObj("GetSessions: repository error", err)
-		return c.Status(fiber.StatusInternalServerError).
-			JSON(fiber.Map{"error": "could not fetch sessions"})
+		log.ErrorObj("GetSessions service error", err)
+		return errors.SendAppError(c, errors.ErrInternal)
 	}
 
-	log.InfoMap("GetSessions: sessions fetched", map[string]any{
-		"user_id":        userID,
-		"sessions_count": len(sessions),
-	})
+	// 4. Mapowanie na DTO
+	currentFingerprint := c.Get("X-Device-Fingerprint")
+	var response []http.SessionResponse
 
-	return c.JSON(sessions)
+	for _, s := range sessions {
+		response = append(response, http.SessionResponse{
+			ID:        s.SessionID,
+			Device:    s.DeviceNameEncrypted,
+			Platform:  s.Platform,
+			IsCurrent: s.Fingerprint == currentFingerprint,
+			CreatedAt: s.CreatedAt,
+			LastUsed:  s.LastUsedAt,
+		})
+	}
+
+	return c.JSON(response)
 }
 
 // POST /user/sessions/terminate
 func (h *UserHandler) TerminateSession(c *fiber.Ctx) error {
-	log := shared.GetLogger()
+	ctx, cancel := context.WithTimeout(c.UserContext(), 3*time.Second)
+	defer cancel()
 
 	userIDStr := c.Get("X-User-Id")
-	if userIDStr == "" {
-		log.Warn("TerminateSession: missing X-User-Id header")
-		return c.Status(fiber.StatusUnauthorized).
-			JSON(fiber.Map{"error": "missing user id"})
-	}
-
 	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
-		log.WarnObj("GetSessions: invalid user id format", userIDStr)
-		return c.Status(fiber.StatusBadRequest).
-			JSON(fiber.Map{
-				"error": "invalid user id format",
-				"code":  "INVALID_UUID",
-			})
+		return errors.SendAppError(c, errors.ErrInvalidToken)
 	}
 
 	type request struct {
 		SessionID uint `json:"session_id"`
 	}
-
 	var req request
 	if err := c.BodyParser(&req); err != nil {
-		log.WarnObj("TerminateSession: invalid body", err)
-		return c.Status(fiber.StatusBadRequest).
-			JSON(fiber.Map{"error": "invalid request"})
+		return errors.SendAppError(c, errors.ErrInvalidRequest)
 	}
 
-	log.InfoMap("TerminateSession: terminating session", map[string]any{
-		"user_id":    userID,
-		"session_id": req.SessionID,
-	})
-
-	err = h.authRepo.DeleteByID(req.SessionID, userID)
-	if err != nil {
-		log.ErrorMap("TerminateSession: failed to revoke session", map[string]any{
-			"user_id":    userID,
-			"session_id": req.SessionID,
-			"error":      err,
-		})
-		return c.Status(fiber.StatusInternalServerError).
-			JSON(fiber.Map{"error": "could not terminate session"})
+	// Wywołanie serwisu (przekazujemy już oczyszczone typy uint i UUID)
+	if err := h.userService.RevokeSession(ctx, userID, req.SessionID); err != nil {
+		return errors.SendAppError(c, errors.ErrInternal)
 	}
 
-	log.InfoMap("TerminateSession: session terminated", map[string]any{
-		"user_id":    userID,
-		"session_id": req.SessionID,
-	})
-
-	return c.JSON(fiber.Map{"status": "success"})
+	return c.JSON(http.TerminateSessionResponse{Status: "success"})
 }
