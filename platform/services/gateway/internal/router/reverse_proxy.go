@@ -3,12 +3,14 @@ package router
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 
 	"github.com/gofiber/fiber/v2"
+	reqctx "github.com/zerodayz7/platform/pkg/context"
+	apperr "github.com/zerodayz7/platform/pkg/errors"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/gateway/internal/di"
 )
@@ -17,81 +19,96 @@ import (
 func ReverseProxy(container *di.Container, target string) fiber.Handler {
 	log := shared.GetLogger()
 	return func(c *fiber.Ctx) error {
+		ctx, _ := c.Locals("requestContext").(*reqctx.RequestContext)
+
 		req, err := prepareProxyRequest(c, target)
 		if err != nil {
 			return err
 		}
 
-		// JAWNIE kopiujemy fingerprint, bo to nasz krytyczny nagłówek bezpieczeństwa
-		fpt := c.Get("X-Device-Fingerprint")
-		if fpt == "" {
-			// Tutaj możesz nawet zdecydować o odrzuceniu requestu,
-			// jeśli Twój system WYMAGA urządzenia we Flutterze
-			log.Warn("Request without device fingerprint")
-		}
-		req.Header.Set("X-Device-Fingerprint", fpt)
-
-		// // Kopiujemy resztę standardowych nagłówków
-		// req.Header.Set("Content-Type", c.Get("Content-Type"))
-		// req.Header.Set("User-Agent", c.Get("User-Agent"))
-
-		allowedHeaders := []string{
+		clientHeaders := []string{
 			"Content-Type",
+			"Accept",
 			"User-Agent",
+			"X-Device-Fingerprint",
 		}
-		for _, h := range allowedHeaders {
-			if val := c.Get(h); val != "" {
-				req.Header.Set(h, val)
+
+		for _, h := range clientHeaders {
+			if v := c.Get(h); v != "" {
+				req.Header.Set(h, v)
 			}
+		}
+
+		if ctx != nil {
+			req.Header.Set("X-Request-Id", ctx.RequestID)
+			req.Header.Set("X-Forwarded-For", ctx.IP)
+			req.Header.Set("X-Real-IP", ctx.IP)
 		}
 
 		return executeProxyRequest(c, container, req, log)
 	}
 }
 
-// ReverseProxySecure - przekazuje request, dodaje ID użytkownika i usuwa Auth
-// ReverseProxySecure - przekazuje request, wstrzykuje tożsamość użytkownika i dba o nagłówki urządzenia
 func ReverseProxySecure(container *di.Container, target string) fiber.Handler {
 	log := shared.GetLogger()
+
 	return func(c *fiber.Ctx) error {
+		// --- Pobieramy RequestContext (JEDYNE źródło prawdy) ---
+		ctx, ok := c.Locals("requestContext").(*reqctx.RequestContext)
+		if !ok || ctx == nil {
+			log.Warn("Missing request context")
+			return fiber.ErrUnauthorized
+		}
+
+		// ---  Budujemy request do upstream ---
 		req, err := prepareProxyRequest(c, target)
 		if err != nil {
 			return err
 		}
 
-		// 1. Definiujemy nagłówki, które MUSZĄ zostać przekazane z aplikacji Flutter
-		allowedHeaders := []string{
+		// ---  Whitelist nagłówków z klienta (MINIMUM) ---
+		clientHeaders := []string{
 			"Content-Type",
 			"Accept",
 			"User-Agent",
-			"X-Device-Fingerprint", // Kluczowe dla rejestracji/weryfikacji urządzenia
-			"X-Request-Id",         // Pozwala łączyć logi Gatewaya z Auth-Service
+			"X-Device-Fingerprint",
 		}
 
-		for _, h := range allowedHeaders {
-			if val := c.Get(h); val != "" {
-				req.Header.Set(h, val)
+		for _, h := range clientHeaders {
+			if v := c.Get(h); v != "" {
+				req.Header.Set(h, v)
 			}
 		}
 
-		// 2. Wstrzykujemy tożsamość użytkownika z contextu (Locals)
-		// Te dane pochodzą z Twojego middleware JWT/Auth na Gatewayu
-		if uid := c.Locals("userID"); uid != nil {
-			req.Header.Set("X-User-Id", fmt.Sprintf("%v", uid))
+		// --- Nagłówki kontrolowane  ---
+		req.Header.Set("X-Request-Id", ctx.RequestID)
+		req.Header.Set("X-Forwarded-For", ctx.IP)
+		req.Header.Set("X-Real-IP", ctx.IP)
+
+		if ctx.UserID != nil {
+			req.Header.Set("X-User-Id", ctx.UserID.String())
 		}
-		if sid := c.Locals("sessionID"); sid != nil {
-			req.Header.Set("X-Session-Id", fmt.Sprintf("%v", sid))
+		if ctx.SessionID != "" {
+			req.Header.Set("X-Session-Id", ctx.SessionID)
 		}
 
-		// 3. Przekazujemy IP klienta
-		userIP := c.IP()
-		req.Header.Set("X-Forwarded-For", userIP)
-		req.Header.Set("X-Real-IP", userIP)
+		if ctx.DeviceID != "" {
+			req.Header.Set("X-Device-Id", ctx.DeviceID)
+		}
 
-		// 4. Bezpieczeństwo: usuwamy oryginalny token Authorization.
-		// Backend (auth-service) powinien ufać nagłówkowi X-User-Id,
-		// bo Gateway już zweryfikował token.
+		// ---  Zero trust: auth-related ---
 		req.Header.Del("Authorization")
+		req.Header.Del("Cookie")
+
+		// --- podpisany kontekst ---
+		payload, err := reqctx.Encode(*ctx)
+		if err != nil {
+			log.ErrorObj("Failed to encode request context", err)
+			return apperr.SendAppError(c, apperr.ErrInternal)
+		}
+		sig := reqctx.Sign(payload, container.InternalSecret)
+		req.Header.Set("X-Internal-Context", base64.StdEncoding.EncodeToString(payload))
+		req.Header.Set("X-Internal-Signature", sig)
 
 		return executeProxyRequest(c, container, req, log)
 	}

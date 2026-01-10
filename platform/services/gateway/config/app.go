@@ -14,10 +14,8 @@ import (
 	"github.com/zerodayz7/platform/services/gateway/internal/middleware"
 )
 
-func NewGatewayApp(
-	cfg ServerConfig,
-	container *di.Container,
-) *fiber.App {
+func NewGatewayApp(container *di.Container) *fiber.App {
+	cfg := container.Config.Server
 
 	cfgFiber := fiber.Config{
 		AppName:       cfg.AppName,
@@ -52,6 +50,7 @@ func NewGatewayApp(
 	app.Use(shared.RequestLoggerMiddleware())
 	app.Use(JWTMiddlewareWithExclusions())
 	app.Use(middleware.AuthRedisMiddleware(container.Redis.Client))
+	app.Use(middleware.ContextBuilder())
 
 	return app
 }

@@ -53,8 +53,10 @@ type Config struct {
 	SessionTTL time.Duration
 }
 
-var AppConfig Config
-var Store *session.Store
+var (
+	AppConfig Config
+	Store     *session.Store
+)
 
 func LoadConfigGlobal() error {
 	log := shared.GetLogger()

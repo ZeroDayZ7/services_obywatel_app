@@ -1,12 +1,10 @@
 package di
 
 import (
-	"time"
-
+	"github.com/zerodayz7/platform/pkg/redis"
+	"github.com/zerodayz7/platform/pkg/types"
 	authHandler "github.com/zerodayz7/platform/services/auth-service/internal/features/auth/handler"
 	userHandler "github.com/zerodayz7/platform/services/auth-service/internal/features/users/handler"
-
-	"github.com/zerodayz7/platform/pkg/redis"
 )
 
 type Handlers struct {
@@ -15,9 +13,9 @@ type Handlers struct {
 	UserHandler  *userHandler.UserHandler
 }
 
-func NewHandlers(services *Services, cache *redis.Cache, sessionTTL time.Duration) *Handlers {
+func NewHandlers(services *Services, cache *redis.Cache, cfg *types.Config) *Handlers {
 	return &Handlers{
-		AuthHandler:  authHandler.NewAuthHandler(services.AuthService, cache, sessionTTL),
+		AuthHandler:  authHandler.NewAuthHandler(services.AuthService, cache, cfg),
 		ResetHandler: authHandler.NewResetHandler(services.AuthService, cache),
 		UserHandler:  userHandler.NewUserHandler(services.UserService),
 	}

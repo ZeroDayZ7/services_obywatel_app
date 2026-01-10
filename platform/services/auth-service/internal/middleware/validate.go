@@ -5,13 +5,13 @@ import (
 	"strings"
 
 	"github.com/go-playground/validator/v10"
-	"github.com/zerodayz7/platform/pkg/shared" // Importujemy Twój pakiet shared
+	"github.com/zerodayz7/platform/pkg/shared"
 )
 
 var validate = validator.New()
 
 func init() {
-	validate.RegisterValidation("passwd", func(fl validator.FieldLevel) bool {
+	err := validate.RegisterValidation("passwd", func(fl validator.FieldLevel) bool {
 		log := shared.GetLogger() // Pobieramy Twój logger
 		field := fl.Field()
 		var passwordBytes []byte
@@ -72,6 +72,9 @@ func init() {
 
 		return isValid
 	})
+	if err != nil {
+		panic("failed to register validator: " + err.Error())
+	}
 }
 
 func ValidateStruct(s any) map[string]string {

@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/pkg/errors"
-	"github.com/zerodayz7/platform/services/auth-service/config"
+	"github.com/zerodayz7/platform/pkg/types"
 	"github.com/zerodayz7/platform/services/auth-service/internal/features/auth/model"
 	authModel "github.com/zerodayz7/platform/services/auth-service/internal/features/auth/model"
 	authRepo "github.com/zerodayz7/platform/services/auth-service/internal/features/auth/repository"
@@ -23,12 +23,18 @@ import (
 type AuthService struct {
 	repo        userRepo.UserRepository
 	refreshRepo authRepo.RefreshTokenRepository
+	cfg         *types.Config
 }
 
-func NewAuthService(repo userRepo.UserRepository, refreshRepo authRepo.RefreshTokenRepository) *AuthService {
+func NewAuthService(
+	repo userRepo.UserRepository,
+	refreshRepo authRepo.RefreshTokenRepository,
+	cfg *types.Config,
+) *AuthService {
 	return &AuthService{
 		repo:        repo,
 		refreshRepo: refreshRepo,
+		cfg:         cfg,
 	}
 }
 
@@ -79,7 +85,7 @@ func (s *AuthService) CreateAccessToken(userID uuid.UUID, fingerprint string) (a
 		"fpt": fingerprint,
 	}
 
-	accessToken, err = security.GenerateJWT(claims, config.AppConfig.JWT.AccessSecret, config.AppConfig.JWT.AccessTTL)
+	accessToken, err = security.GenerateJWT(claims, s.cfg.JWT.AccessSecret, s.cfg.JWT.AccessTTL)
 	if err != nil {
 		return "", "", err
 	}
@@ -95,7 +101,7 @@ func (s *AuthService) CreateSession(userID uuid.UUID) (string, error) {
 }
 
 func (s *AuthService) CreateRefreshToken(userID uuid.UUID, fingerprint string) (*authModel.RefreshToken, error) {
-	refreshTTL := config.AppConfig.JWT.RefreshTTL
+	refreshTTL := s.cfg.JWT.RefreshTTL
 
 	// 1. Generujemy surowy, losowy token (64 znaki)
 	rawToken, err := security.GenerateRefreshToken()

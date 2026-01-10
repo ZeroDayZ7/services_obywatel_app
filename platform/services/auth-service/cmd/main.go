@@ -18,7 +18,7 @@ func main() {
 
 	// Config
 	if err := config.LoadConfigGlobal(); err != nil {
-		log.ErrorObj("Config load failed", err)
+		log.Fatal("Config load failed", err)
 		return
 	}
 
@@ -41,14 +41,10 @@ func main() {
 	defer closeDB()
 
 	// Dependency Injection
-	container := di.NewContainer(
-		db,
-		redisClient,
-		config.AppConfig.Session.Prefix,
-		config.AppConfig.Session.TTL,
-	)
+
+	container := di.NewContainer(db, redisClient, &config.AppConfig)
 	// Fiber
-	app := config.NewAuthApp(config.AppConfig.Server)
+	app := config.NewAuthApp(container)
 
 	// Routes
 	router.SetupRoutes(app, container)

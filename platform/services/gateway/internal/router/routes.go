@@ -2,47 +2,50 @@ package router
 
 import (
 	"github.com/gofiber/fiber/v2"
-	"github.com/zerodayz7/platform/pkg/router"
+	pkgRouter "github.com/zerodayz7/platform/pkg/router"
 	"github.com/zerodayz7/platform/pkg/router/health"
-	"github.com/zerodayz7/platform/services/gateway/config"
 	"github.com/zerodayz7/platform/services/gateway/internal/di"
 )
 
 func SetupRoutes(app *fiber.App, container *di.Container) {
+	// 1. Health Checks (wyciągamy dane z kontenera)
 	checker := &health.Checker{
 		Redis:   container.Redis.Client,
 		Service: "gateway",
-		Version: config.AppConfig.Server.AppVersion,
+		Version: container.Config.Server.AppVersion,
 		Upstreams: []string{
-			"http://auth-service:8082/health",
-			"http://citizen-docs:8083/health",
+			container.Services.Auth + "/health",
+			container.Services.Documents + "/health",
+			container.Services.Notify + "/health",
+			container.Services.Users + "/health",
 		},
 	}
 	health.RegisterRoutes(app, checker)
 
-	// --- PUBLICZNE PROXY ---
-	app.Post("/auth/login", ReverseProxy(container, "http://localhost:8082"))
-	app.Post("/auth/2fa-verify", ReverseProxy(container, "http://localhost:8082"))
-	app.Post("/auth/refresh", ReverseProxy(container, "http://localhost:8082"))
+	// --- AUTH SERVICE (Publiczne) ---
+	auth := container.Services.Auth
+	app.Post("/auth/login", ReverseProxy(container, auth))
+	app.Post("/auth/2fa-verify", ReverseProxy(container, auth))
+	app.Post("/auth/refresh", ReverseProxy(container, auth))
+	app.Post("/auth/reset/send", ReverseProxy(container, auth))
+	app.Post("/auth/reset/verify", ReverseProxy(container, auth))
+	app.Post("/auth/reset/final", ReverseProxy(container, auth))
 
-	// --- ZABEZPIECZONE PROXY ---
-	app.Post("/auth/register-device", ReverseProxySecure(container, "http://localhost:8082"))
-	app.Post("/auth/logout", ReverseProxySecure(container, "http://localhost:8082"))
+	// --- AUTH SERVICE (Zabezpieczone) ---
+	app.Post("/auth/register-device", ReverseProxySecure(container, auth))
+	app.Post("/auth/logout", ReverseProxySecure(container, auth))
+	app.Get("/user/sessions", ReverseProxySecure(container, auth))
+	app.Post("/user/sessions/terminate", ReverseProxySecure(container, auth))
 
-	// --- RESET HASŁA ---
-	app.Post("/auth/reset/send", ReverseProxy(container, "http://localhost:8082"))
-	app.Post("/auth/reset/verify", ReverseProxy(container, "http://localhost:8082"))
-	app.Post("/auth/reset/final", ReverseProxy(container, "http://localhost:8082"))
+	// --- NOTIFICATIONS (Zabezpieczone) ---
+	app.All("/notifications*", ReverseProxySecure(container, container.Services.Notify))
 
-	app.All("/notifications*", ReverseProxySecure(container, "http://localhost:8084"))
+	// --- DOCUMENTS (Zabezpieczone) ---
+	app.All("/documents/*", ReverseProxySecure(container, container.Services.Documents))
 
-	// SESJE
-	app.Get("/user/sessions", ReverseProxySecure(container, "http://localhost:8082"))
-	app.Post("/user/sessions/terminate", ReverseProxySecure(container, "http://localhost:8082"))
+	// --- USERS SERVICE ---
+	app.All("/users/*", ReverseProxySecure(container, container.Services.Users))
 
-	// DOKUMENTY I INNE
-	app.All("/documents/*", ReverseProxySecure(container, "http://localhost:8083"))
-	app.All("/users/*", ReverseProxy(container, "http://users-service:3000"))
-
-	router.SetupFallbackHandlers(app)
+	// Fallback (404 / 405)
+	pkgRouter.SetupFallbackHandlers(app)
 }

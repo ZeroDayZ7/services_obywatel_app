@@ -11,20 +11,8 @@ import (
 	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/redis/go-redis/v9"
 	"github.com/zerodayz7/platform/pkg/shared"
+	"github.com/zerodayz7/platform/pkg/types"
 )
-
-// PublicPathsRedis - ścieżki, które NIE wymagają weryfikacji Redis
-var PublicPathsRedis = []string{
-	"/auth/login",
-	"/auth/register",
-	"/auth/refresh",
-	"/auth/2fa-verify",
-	"/auth/reset/verify",
-	"/auth/reset/send",
-	"/auth/reset/final",
-	"/auth/2fa-resend",
-	"/health",
-}
 
 type UserSession struct {
 	UserID      string `json:"user_id"`
@@ -38,7 +26,7 @@ func AuthRedisMiddleware(rdb *redis.Client) fiber.Handler {
 		path := c.Path()
 
 		// 1. Skip public paths
-		if slices.Contains(PublicPathsRedis, path) {
+		if slices.Contains(types.PublicPaths, path) {
 			return c.Next()
 		}
 

@@ -207,6 +207,9 @@ func (l *Logger) parseArgs(args ...any) []zap.Field {
 	fields := []zap.Field{}
 	for _, arg := range args {
 		switch v := arg.(type) {
+		case error:
+			// AUTOMATYCZNIE zamieniamy każdy błąd na profesjonalne pole zap.Error
+			fields = append(fields, zap.Error(v))
 		case zap.Field:
 			fields = append(fields, v)
 		case map[string]any:
@@ -297,4 +300,16 @@ func (l *Logger) printValue(f zap.Field, indent int) {
 			fmt.Printf(" %v\n", f.Interface)
 		}
 	}
+}
+
+func (l *Logger) Fatal(msg string, args ...any) {
+	l.Logger.Fatal(msg, l.parseArgs(args...)...)
+}
+
+func (l *Logger) FatalMap(msg string, m map[string]any) {
+	l.Logger.Fatal(msg, toFields(m)...)
+}
+
+func (l *Logger) FatalObj(msg string, obj any) {
+	l.Logger.Fatal(msg, convertStructToFields(obj)...)
 }

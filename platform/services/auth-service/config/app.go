@@ -7,9 +7,12 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/requestid"
 	"github.com/zerodayz7/platform/pkg/server"
 	"github.com/zerodayz7/platform/pkg/shared"
+	"github.com/zerodayz7/platform/services/auth-service/internal/di"
+	"github.com/zerodayz7/platform/services/auth-service/internal/middleware"
 )
 
-func NewAuthApp(cfg ServerConfig) *fiber.App {
+func NewAuthApp(container *di.Container) *fiber.App {
+	cfg := container.Config.Server
 
 	cfgFiber := fiber.Config{
 		AppName:       cfg.AppName,
@@ -39,6 +42,7 @@ func NewAuthApp(cfg ServerConfig) *fiber.App {
 	app.Use(recover.New())
 	app.Use(shared.NewLimiter("global"))
 	app.Use(shared.RequestLoggerMiddleware())
+	app.Use(middleware.InternalAuthMiddleware(container.InternalSecret))
 
 	return app
 }

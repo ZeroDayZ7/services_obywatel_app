@@ -35,17 +35,9 @@ func main() {
 	}
 	defer redisClient.Close()
 
-	container := di.NewContainer(
-		redisClient,
-		config.AppConfig.Session.Prefix,
-		config.AppConfig.Session.TTL,
-		config.AppConfig.Proxy.RequestTimeout,
-		config.AppConfig.Proxy.MaxIdleConns,
-		config.AppConfig.Proxy.MaxIdleConnsPerHost,
-	)
+	container := di.NewContainer(redisClient, &config.AppConfig)
 
-	// 5. Fiber app (config importuje di - to jest ok)
-	app := config.NewGatewayApp(config.AppConfig.Server, container)
+	app := config.NewGatewayApp(container)
 
 	// Routes
 	router.SetupRoutes(app, container)
@@ -57,6 +49,7 @@ func main() {
 	address := "0.0.0.0:" + config.AppConfig.Server.Port
 	log.Info("Server started", map[string]any{
 		"app":     config.AppConfig.Server.AppName,
+		"version": config.AppConfig.Server.AppVersion,
 		"address": address,
 	})
 	// Start serwera

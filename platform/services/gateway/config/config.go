@@ -8,117 +8,22 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/zerodayz7/platform/pkg/shared"
+	"github.com/zerodayz7/platform/pkg/types"
+	pkgConfig "github.com/zerodayz7/platform/pkg/viper"
 )
 
-type OTELConfig struct {
-	Enabled     bool
-	Endpoint    string
-	ServiceName string
-}
-
-type ProxyConfig struct {
-	MaxIdleConns        int
-	IdleConnTimeout     time.Duration
-	MaxIdleConnsPerHost int
-	RequestTimeout      time.Duration
-}
-
-type SessionConfig struct {
-	Prefix string
-	TTL    time.Duration
-}
-
-type ServerConfig struct {
-	AppName       string
-	Port          string
-	BodyLimitMB   int
-	Env           string
-	AppVersion    string
-	ServerHeader  string
-	Prefork       bool
-	CaseSensitive bool
-	StrictRouting bool
-	IdleTimeout   time.Duration
-	ReadTimeout   time.Duration
-	WriteTimeout  time.Duration
-}
-
-type RedisConfig struct {
-	Host     string
-	Port     string
-	Password string
-	DB       int
-}
-
-type JWTConfig struct {
-	AccessSecret  string
-	RefreshSecret string
-	AccessTTL     time.Duration
-	RefreshTTL    time.Duration
-}
-
-type Config struct {
-	Server    ServerConfig
-	Redis     RedisConfig
-	Session   SessionConfig
-	Proxy     ProxyConfig
-	CORSAllow string
-	Shutdown  time.Duration
-	JWT       JWTConfig
-	OTEL      OTELConfig
-}
-
-var AppConfig Config
-var Store *session.Store
+var (
+	AppConfig types.Config
+	Store     *session.Store
+)
 
 func LoadConfigGlobal() error {
 	log := shared.GetLogger()
 
+	pkgConfig.SetSharedDefaults("gateway")
+
 	viper.SetConfigFile(".env")
 	viper.AutomaticEnv()
-
-	// Server defaults
-	viper.SetDefault("APP_NAME", "http-server")
-	viper.SetDefault("PORT", "8081")
-	viper.SetDefault("BODY_LIMIT_MB", 2)
-	viper.SetDefault("APP_VERSION", "2.1.1")
-	viper.SetDefault("ENV", "development")
-	viper.SetDefault("SERVER_HEADER", "ZeroDayZ7")
-	viper.SetDefault("PREFORK", false)
-	viper.SetDefault("CASE_SENSITIVE", true)
-	viper.SetDefault("STRICT_ROUTING", false)
-	viper.SetDefault("IDLE_TIMEOUT_SEC", 30)
-	viper.SetDefault("READ_TIMEOUT_SEC", 15)
-	viper.SetDefault("WRITE_TIMEOUT_SEC", 15)
-
-	// Redis defaults
-	viper.SetDefault("REDIS_HOST", "127.0.0.1")
-	viper.SetDefault("REDIS_PORT", "6379")
-	viper.SetDefault("REDIS_PASSWORD", "")
-	viper.SetDefault("REDIS_DB", 0)
-
-	// Shutdown
-	viper.SetDefault("SHUTDOWN_TIMEOUT_SEC", 5)
-
-	// JWT
-	viper.SetDefault("JWT_ACCESS_SECRET", "super_access_secret_123")
-	viper.SetDefault("JWT_REFRESH_SECRET", "super_refresh_secret_123")
-	viper.SetDefault("JWT_ACCESS_TTL_MIN", 15)
-	viper.SetDefault("JWT_REFRESH_TTL_DAYS", 7)
-
-	viper.SetDefault("PROXY_MAX_IDLE_CONNS", 100)
-	viper.SetDefault("PROXY_IDLE_CONN_TIMEOUT_SEC", 90)
-	viper.SetDefault("PROXY_MAX_IDLE_CONNS_PER_HOST", 20)
-	viper.SetDefault("PROXY_REQUEST_TIMEOUT_SEC", 30)
-
-	// Session defaults
-	viper.SetDefault("REDIS_SESSION_PREFIX", "session:")
-	viper.SetDefault("REDIS_SESSION_TTL_MIN", 60)
-
-	//OTL
-	viper.SetDefault("OTEL_ENABLED", true)
-	viper.SetDefault("OTEL_ENDPOINT", "http://localhost:4318/v1/traces")
-	viper.SetDefault("OTEL_SERVICE_NAME", "gateway")
 
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
@@ -127,8 +32,8 @@ func LoadConfigGlobal() error {
 		}
 	}
 
-	AppConfig = Config{
-		Server: ServerConfig{
+	AppConfig = types.Config{
+		Server: types.ServerConfig{
 			AppName:       viper.GetString("APP_NAME"),
 			Port:          viper.GetString("PORT"),
 			BodyLimitMB:   viper.GetInt("BODY_LIMIT_MB"),
@@ -142,34 +47,48 @@ func LoadConfigGlobal() error {
 			ReadTimeout:   time.Duration(viper.GetInt("READ_TIMEOUT_SEC")) * time.Second,
 			WriteTimeout:  time.Duration(viper.GetInt("WRITE_TIMEOUT_SEC")) * time.Second,
 		},
-		Redis: RedisConfig{
+		Internal: types.InternalSecurityConfig{
+			HMACSecret: viper.GetString("INTERNAL_HMAC_SECRET"),
+		},
+		Redis: types.RedisConfig{
 			Host:     viper.GetString("REDIS_HOST"),
 			Port:     viper.GetString("REDIS_PORT"),
 			Password: viper.GetString("REDIS_PASSWORD"),
 			DB:       viper.GetInt("REDIS_DB"),
 		},
-		Session: SessionConfig{
+		Session: types.SessionConfig{
 			Prefix: viper.GetString("REDIS_SESSION_PREFIX"),
 			TTL:    time.Duration(viper.GetInt("REDIS_SESSION_TTL_MIN")) * time.Minute,
 		},
 		CORSAllow: viper.GetString("CORS_ALLOW_ORIGINS"),
 		Shutdown:  time.Duration(viper.GetInt("SHUTDOWN_TIMEOUT_SEC")) * time.Second,
-		JWT: JWTConfig{
+		JWT: types.JWTConfig{
 			AccessSecret:  viper.GetString("JWT_ACCESS_SECRET"),
 			RefreshSecret: viper.GetString("JWT_REFRESH_SECRET"),
 		},
 
-		Proxy: ProxyConfig{
+		Proxy: types.ProxyConfig{
 			MaxIdleConns:        viper.GetInt("PROXY_MAX_IDLE_CONNS"),
 			IdleConnTimeout:     time.Duration(viper.GetInt("PROXY_IDLE_CONN_TIMEOUT_SEC")) * time.Second,
 			MaxIdleConnsPerHost: viper.GetInt("PROXY_MAX_IDLE_CONNS_PER_HOST"),
 			RequestTimeout:      time.Duration(viper.GetInt("PROXY_REQUEST_TIMEOUT_SEC")) * time.Second,
 		},
-		OTEL: OTELConfig{
+		OTEL: types.OTELConfig{
 			Enabled:     viper.GetBool("OTEL_ENABLED"),
 			Endpoint:    viper.GetString("OTEL_ENDPOINT"),
 			ServiceName: viper.GetString("OTEL_SERVICE_NAME"),
 		},
+
+		Services: types.ServicesConfig{
+			Auth:      viper.GetString("SERVICE_AUTH_URL"),
+			Documents: viper.GetString("SERVICE_DOCS_URL"),
+			Notify:    viper.GetString("SERVICE_NOTIFY_URL"),
+			Users:     viper.GetString("SERVICE_USERS_URL"),
+		},
+	}
+
+	if AppConfig.Internal.HMACSecret == "" {
+		return fmt.Errorf("INTERNAL_HMAC_SECRET is required")
 	}
 
 	log.Info("Configuration loaded")
