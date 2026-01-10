@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gofiber/fiber/v2"
+	fiberRedis "github.com/gofiber/storage/redis/v3"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -45,6 +47,10 @@ func (c *Client) Close() error {
 	return c.Client.Close()
 }
 
+func (c *Client) AsFiberStorage() fiber.Storage {
+	return fiberRedis.NewFromConnection(c.Client)
+}
+
 // ----------------------------
 // STREAM BATCH METHODS
 // ----------------------------
@@ -56,7 +62,6 @@ func (c *Client) ReadStreamBatch(
 	maxCount int,
 	block time.Duration,
 ) ([]redis.XMessage, error) {
-
 	args := &redis.XReadGroupArgs{
 		Group:    group,
 		Consumer: consumer,

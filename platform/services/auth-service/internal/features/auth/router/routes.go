@@ -10,7 +10,7 @@ import (
 
 func SetupAuthRoutes(app *fiber.App, h *handler.AuthHandler, resetHandler *handler.ResetHandler) {
 	auth := app.Group("/auth")
-	auth.Use(shared.NewLimiter("auth"))
+	auth.Use(shared.NewLimiter("auth", nil))
 
 	// ==========================
 	// LOGIN / REGISTER / JWT
@@ -53,7 +53,7 @@ func SetupAuthRoutes(app *fiber.App, h *handler.AuthHandler, resetHandler *handl
 	// RESET PASSWORD
 	// ==========================
 	reset := auth.Group("/reset")
-	reset.Use(shared.NewLimiter("reset"))
+	reset.Use(shared.NewLimiter("reset", nil))
 
 	reset.Post("/send",
 		middleware.ValidateBody[validator.ResetPasswordRequest](),

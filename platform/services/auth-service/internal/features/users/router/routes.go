@@ -11,7 +11,7 @@ func SetupUserRoutes(app *fiber.App, h *handler.UserHandler) {
 	user := app.Group("/user")
 
 	// Middleware limitujący requesty
-	user.Use(shared.NewLimiter("users"))
+	user.Use(shared.NewLimiter("users", nil))
 
 	// --- SESJE URZĄDZEŃ ---
 	// Pobieranie aktywnych sesji (urządzeń)

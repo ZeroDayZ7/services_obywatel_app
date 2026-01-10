@@ -39,7 +39,7 @@ func NewAuditApp(container *di.Container) *fiber.App {
 	// 2. Rejestracja globalnych middleware.
 	app.Use(requestid.New())
 	app.Use(recover.New())
-	app.Use(shared.NewLimiter("global"))
+	app.Use(shared.NewLimiter("global", nil))
 	app.Use(shared.RequestLoggerMiddleware())
 
 	return app

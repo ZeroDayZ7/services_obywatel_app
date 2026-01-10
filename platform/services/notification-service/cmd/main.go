@@ -6,6 +6,7 @@ import (
 	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/server"
 	"github.com/zerodayz7/platform/pkg/shared"
+	"github.com/zerodayz7/platform/pkg/utils"
 	"github.com/zerodayz7/platform/services/notification-service/config"
 	"github.com/zerodayz7/platform/services/notification-service/internal/di"
 	"github.com/zerodayz7/platform/services/notification-service/internal/router"
@@ -43,7 +44,7 @@ func main() {
 	container := di.NewContainer(db, redisClient, log, &config.AppConfig)
 
 	// Start Notification Worker w tle
-	go container.Workers.NotificationWorker.Start()
+	utils.SafeGo(log, container.Workers.NotificationWorker.Start)
 
 	// Fiber App
 	app := config.NewNotificationApp(container)

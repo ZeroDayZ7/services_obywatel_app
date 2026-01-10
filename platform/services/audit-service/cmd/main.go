@@ -5,45 +5,42 @@ import (
 
 	"github.com/zerodayz7/platform/pkg/server"
 	"github.com/zerodayz7/platform/pkg/shared"
+	"github.com/zerodayz7/platform/pkg/utils"
 	"github.com/zerodayz7/platform/services/audit-service/config"
 	"github.com/zerodayz7/platform/services/audit-service/internal/di"
 	"github.com/zerodayz7/platform/services/audit-service/internal/router"
 )
 
 func main() {
-	// 1. Ładowanie konfiguracji globalnej z pkg/viper.
+	// Inicjalizacja konfiguracji
 	if err := config.LoadConfigGlobal(); err != nil {
 		panic(fmt.Sprintf("Failed to load config: %v", err))
 	}
 
-	// 2. Inicjalizacja loggera dla środowiska zdefiniowanego w configu.
+	// Inicjalizacja loggera
 	log := shared.InitLogger(config.AppConfig.Server.Env)
 
-	// 3. Nawiązanie połączenia z bazą danych i rejestracja funkcji zamykającej.
+	// Inicjalizacja bazy danych
 	db, closeDB := config.MustInitDB(config.AppConfig.Database)
 	defer closeDB()
 
-	// 4. Budowa kontenera zależności DI.
+	// Inicjalizacja kontenera DI
 	container := di.NewContainer(db, nil, log, &config.AppConfig)
 
-	// 5. Instancja aplikacji Fiber z wstrzykniętym kontenerem.
-	app := config.NewAuditApp(container)
+	// Bezpieczne uruchomienie workera w tle
+	utils.SafeGo(log, container.AuditWorker.Start)
 
-	// 6. Konfiguracja tras routingu przy użyciu ustandaryzowanego SetupRoutes.
+	// Inicjalizacja aplikacji Fiber i routing
+	app := config.NewAuditApp(container)
 	router.SetupRoutes(app, container)
 
-	// 7. Obsługa bezpiecznego wyłączania serwera (poprawiona kolejność argumentów: timeout, cleanups).
-	server.SetupGracefulShutdown(
-		app,
-		config.AppConfig.Shutdown, // time.Duration
-		closeDB,
-	)
+	// Konfiguracja Graceful Shutdown
+	server.SetupGracefulShutdown(app, config.AppConfig.Shutdown, closeDB)
 
-	// 8. Uruchomienie nasłuchiwania serwera z rozszerzonym logowaniem wersji.
+	// Uruchomienie serwera
 	address := ":" + config.AppConfig.Server.Port
 	log.Info("Service started", map[string]any{
 		"app":     config.AppConfig.Server.AppName,
-		"version": config.AppConfig.Server.AppVersion,
 		"address": address,
 		"env":     config.AppConfig.Server.Env,
 	})

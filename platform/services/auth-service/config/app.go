@@ -40,7 +40,7 @@ func NewAuthApp(container *di.Container) *fiber.App {
 	app.Use(otelfiber.Middleware())
 	app.Use(requestid.New())
 	app.Use(recover.New())
-	app.Use(shared.NewLimiter("global"))
+	app.Use(shared.NewLimiter("global", nil))
 	app.Use(shared.RequestLoggerMiddleware())
 	app.Use(middleware.InternalAuthMiddleware(container.InternalSecret))
 

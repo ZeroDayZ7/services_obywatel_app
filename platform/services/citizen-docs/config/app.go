@@ -37,7 +37,7 @@ func NewDocsApp(container *di.Container) *fiber.App {
 	app.Use(recover.New())
 
 	// Limiter i Logger z pkg/shared
-	app.Use(shared.NewLimiter("global"))
+	app.Use(shared.NewLimiter("global", nil))
 	app.Use(shared.RequestLoggerMiddleware())
 
 	// Jeśli potrzebujesz autoryzacji wewnętrznej (HMAC) jak w auth-service:

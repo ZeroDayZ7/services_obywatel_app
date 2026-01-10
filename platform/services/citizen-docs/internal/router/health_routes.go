@@ -10,7 +10,7 @@ import (
 func SetupHealthRoutes(app *fiber.App) {
 	health := app.Group("/health")
 
-	health.Use(shared.NewLimiter("health"))
+	health.Use(shared.NewLimiter("health", nil))
 
 	// GET /health
 	health.Get("/", func(c *fiber.Ctx) error {

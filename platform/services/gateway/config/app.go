@@ -45,7 +45,7 @@ func NewGatewayApp(container *di.Container) *fiber.App {
 	app.Use(recover.New())
 	app.Use(helmet.New(HelmetConfig()))
 	app.Use(cors.New(CorsConfig()))
-	app.Use(shared.NewLimiter("global"))
+	app.Use(shared.NewLimiter("global", container.Redis.AsFiberStorage()))
 	app.Use(compress.New(CompressConfig()))
 	app.Use(shared.RequestLoggerMiddleware())
 	app.Use(JWTMiddlewareWithExclusions())
