@@ -8,22 +8,24 @@ import (
 )
 
 func SetupRoutes(app *fiber.App, container *di.Container) {
-	// 1. Health Checks (wyciągamy dane z kontenera)
+	services := container.Config.Services
+
+	// 1. Health Checks
 	checker := &health.Checker{
 		Redis:   container.Redis.Client,
 		Service: "gateway",
 		Version: container.Config.Server.AppVersion,
 		Upstreams: []string{
-			container.Services.Auth + "/health",
-			container.Services.Documents + "/health",
-			container.Services.Notify + "/health",
-			container.Services.Users + "/health",
+			services.Auth + "/health",
+			services.Documents + "/health",
+			services.Notify + "/health",
+			services.Users + "/health",
 		},
 	}
 	health.RegisterRoutes(app, checker)
 
 	// --- AUTH SERVICE (Publiczne) ---
-	auth := container.Services.Auth
+	auth := services.Auth
 	app.Post("/auth/login", ReverseProxy(container, auth))
 	app.Post("/auth/2fa-verify", ReverseProxy(container, auth))
 	app.Post("/auth/refresh", ReverseProxy(container, auth))
@@ -38,13 +40,16 @@ func SetupRoutes(app *fiber.App, container *di.Container) {
 	app.Post("/user/sessions/terminate", ReverseProxySecure(container, auth))
 
 	// --- NOTIFICATIONS (Zabezpieczone) ---
-	app.All("/notifications*", ReverseProxySecure(container, container.Services.Notify))
+	notify := services.Notify
+	app.All("/notifications*", ReverseProxySecure(container, notify))
 
 	// --- DOCUMENTS (Zabezpieczone) ---
-	app.All("/documents/*", ReverseProxySecure(container, container.Services.Documents))
+	documents := services.Documents
+	app.All("/documents/*", ReverseProxySecure(container, documents))
 
 	// --- USERS SERVICE ---
-	app.All("/users/*", ReverseProxySecure(container, container.Services.Users))
+	users := services.Users
+	app.All("/users/*", ReverseProxySecure(container, users))
 
 	// Fallback (404 / 405)
 	pkgRouter.SetupFallbackHandlers(app)

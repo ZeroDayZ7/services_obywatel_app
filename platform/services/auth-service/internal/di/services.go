@@ -1,7 +1,7 @@
 package di
 
 import (
-	"github.com/zerodayz7/platform/pkg/types"
+	"github.com/zerodayz7/platform/pkg/viper"
 	authService "github.com/zerodayz7/platform/services/auth-service/internal/features/auth/service"
 	userService "github.com/zerodayz7/platform/services/auth-service/internal/features/users/service"
 )
@@ -11,7 +11,7 @@ type Services struct {
 	UserService *userService.UserService
 }
 
-func NewServices(repos *Repositories, cfg *types.Config) *Services {
+func NewServices(repos *Repositories, cfg *viper.Config) *Services {
 	return &Services{
 		AuthService: authService.NewAuthService(
 			repos.UserRepo,

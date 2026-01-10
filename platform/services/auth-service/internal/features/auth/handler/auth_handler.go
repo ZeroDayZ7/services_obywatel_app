@@ -14,8 +14,8 @@ import (
 	"github.com/zerodayz7/platform/pkg/events"
 	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/shared"
-	"github.com/zerodayz7/platform/pkg/types"
 	"github.com/zerodayz7/platform/pkg/utils"
+	"github.com/zerodayz7/platform/pkg/viper"
 	"github.com/zerodayz7/platform/services/auth-service/internal/features/auth/http"
 	service "github.com/zerodayz7/platform/services/auth-service/internal/features/auth/service"
 	"github.com/zerodayz7/platform/services/auth-service/internal/validator"
@@ -25,10 +25,10 @@ import (
 type AuthHandler struct {
 	authService *service.AuthService
 	cache       *redis.Cache
-	cfg         *types.Config
+	cfg         *viper.Config
 }
 
-func NewAuthHandler(authService *service.AuthService, cache *redis.Cache, cfg *types.Config) *AuthHandler {
+func NewAuthHandler(authService *service.AuthService, cache *redis.Cache, cfg *viper.Config) *AuthHandler {
 	return &AuthHandler{
 		authService: authService,
 		cache:       cache,

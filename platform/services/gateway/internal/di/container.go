@@ -2,10 +2,9 @@ package di
 
 import (
 	"net/http"
-	"time"
 
 	"github.com/zerodayz7/platform/pkg/redis"
-	"github.com/zerodayz7/platform/pkg/types"
+	"github.com/zerodayz7/platform/pkg/viper"
 )
 
 type Container struct {
@@ -13,11 +12,10 @@ type Container struct {
 	Cache          *redis.Cache
 	HTTPClient     *http.Client
 	InternalSecret []byte
-	Services       types.ServicesConfig
-	Config         *types.Config
+	Config         *viper.Config
 }
 
-func NewContainer(redisClient *redis.Client, cfg *types.Config) *Container {
+func NewContainer(redisClient *redis.Client, cfg *viper.Config) *Container {
 	cache := redis.NewCache(redisClient, cfg.Session.Prefix, cfg.Session.TTL)
 
 	return &Container{
@@ -28,11 +26,10 @@ func NewContainer(redisClient *redis.Client, cfg *types.Config) *Container {
 			Transport: &http.Transport{
 				MaxIdleConns:        cfg.Proxy.MaxIdleConns,
 				MaxIdleConnsPerHost: cfg.Proxy.MaxIdleConnsPerHost,
-				IdleConnTimeout:     90 * time.Second,
+				IdleConnTimeout:     cfg.Proxy.IdleConnTimeout,
 			},
 		},
 		InternalSecret: []byte(cfg.Internal.HMACSecret),
-		Services:       cfg.Services,
 		Config:         cfg,
 	}
 }

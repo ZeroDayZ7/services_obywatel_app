@@ -5,13 +5,13 @@ import (
 	"time"
 
 	"github.com/zerodayz7/platform/pkg/shared"
-	"github.com/zerodayz7/platform/pkg/types"
+	"github.com/zerodayz7/platform/pkg/viper"
 	"github.com/zerodayz7/platform/services/auth-service/internal/features/auth/model"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
-func MustInitDB(cfg types.DBConfig) (*gorm.DB, func()) {
+func MustInitDB(cfg viper.DBConfig) (*gorm.DB, func()) {
 	log := shared.GetLogger()
 
 	db, err := gorm.Open(postgres.Open(cfg.DSN), &gorm.Config{})

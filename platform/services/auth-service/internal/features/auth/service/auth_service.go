@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/pkg/errors"
-	"github.com/zerodayz7/platform/pkg/types"
+	"github.com/zerodayz7/platform/pkg/viper"
 	"github.com/zerodayz7/platform/services/auth-service/internal/features/auth/model"
 	authModel "github.com/zerodayz7/platform/services/auth-service/internal/features/auth/model"
 	authRepo "github.com/zerodayz7/platform/services/auth-service/internal/features/auth/repository"
@@ -23,13 +23,13 @@ import (
 type AuthService struct {
 	repo        userRepo.UserRepository
 	refreshRepo authRepo.RefreshTokenRepository
-	cfg         *types.Config
+	cfg         *viper.Config
 }
 
 func NewAuthService(
 	repo userRepo.UserRepository,
 	refreshRepo authRepo.RefreshTokenRepository,
-	cfg *types.Config,
+	cfg *viper.Config,
 ) *AuthService {
 	return &AuthService{
 		repo:        repo,

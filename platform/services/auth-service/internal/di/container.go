@@ -2,7 +2,7 @@ package di
 
 import (
 	"github.com/zerodayz7/platform/pkg/redis"
-	"github.com/zerodayz7/platform/pkg/types"
+	"github.com/zerodayz7/platform/pkg/viper"
 	"gorm.io/gorm"
 )
 
@@ -13,10 +13,10 @@ type Container struct {
 	Redis          *redis.Client
 	Cache          *redis.Cache
 	InternalSecret []byte
-	Config         *types.Config
+	Config         *viper.Config
 }
 
-func NewContainer(db *gorm.DB, redisClient *redis.Client, cfg *types.Config) *Container {
+func NewContainer(db *gorm.DB, redisClient *redis.Client, cfg *viper.Config) *Container {
 	repos := NewRepositories(db)
 	services := NewServices(repos, cfg)
 
