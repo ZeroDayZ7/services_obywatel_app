@@ -6,29 +6,42 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/requestid"
 	"github.com/zerodayz7/platform/pkg/server"
 	"github.com/zerodayz7/platform/pkg/shared"
+	"github.com/zerodayz7/platform/services/citizen-docs/internal/di"
 )
 
-// NewDocsApp tworzy lekką instancję Fiber dla serwisu Docs / Citizen
-func NewDocsApp() *fiber.App {
-	cfg := AppConfig.Server
+// NewDocsApp tworzy instancję Fiber przyjmując kontener DI
+func NewDocsApp(container *di.Container) *fiber.App {
+	// Pobieramy konfigurację serwera z kontenera
+	cfg := container.Config.Server
 
 	app := fiber.New(fiber.Config{
-		ServerHeader:          cfg.ServerHeader,
-		BodyLimit:             cfg.BodyLimitMB * 1024 * 1024,
-		ReadTimeout:           cfg.ReadTimeout,
-		WriteTimeout:          cfg.WriteTimeout,
-		IdleTimeout:           cfg.IdleTimeout,
-		DisableStartupMessage: true,
-		EnableIPValidation:    true,
-		TrustedProxies:        []string{"127.0.0.1", "::1"},
-		ErrorHandler:          server.ErrorHandler(),
+		AppName:                 cfg.AppName,
+		ServerHeader:            cfg.ServerHeader,
+		Prefork:                 cfg.Prefork,
+		CaseSensitive:           cfg.CaseSensitive,
+		StrictRouting:           cfg.StrictRouting,
+		BodyLimit:               cfg.BodyLimitMB * 1024 * 1024,
+		ReadTimeout:             cfg.ReadTimeout,
+		WriteTimeout:            cfg.WriteTimeout,
+		IdleTimeout:             cfg.IdleTimeout,
+		DisableStartupMessage:   true,
+		EnableIPValidation:      true,
+		ProxyHeader:             fiber.HeaderXForwardedFor,
+		EnableTrustedProxyCheck: true,
+		TrustedProxies:          []string{"127.0.0.1", "::1"},
+		ErrorHandler:            server.ErrorHandler(),
 	})
 
 	// Middleware podstawowe
 	app.Use(requestid.New())
 	app.Use(recover.New())
+
+	// Limiter i Logger z pkg/shared
 	app.Use(shared.NewLimiter("global"))
 	app.Use(shared.RequestLoggerMiddleware())
+
+	// Jeśli potrzebujesz autoryzacji wewnętrznej (HMAC) jak w auth-service:
+	// app.Use(middleware.InternalAuthMiddleware(container.Config.Internal.HMACSecret))
 
 	return app
 }

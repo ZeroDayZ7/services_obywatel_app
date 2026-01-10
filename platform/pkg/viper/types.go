@@ -10,8 +10,14 @@ type ServicesConfig struct {
 }
 
 type InternalSecurityConfig struct {
-	// HMAC musi mieć co najmniej 32 znaki dla realnego bezpieczeństwa
+	// HMAC musi mieć co najmniej 32 znaki dla realnego bezpieczeństwa (używany do podpisów)
 	HMACSecret string `mapstructure:"INTERNAL_HMAC_SECRET" validate:"required,min=32"`
+
+	// EncryptionKey musi mieć dokładnie 32 znaki dla AES-256 (szyfrowanie danych PII)
+	EncryptionKey string `mapstructure:"INTERNAL_ENCRYPTION_KEY" validate:"required,len=32"`
+
+	// HashSalt używany do "solenia" hashy PESEL/Email (zapobiega rainbow tables)
+	HashSalt string `mapstructure:"INTERNAL_HASH_SALT" validate:"required,min=16"`
 }
 
 type OTELConfig struct {

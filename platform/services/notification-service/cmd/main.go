@@ -49,7 +49,7 @@ func main() {
 	app := config.NewNotificationApp(container)
 
 	// Routes
-	router.SetupRoutes(app, container.Handlers.NotificationHandler)
+	router.SetupRoutes(app, container)
 
 	// Graceful Shutdown
 	server.SetupGracefulShutdown(

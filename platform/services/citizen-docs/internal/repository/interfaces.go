@@ -1,8 +1,21 @@
+// platform/services/citizen-docs/internal/repository/interfaces.go
+
 package repository
 
-import "github.com/zerodayz7/platform/services/citizen-docs/internal/model"
+import (
+	"context"
+
+	"github.com/google/uuid"
+	"github.com/zerodayz7/platform/services/citizen-docs/internal/model"
+)
+
+type CitizenRepo interface {
+	Create(ctx context.Context, profile *model.CitizenProfile) error
+	GetByUserID(ctx context.Context, userID uuid.UUID) (*model.CitizenProfile, error)
+	GetByPeselHash(ctx context.Context, hash string) (*model.CitizenProfile, error)
+}
 
 type UserDocumentRepo interface {
-	Create(doc *model.UserDocument) error
-	GetByUserID(userID uint) ([]model.UserDocument, error)
+	Create(ctx context.Context, doc *model.UserDocument) error
+	GetByProfileID(ctx context.Context, profileID uint) ([]model.UserDocument, error)
 }

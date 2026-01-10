@@ -1,29 +1,26 @@
 package repository
 
 import (
-	"github.com/zerodayz7/platform/services/citizen-docs/internal/model"
+	"context"
 
+	"github.com/zerodayz7/platform/services/citizen-docs/internal/model"
 	"gorm.io/gorm"
 )
 
-// UserDocumentRepository handles DB operations for user documents
-type UserDocumentRepository struct {
+type userDocumentRepository struct {
 	db *gorm.DB
 }
 
-// NewUserDocumentRepository creates a new repository instance
-func NewUserDocumentRepository(db *gorm.DB) *UserDocumentRepository {
-	return &UserDocumentRepository{db: db}
+func NewUserDocumentRepository(db *gorm.DB) UserDocumentRepo {
+	return &userDocumentRepository{db: db}
 }
 
-// Create saves a new user document
-func (r *UserDocumentRepository) Create(doc *model.UserDocument) error {
-	return r.db.Create(doc).Error
+func (r *userDocumentRepository) Create(ctx context.Context, doc *model.UserDocument) error {
+	return r.db.WithContext(ctx).Create(doc).Error
 }
 
-// GetByUserID retrieves all documents for a given user
-func (r *UserDocumentRepository) GetByUserID(userID uint) ([]model.UserDocument, error) {
+func (r *userDocumentRepository) GetByProfileID(ctx context.Context, profileID uint) ([]model.UserDocument, error) {
 	var docs []model.UserDocument
-	err := r.db.Where("user_id = ?", userID).Find(&docs).Error
+	err := r.db.WithContext(ctx).Where("profile_id = ?", profileID).Find(&docs).Error
 	return docs, err
 }
