@@ -2,33 +2,44 @@ package router
 
 import (
 	"github.com/gofiber/fiber/v2"
+	pkgRouter "github.com/zerodayz7/platform/pkg/router"
+	"github.com/zerodayz7/platform/pkg/router/health"
 	"github.com/zerodayz7/platform/pkg/shared"
-	"github.com/zerodayz7/platform/services/audit-service/internal/audit"
+	"github.com/zerodayz7/platform/services/audit-service/internal/di"
 )
 
-// SetupAuditRoutes konfiguruje trasy dla zarządzania logami (głównie dla Admina)
-func SetupAuditRoutes(app *fiber.App, auditH *audit.AuditHandler) {
-	// Tworzymy grupę audit
+// SetupRoutes konfiguruje trasy dla serwisu audytu (przeznaczone głównie dla administracji).
+func SetupRoutes(app *fiber.App, container *di.Container) {
+	// 1. Inicjalizacja handlera z kontenera DI.
+	h := container.AuditHandler
+
+	// 2. Automatyczne Health Checks (spójne z resztą platformy).
+	checker := &health.Checker{
+		Service: "audit-service",
+		Version: container.Config.Server.AppVersion,
+	}
+	health.RegisterRoutes(app, checker)
+
+	// 3. Grupa audit z dedykowanym limiterem.
 	auditGroup := app.Group("/audit")
+	{
+		// Nałożenie limitera z pkg/shared.
+		auditGroup.Use(shared.NewLimiter("audit"))
 
-	// Nakładamy limiter z Twojego pkg/shared
-	auditGroup.Use(shared.NewLimiter("audit"))
+		// --- Odczyt logów ---
+		// Pobieranie listy wszystkich logów (z paginacją).
+		auditGroup.Get("/", h.ListLogs)
 
-	// --- Odczyt logów (Wymagany klucz publiczny admina do deszyfrowania po stronie klienta) ---
+		// Pobieranie logów konkretnego użytkownika.
+		auditGroup.Get("/user/:id", h.ListUserLogs)
 
-	// Pobieranie listy wszystkich logów (z paginacją)
-	// GET /audit
-	auditGroup.Get("/", auditH.ListLogs)
+		// Pobieranie szczegółów jednego logu (zaszyfrowane dane binarne).
+		auditGroup.Get("/:id", h.GetLogDetails)
 
-	// Pobieranie logów konkretnego użytkownika
-	// GET /audit/user/:id
-	auditGroup.Get("/user/:id", auditH.ListUserLogs)
+		// Filtrowanie po typie akcji (np. "login", "document_download").
+		auditGroup.Get("/action/:action", h.ListLogsByAction)
+	}
 
-	// Pobieranie szczegółów jednego logu (zwraca binarne zaszyfrowane pola)
-	// GET /audit/:id
-	auditGroup.Get("/:id", auditH.GetLogDetails)
-
-	// Filtrowanie po akcji (np. "login", "payment_failed")
-	// GET /audit/action/:action
-	auditGroup.Get("/action/:action", auditH.ListLogsByAction)
+	// 4. Uniwersalne Fallback Handlery (404, favicon itp.) z pkg.
+	pkgRouter.SetupFallbackHandlers(app)
 }

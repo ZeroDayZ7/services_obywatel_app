@@ -6,9 +6,13 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/requestid"
 	"github.com/zerodayz7/platform/pkg/server"
 	"github.com/zerodayz7/platform/pkg/shared"
+	"github.com/zerodayz7/platform/services/audit-service/internal/di"
 )
 
-func NewAuditApp(cfg ServerConfig) *fiber.App {
+// NewAuditApp tworzy instancję Fiber App wstrzykując kontener DI.
+func NewAuditApp(container *di.Container) *fiber.App {
+	// 1. Pobranie konfiguracji serwera bezpośrednio z kontenera.
+	cfg := container.Config.Server
 
 	cfgFiber := fiber.Config{
 		AppName:       cfg.AppName,
@@ -32,7 +36,7 @@ func NewAuditApp(cfg ServerConfig) *fiber.App {
 
 	app := fiber.New(cfgFiber)
 
-	// Middleware
+	// 2. Rejestracja globalnych middleware.
 	app.Use(requestid.New())
 	app.Use(recover.New())
 	app.Use(shared.NewLimiter("global"))

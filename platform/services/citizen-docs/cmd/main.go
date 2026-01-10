@@ -43,10 +43,11 @@ func main() {
 
 	// 8. Uruchomienie serwera
 	address := ":" + config.AppConfig.Server.Port
-	log.Info("Citizen Docs Service started", map[string]any{
+	log.Info("Service started", map[string]any{
 		"app":     config.AppConfig.Server.AppName,
 		"version": config.AppConfig.Server.AppVersion,
 		"address": address,
+		"env":     config.AppConfig.Server.Env,
 	})
 
 	if err := app.Listen(address); err != nil {

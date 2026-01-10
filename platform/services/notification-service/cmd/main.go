@@ -61,9 +61,11 @@ func main() {
 	// Start Server
 
 	address := "0.0.0.0:" + config.AppConfig.Server.Port
-	log.Info("Server started", map[string]any{
+	log.Info("Service started", map[string]any{
 		"app":     config.AppConfig.Server.AppName,
+		"version": config.AppConfig.Server.AppVersion,
 		"address": address,
+		"env":     config.AppConfig.Server.Env,
 	})
 	if err := app.Listen(address); err != nil {
 		log.ErrorObj("Failed to start server", err)
