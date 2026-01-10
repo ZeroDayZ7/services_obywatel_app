@@ -15,7 +15,7 @@
       "**/bin": true,
       "**/LICENSE": true,
       "**/go.sum": true,
-      "**/go.mod": true,
+      // "**/go.mod": true,
       "**/go.work.sum": true,
       "**/.gitignore": true,
       "**/README.md": true,

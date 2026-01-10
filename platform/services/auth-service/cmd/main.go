@@ -1,7 +1,7 @@
 package main
 
 import (
-	"os"
+	"fmt"
 
 	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/server"
@@ -13,43 +13,46 @@ import (
 )
 
 func main() {
-	// Inicjalizacja loggera
-	log := shared.InitLogger(os.Getenv("ENV"))
-
-	// Config
+	// 1. Config
 	if err := config.LoadConfigGlobal(); err != nil {
-		log.Fatal("Config load failed", err)
-		return
+		panic(fmt.Sprintf("Config load failed: %v", err))
 	}
 
-	// OTP
-	cleanup := telemetry.InitTracer(
-		config.AppConfig.Server.AppName,
-		config.AppConfig.OTEL.Endpoint,
-	)
-	defer cleanup()
+	// 2. Logger
+	log := shared.InitLogger(config.AppConfig.Server.Env)
 
-	// Redis – z nowego pkg
+	// 3. Telemetry (Tracer)
+	if config.AppConfig.OTEL.Enabled {
+		cleanup := telemetry.InitTracer(
+			config.AppConfig.Server.AppName,
+			config.AppConfig.OTEL.Endpoint,
+		)
+		defer cleanup()
+	}
+
+	// 4. Infrastruktura (Redis & DB)
 	redisClient, err := redis.New(redis.Config(config.AppConfig.Redis))
 	if err != nil {
 		log.ErrorObj("Redis failed", err)
 	}
 	defer redisClient.Close()
 
-	// DB
 	db, closeDB := config.MustInitDB(config.AppConfig.Database)
 	defer closeDB()
 
-	// Dependency Injection
-
+	// 5. DI & App
 	container := di.NewContainer(db, redisClient, &config.AppConfig)
-	// Fiber
 	app := config.NewAuthApp(container)
 
-	// Routes
+	// 6. Routes
 	router.SetupRoutes(app, container)
-	// Graceful shutdown
-	server.SetupGracefulShutdown(app, closeDB, config.AppConfig.Shutdown)
+	// 7. Graceful shutdown
+	server.SetupGracefulShutdown(
+		app,
+		config.AppConfig.Shutdown,
+		func() { closeDB() },
+		func() { _ = redisClient.Close() },
+	)
 
 	address := "0.0.0.0:" + config.AppConfig.Server.Port
 	log.Info("Server started", map[string]any{

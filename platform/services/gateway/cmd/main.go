@@ -1,7 +1,7 @@
 package main
 
 import (
-	"os"
+	"fmt"
 
 	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/server"
@@ -13,20 +13,21 @@ import (
 )
 
 func main() {
-	log := shared.InitLogger(os.Getenv("ENV"))
-
-	// Config
+	// 1. Config
 	if err := config.LoadConfigGlobal(); err != nil {
-		log.ErrorObj("Config load failed", err)
-		return
+		panic(fmt.Sprintf("Config load failed: %v", err))
 	}
+	// 2. Logger
+	log := shared.InitLogger(config.AppConfig.Server.Env)
 
-	// OTP
-	cleanup := telemetry.InitTracer(
-		config.AppConfig.Server.AppName,
-		config.AppConfig.OTEL.Endpoint,
-	)
-	defer cleanup()
+	// 3. Telemetry (Tracer)
+	if config.AppConfig.OTEL.Enabled {
+		cleanup := telemetry.InitTracer(
+			config.AppConfig.Server.AppName,
+			config.AppConfig.OTEL.Endpoint,
+		)
+		defer cleanup()
+	}
 
 	// Redis – z nowego pkg
 	redisClient, err := redis.New(redis.Config(config.AppConfig.Redis))
@@ -43,7 +44,11 @@ func main() {
 	router.SetupRoutes(app, container)
 
 	// Graceful shutdown
-	server.SetupGracefulShutdown(app, nil, config.AppConfig.Shutdown)
+	server.SetupGracefulShutdown(
+		app,
+		config.AppConfig.Shutdown,
+		func() { _ = redisClient.Close() },
+	)
 
 	// Log start
 	address := "0.0.0.0:" + config.AppConfig.Server.Port

@@ -1,7 +1,7 @@
 package main
 
 import (
-	"os"
+	"fmt"
 
 	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/server"
@@ -12,42 +12,52 @@ import (
 )
 
 func main() {
-
-	// Logger
-	log := shared.InitLogger(os.Getenv("ENV"))
-
-	// Load Config
+	// 1. Config
 	if err := config.LoadConfigGlobal(); err != nil {
-		log.ErrorObj("Config load failed", err)
-		return
+		panic(fmt.Sprintf("Config load failed: %v", err))
 	}
 
-	// Redis
+	// 2. Logger
+	log := shared.InitLogger(config.AppConfig.Server.Env)
+
+	// 3. Telemetry (Tracer)
+	// if config.AppConfig.OTEL.Enabled {
+	// 	cleanup := telemetry.InitTracer(
+	// 		config.AppConfig.Server.AppName,
+	// 		config.AppConfig.OTEL.Endpoint,
+	// 	)
+	// 	defer cleanup()
+	// }
+
+	// 4. Infrastruktura (Redis & DB)
 	redisClient, err := redis.New(redis.Config(config.AppConfig.Redis))
 	if err != nil {
-		log.ErrorObj("Redis init failed", err)
-		return
+		log.ErrorObj("Redis failed", err)
 	}
 	defer redisClient.Close()
 
-	// Database
 	db, closeDB := config.MustInitDB(config.AppConfig.Database)
 	defer closeDB()
 
 	// Dependency Injection
-	container := di.NewContainer(db, redisClient, log)
+	container := di.NewContainer(db, redisClient, log, &config.AppConfig)
 
 	// Start Notification Worker w tle
 	go container.Workers.NotificationWorker.Start()
 
 	// Fiber App
-	app := config.NewNotificationApp(config.AppConfig.Server)
+	app := config.NewNotificationApp(container)
 
 	// Routes
 	router.SetupRoutes(app, container.Handlers.NotificationHandler)
 
 	// Graceful Shutdown
-	server.SetupGracefulShutdown(app, closeDB, config.AppConfig.Shutdown)
+	server.SetupGracefulShutdown(
+		app,
+		config.AppConfig.Shutdown,
+		closeDB,
+		func() { _ = redisClient.Close() },
+	)
 	// Start Server
 
 	address := "0.0.0.0:" + config.AppConfig.Server.Port

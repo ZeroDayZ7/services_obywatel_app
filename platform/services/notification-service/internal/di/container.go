@@ -3,6 +3,7 @@ package di
 import (
 	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/shared"
+	"github.com/zerodayz7/platform/pkg/viper"
 	"gorm.io/gorm"
 )
 
@@ -11,9 +12,10 @@ type Container struct {
 	Workers  *Workers
 	Redis    *redis.Client
 	Logger   *shared.Logger
+	Config   *viper.Config
 }
 
-func NewContainer(db *gorm.DB, redisClient *redis.Client, log *shared.Logger) *Container {
+func NewContainer(db *gorm.DB, redisClient *redis.Client, log *shared.Logger, cfg *viper.Config) *Container {
 	repos := NewRepositories(db)
 	services := NewServices(repos)
 
@@ -25,5 +27,6 @@ func NewContainer(db *gorm.DB, redisClient *redis.Client, log *shared.Logger) *C
 		Workers:  workers,
 		Redis:    redisClient,
 		Logger:   log,
+		Config:   cfg,
 	}
 }

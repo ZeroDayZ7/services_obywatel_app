@@ -1,52 +1,29 @@
 package config
 
 import (
-	"fmt"
-	"time"
-
-	"github.com/zerodayz7/platform/pkg/shared"
+	"github.com/zerodayz7/platform/pkg/database"
 	"github.com/zerodayz7/platform/pkg/viper"
 	"github.com/zerodayz7/platform/services/auth-service/internal/features/auth/model"
-	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
 func MustInitDB(cfg viper.DBConfig) (*gorm.DB, func()) {
-	log := shared.GetLogger()
-
-	db, err := gorm.Open(postgres.Open(cfg.DSN), &gorm.Config{})
-	if err != nil {
-		panic(fmt.Errorf("failed to connect to database: %w", err))
-	}
-
-	sqlDB, err := db.DB()
-	if err != nil {
-		panic(fmt.Errorf("failed to get database instance: %w", err))
-	}
-
-	sqlDB.SetMaxOpenConns(cfg.MaxOpenConns)
-	sqlDB.SetMaxIdleConns(cfg.MaxIdleConns)
-	sqlDB.SetConnMaxLifetime(time.Duration(cfg.ConnMaxLifetime) * time.Minute)
-
-	if err := sqlDB.Ping(); err != nil {
-		panic(fmt.Errorf("database ping failed: %w", err))
-	}
-
-	// Migracje modeli
-	if err := db.AutoMigrate(
+	// 1. Inicjalizacja z pkg - przekazujemy modele do migracji
+	db, closeDB, err := database.NewPostgres(cfg,
 		&model.User{},
 		&model.UserPermission{},
 		&model.RefreshToken{},
 		&model.UserDevice{},
-	); err != nil {
-		log.ErrorObj("Failed to migrate database", err)
+	)
+	if err != nil {
 		panic(err)
 	}
 
-	if err := SeedData(db); err != nil {
-		log.ErrorObj("Failed to seed initial data", err)
+	// 2. Uruchomienie seedera przy użyciu pomocnika z pkg
+	// Podajemy model User, żeby sprawdzić czy tabela jest pusta przed seedem
+	if err := database.RunSeed(db, &model.User{}, SeedData); err != nil {
+		panic(err)
 	}
 
-	log.Info("Successfully connected to PostgreSQL")
-	return db, func() { sqlDB.Close() }
+	return db, closeDB
 }
