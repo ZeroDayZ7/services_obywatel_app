@@ -2,10 +2,10 @@ package router
 
 import (
 	"github.com/gofiber/fiber/v2"
+	"github.com/zerodayz7/platform/pkg/schemas"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/auth-service/internal/features/auth/handler"
 	"github.com/zerodayz7/platform/services/auth-service/internal/middleware"
-	"github.com/zerodayz7/platform/services/auth-service/internal/validator"
 )
 
 func SetupAuthRoutes(app *fiber.App, h *handler.AuthHandler, resetHandler *handler.ResetHandler) {
@@ -16,27 +16,27 @@ func SetupAuthRoutes(app *fiber.App, h *handler.AuthHandler, resetHandler *handl
 	// LOGIN / REGISTER / JWT
 	// ==========================
 	auth.Post("/login",
-		middleware.ValidateBody[validator.LoginRequest](),
+		middleware.ValidateBody[schemas.LoginRequest](),
 		h.Login,
 	)
 
 	auth.Post("/2fa-verify",
-		middleware.ValidateBody[validator.TwoFARequest](),
+		middleware.ValidateBody[schemas.TwoFARequest](),
 		h.Verify2FA,
 	)
 
 	auth.Post("/register",
-		middleware.ValidateBody[validator.RegisterRequest](),
+		middleware.ValidateBody[schemas.RegisterRequest](),
 		h.Register,
 	)
 
 	auth.Post("/refresh",
-		middleware.ValidateBody[validator.RefreshTokenRequest](),
+		middleware.ValidateBody[schemas.RefreshTokenRequest](),
 		h.RefreshToken,
 	)
 
 	auth.Post("/logout",
-		middleware.ValidateBody[validator.RefreshTokenRequest](),
+		middleware.ValidateBody[schemas.RefreshTokenRequest](),
 		h.Logout,
 	)
 
@@ -45,7 +45,7 @@ func SetupAuthRoutes(app *fiber.App, h *handler.AuthHandler, resetHandler *handl
 	// ==========================
 	// Tutaj dodajemy endpoint, którego szuka Flutter
 	auth.Post("/register-device",
-		middleware.ValidateBody[validator.RegisterDeviceRequest](),
+		middleware.ValidateBody[schemas.RegisterDeviceRequest](),
 		h.RegisterDevice,
 	)
 
@@ -56,17 +56,17 @@ func SetupAuthRoutes(app *fiber.App, h *handler.AuthHandler, resetHandler *handl
 	reset.Use(shared.NewLimiter("reset", nil))
 
 	reset.Post("/send",
-		middleware.ValidateBody[validator.ResetPasswordRequest](),
+		middleware.ValidateBody[schemas.ResetPasswordRequest](),
 		resetHandler.SendResetCode,
 	)
 
 	reset.Post("/verify",
-		middleware.ValidateBody[validator.ResetCodeVerifyRequest](),
+		middleware.ValidateBody[schemas.ResetCodeVerifyRequest](),
 		resetHandler.VerifyResetCode,
 	)
 
 	reset.Post("/final",
-		middleware.ValidateBody[validator.ResetPasswordFinalRequest](),
+		middleware.ValidateBody[schemas.ResetPasswordFinalRequest](),
 		resetHandler.ResetPassword,
 	)
 }

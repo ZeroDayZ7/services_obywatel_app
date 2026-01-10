@@ -13,12 +13,12 @@ import (
 	"github.com/zerodayz7/platform/pkg/errors"
 	"github.com/zerodayz7/platform/pkg/events"
 	"github.com/zerodayz7/platform/pkg/redis"
+	"github.com/zerodayz7/platform/pkg/schemas"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/pkg/utils"
 	"github.com/zerodayz7/platform/pkg/viper"
 	"github.com/zerodayz7/platform/services/auth-service/internal/features/auth/http"
 	service "github.com/zerodayz7/platform/services/auth-service/internal/features/auth/service"
-	"github.com/zerodayz7/platform/services/auth-service/internal/validator"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -43,7 +43,7 @@ func (h *AuthHandler) RegisterDevice(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	body, ok := c.Locals("validatedBody").(validator.RegisterDeviceRequest)
+	body, ok := c.Locals("validatedBody").(schemas.RegisterDeviceRequest)
 	if !ok {
 		return errors.SendAppError(c, errors.ErrInternal)
 	}
@@ -223,8 +223,8 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	defer cancel()
 	log := shared.GetLogger()
 
-	// 1. Pobieramy body (używając Twojego validatora)
-	body := c.Locals("validatedBody").(validator.LoginRequest)
+	// 1. Pobieramy body (używając Twojego schemasa)
+	body := c.Locals("validatedBody").(schemas.LoginRequest)
 	fingerprint := c.Get("X-Device-Fingerprint")
 
 	// Czyszczenie hasła z RAM po zakończeniu funkcji
@@ -341,7 +341,7 @@ func (h *AuthHandler) Verify2FA(c *fiber.Ctx) error {
 	log := shared.GetLogger()
 
 	// 1. Pobieramy body z Locals (walidowane przez middleware)
-	body, ok := c.Locals("validatedBody").(validator.TwoFARequest)
+	body, ok := c.Locals("validatedBody").(schemas.TwoFARequest)
 	if !ok {
 		log.Error("Failed to cast validatedBody to TwoFARequest")
 		return errors.SendAppError(c, errors.ErrInternal)
@@ -469,7 +469,7 @@ func (h *AuthHandler) Verify2FA(c *fiber.Ctx) error {
 func (h *AuthHandler) RefreshToken(c *fiber.Ctx) error {
 	// ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	// defer cancel()
-	body := c.Locals("validatedBody").(validator.RefreshTokenRequest)
+	body := c.Locals("validatedBody").(schemas.RefreshTokenRequest)
 	log := shared.GetLogger()
 
 	// 1. Pobieramy fingerprint z nagłówka
@@ -537,7 +537,7 @@ func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 	log := shared.GetLogger()
 
 	// 1. Pobierz body (refresh token)
-	body := c.Locals("validatedBody").(validator.RefreshTokenRequest)
+	body := c.Locals("validatedBody").(schemas.RefreshTokenRequest)
 	if body.RefreshToken == "" {
 		log.Warn("Missing refresh token in request body")
 		return fiber.NewError(fiber.StatusBadRequest, "Missing refresh token")
@@ -593,7 +593,7 @@ func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 // #region REGISTER
 func (h *AuthHandler) Register(c *fiber.Ctx) error {
 	log := shared.GetLogger()
-	body := c.Locals("validatedBody").(validator.RegisterRequest)
+	body := c.Locals("validatedBody").(schemas.RegisterRequest)
 
 	// Próba rejestracji użytkownika
 	user, err := h.authService.Register(body.Username, body.Email, body.Password)

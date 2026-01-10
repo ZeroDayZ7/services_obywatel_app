@@ -11,10 +11,10 @@ import (
 	"github.com/zerodayz7/platform/pkg/errors"
 	"github.com/zerodayz7/platform/pkg/events"
 	"github.com/zerodayz7/platform/pkg/redis"
+	"github.com/zerodayz7/platform/pkg/schemas"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/auth-service/internal/features/auth/http"
 	"github.com/zerodayz7/platform/services/auth-service/internal/features/auth/service"
-	"github.com/zerodayz7/platform/services/auth-service/internal/validator"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -49,7 +49,7 @@ func (h *ResetHandler) SendResetCode(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(c.UserContext(), 2*time.Second)
 	defer cancel()
 	log := shared.GetLogger()
-	body := c.Locals("validatedBody").(validator.ResetPasswordRequest)
+	body := c.Locals("validatedBody").(schemas.ResetPasswordRequest)
 
 	// Pobranie użytkownika po emailu z pola Value
 	user, err := h.authService.GetUserByEmail(ctx, body.Value)
@@ -99,7 +99,7 @@ func (h *ResetHandler) SendResetCode(c *fiber.Ctx) error {
 // 2️⃣ Weryfikacja kodu
 func (h *ResetHandler) VerifyResetCode(c *fiber.Ctx) error {
 	log := shared.GetLogger()
-	body := c.Locals("validatedBody").(validator.ResetCodeVerifyRequest)
+	body := c.Locals("validatedBody").(schemas.ResetCodeVerifyRequest)
 
 	// DEBUG: Sprawdzenie co przyszło w żądaniu
 	log.DebugMap("Processing VerifyResetCode", map[string]any{
@@ -179,7 +179,7 @@ func (h *ResetHandler) VerifyResetCode(c *fiber.Ctx) error {
 
 func (h *ResetHandler) ResetPassword(c *fiber.Ctx) error {
 	log := shared.GetLogger()
-	body := c.Locals("validatedBody").(validator.ResetPasswordFinalRequest)
+	body := c.Locals("validatedBody").(schemas.ResetPasswordFinalRequest)
 
 	// 1. Pobranie sesji resetu z cache
 	key := fmt.Sprintf("reset:password:%s", body.Token)

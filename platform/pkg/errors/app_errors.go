@@ -69,6 +69,8 @@ var (
 	ErrNotFound            = newErr("NOT_FOUND", NotFound, "Zasób nie został znaleziony.")
 	ErrInternal            = newErr("SERVER_ERROR", Internal, "Internal server error")
 	ErrInvalidJSON         = newErr("INVALID_JSON", BadRequest, "Invalid JSON in request body")
+	ErrInvalidParams       = newErr("INVALID_PARAMS", BadRequest, "Invalid or missing path parameters")
+	ErrInvalidQuery        = newErr("INVALID_QUERY", BadRequest, "Invalid or missing query string parameters")
 	ErrValidationFailed    = newErr("VALIDATION_FAILED", Validation, "Request validation failed")
 	ErrTooManyRequests     = newErr("TOO_MANY_REQUESTS", BadRequest, "Too many requests")
 	ErrUnauthorized        = newErr("UNAUTHORIZED", Unauthorized, "Unauthorized access")

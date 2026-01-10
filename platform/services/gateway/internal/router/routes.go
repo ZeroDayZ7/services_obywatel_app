@@ -4,7 +4,9 @@ import (
 	"github.com/gofiber/fiber/v2"
 	pkgRouter "github.com/zerodayz7/platform/pkg/router"
 	"github.com/zerodayz7/platform/pkg/router/health"
+	"github.com/zerodayz7/platform/pkg/schemas"
 	"github.com/zerodayz7/platform/services/gateway/internal/di"
+	"github.com/zerodayz7/platform/services/gateway/internal/middleware"
 )
 
 func SetupRoutes(app *fiber.App, container *di.Container) {
@@ -26,16 +28,42 @@ func SetupRoutes(app *fiber.App, container *di.Container) {
 
 	// --- AUTH SERVICE (Publiczne) ---
 	auth := services.Auth
-	app.Post("/auth/login", ReverseProxy(container, auth))
-	app.Post("/auth/2fa-verify", ReverseProxy(container, auth))
-	app.Post("/auth/refresh", ReverseProxy(container, auth))
-	app.Post("/auth/reset/send", ReverseProxy(container, auth))
-	app.Post("/auth/reset/verify", ReverseProxy(container, auth))
-	app.Post("/auth/reset/final", ReverseProxy(container, auth))
+	app.Post("/auth/login",
+		middleware.ValidateBody[schemas.LoginRequest](),
+		ReverseProxy(container, auth),
+	)
+
+	app.Post("/auth/2fa-verify",
+		middleware.ValidateBody[schemas.TwoFARequest](),
+		ReverseProxy(container, auth),
+	)
+
+	app.Post("/auth/refresh",
+		middleware.ValidateBody[schemas.RefreshTokenRequest](),
+		ReverseProxy(container, auth),
+	)
+
+	app.Post("/auth/reset/send",
+		middleware.ValidateBody[schemas.ResetPasswordRequest](),
+		ReverseProxy(container, auth))
+
+	app.Post("/auth/reset/verify",
+		middleware.ValidateBody[schemas.ResetCodeVerifyRequest](),
+		ReverseProxy(container, auth))
+
+	app.Post("/auth/reset/final",
+		middleware.ValidateBody[schemas.ResetPasswordFinalRequest](),
+		ReverseProxy(container, auth))
 
 	// --- AUTH SERVICE (Zabezpieczone) ---
-	app.Post("/auth/register-device", ReverseProxySecure(container, auth))
-	app.Post("/auth/logout", ReverseProxySecure(container, auth))
+	app.Post("/auth/register-device",
+		middleware.ValidateBody[schemas.RegisterDeviceRequest](),
+		ReverseProxySecure(container, auth),
+	)
+	app.Post("/auth/logout",
+		middleware.ValidateBody[schemas.RefreshTokenRequest](),
+		ReverseProxySecure(container, auth))
+
 	app.Get("/user/sessions", ReverseProxySecure(container, auth))
 	app.Post("/user/sessions/terminate", ReverseProxySecure(container, auth))
 

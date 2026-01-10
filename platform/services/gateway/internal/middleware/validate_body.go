@@ -3,6 +3,7 @@ package middleware
 import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/zerodayz7/platform/pkg/errors"
+	"github.com/zerodayz7/platform/pkg/validator"
 )
 
 func ValidateBody[T any]() fiber.Handler {
@@ -12,8 +13,7 @@ func ValidateBody[T any]() fiber.Handler {
 			return errors.SendAppError(c, errors.ErrInvalidJSON)
 		}
 
-		if errs := ValidateStruct(body); len(errs) > 0 {
-
+		if errs := validator.Validate(body); len(errs) > 0 {
 			meta := make(map[string]any)
 			for k, v := range errs {
 				meta[k] = v
