@@ -9,11 +9,36 @@ import (
 	"net/http"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/proxy"
 	reqctx "github.com/zerodayz7/platform/pkg/context"
 	apperr "github.com/zerodayz7/platform/pkg/errors"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/gateway/internal/di"
 )
+
+func ReverseProxyFiber(container *di.Container, target string) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		// 1. Pobieramy Twój kontekst (ID requestu itp.)
+		ctx, _ := c.Locals("requestContext").(*reqctx.RequestContext)
+
+		// 2. Przygotowujemy URL docelowy (np. http://auth-service:8080/auth/login)
+		// c.Path() zawiera pełną ścieżkę
+		url := target + c.Path()
+
+		// 3. Dodajemy Twoje customowe nagłówki przed wysłaniem
+		if ctx != nil {
+			c.Request().Header.Set("X-Request-Id", ctx.RequestID)
+			c.Request().Header.Set("X-Forwarded-For", ctx.IP)
+			c.Request().Header.Set("X-Real-IP", ctx.IP)
+		}
+
+		// Wymusić przekazanie User-Agent i Fingerprint,
+		// Fiber domyślnie przekazuje większość nagłówków klienta.
+
+		// 4. Wykonujemy Proxy
+		return proxy.Do(c, url)
+	}
+}
 
 // W internal/router/proxy.go popraw ReverseProxy:
 func ReverseProxy(container *di.Container, target string) fiber.Handler {
@@ -117,7 +142,6 @@ func ReverseProxySecure(container *di.Container, target string) fiber.Handler {
 // --- FUNKCJE POMOCNICZE (DRY) ---
 
 func prepareProxyRequest(c *fiber.Ctx, target string) (*http.Request, error) {
-
 	body := c.Body()
 
 	url := target + c.OriginalURL()
@@ -128,7 +152,6 @@ func prepareProxyRequest(c *fiber.Ctx, target string) (*http.Request, error) {
 		url,
 		bytes.NewReader(body),
 	)
-
 	if err != nil {
 		return nil, err
 	}

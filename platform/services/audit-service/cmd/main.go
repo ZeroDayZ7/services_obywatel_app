@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	"os"
 
 	"github.com/zerodayz7/platform/pkg/server"
 	"github.com/zerodayz7/platform/pkg/shared"
@@ -12,9 +12,12 @@ import (
 )
 
 func main() {
-	// Inicjalizacja konfiguracji
+	// 0. Boostrap Logger
+	bootLog := shared.InitBootstrapLogger(os.Getenv("ENV"))
+	defer func() { _ = bootLog.Sync() }()
+	// 1. Config
 	if err := config.LoadConfigGlobal(); err != nil {
-		panic(fmt.Sprintf("Failed to load config: %v", err))
+		bootLog.Fatal("Config load failed", "error", err)
 	}
 
 	// Inicjalizacja loggera

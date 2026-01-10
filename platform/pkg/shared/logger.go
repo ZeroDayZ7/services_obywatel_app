@@ -21,6 +21,34 @@ var (
 	once     sync.Once
 )
 
+func InitBootstrapLogger(env string) *Logger {
+	var level zapcore.Level
+	if strings.ToLower(env) == "production" {
+		level = zapcore.InfoLevel
+	} else {
+		level = zapcore.DebugLevel
+	}
+
+	encoderConfig := zapcore.EncoderConfig{
+		MessageKey: "msg", LevelKey: "level", TimeKey: "time",
+		CallerKey: "caller", EncodeLevel: zapcore.CapitalColorLevelEncoder,
+		EncodeTime: zapcore.ISO8601TimeEncoder, EncodeCaller: zapcore.ShortCallerEncoder,
+	}
+
+	// Konsola
+	consoleCore := zapcore.NewCore(zapcore.NewConsoleEncoder(encoderConfig), zapcore.AddSync(os.Stdout), level)
+
+	// Plik (Lumberjack)
+	logFile := &lumberjack.Logger{
+		Filename: "logs/bootstrap.log",
+		MaxSize:  2, MaxBackups: 1, Compress: false,
+	}
+	fileCore := zapcore.NewCore(zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()), zapcore.AddSync(logFile), zapcore.InfoLevel)
+
+	core := zapcore.NewTee(consoleCore, fileCore)
+	return &Logger{zap.New(core, zap.AddCaller())}
+}
+
 // InitLogger inicjalizuje singleton loggera z dynamicznym poziomem logowania
 func InitLogger(env string) *Logger {
 	once.Do(func() {

@@ -53,5 +53,7 @@ func SetSharedDefaults(serviceName string) {
 	viper.SetDefault("SERVICE_NOTIFY_URL", "http://localhost:8084")
 	viper.SetDefault("SERVICE_USERS_URL", "http://localhost:3000")
 
-	viper.SetDefault("INTERNAL_HMAC_SECRET", "change_me_in_production")
+	viper.SetDefault("INTERNAL_HMAC_SECRET", "")
+	viper.SetDefault("INTERNAL_ENCRYPTION_KEY", "")
+	viper.SetDefault("INTERNAL_HASH_SALT", "")
 }

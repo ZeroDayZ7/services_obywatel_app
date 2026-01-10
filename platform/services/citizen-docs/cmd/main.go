@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	"os"
 
 	"github.com/zerodayz7/platform/pkg/server"
 	"github.com/zerodayz7/platform/pkg/shared"
@@ -11,10 +11,12 @@ import (
 )
 
 func main() {
-	// 1. Wczytanie konfiguracji (używamy Twojej nowej metody LoadConfigGlobal)
+	// 0. Boostrap Logger
+	bootLog := shared.InitBootstrapLogger(os.Getenv("ENV"))
+	defer func() { _ = bootLog.Sync() }()
+	// 1. Config
 	if err := config.LoadConfigGlobal(); err != nil {
-		// Używamy fmt.Printf, bo logger jeszcze nie jest zainicjowany poprawnie z configu
-		panic(fmt.Sprintf("Failed to load config: %v", err))
+		bootLog.Fatal("Config load failed", "error", err)
 	}
 
 	// 2. Inicjalizacja Loggera (pobieramy środowisko z AppConfig)

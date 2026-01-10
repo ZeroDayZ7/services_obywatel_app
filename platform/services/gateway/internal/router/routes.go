@@ -30,7 +30,7 @@ func SetupRoutes(app *fiber.App, container *di.Container) {
 	auth := services.Auth
 	app.Post("/auth/login",
 		middleware.ValidateBody[schemas.LoginRequest](),
-		ReverseProxy(container, auth),
+		ReverseProxyFiber(container, auth),
 	)
 
 	app.Post("/auth/2fa-verify",
