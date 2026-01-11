@@ -17,15 +17,14 @@ type Container struct {
 }
 
 func NewContainer(db *gorm.DB, redisClient *redis.Client, cfg *viper.Config) *Container {
-	repos := NewRepositories(db)
-	services := NewServices(repos, cfg)
-
 	cache := redis.NewCache(
 		redisClient,
 		cfg.Session.Prefix,
 		cfg.Session.TTL,
 	)
 
+	repos := NewRepositories(db)
+	services := NewServices(repos, cache, cfg)
 	handlers := NewHandlers(services, cache, cfg)
 
 	return &Container{

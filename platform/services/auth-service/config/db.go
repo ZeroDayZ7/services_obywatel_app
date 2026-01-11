@@ -3,7 +3,7 @@ package config
 import (
 	"github.com/zerodayz7/platform/pkg/database"
 	"github.com/zerodayz7/platform/pkg/viper"
-	"github.com/zerodayz7/platform/services/auth-service/internal/features/auth/model"
+	"github.com/zerodayz7/platform/services/auth-service/internal/model"
 	"gorm.io/gorm"
 )
 

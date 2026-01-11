@@ -1,23 +1,20 @@
 package di
 
 import (
-	authRepo "github.com/zerodayz7/platform/services/auth-service/internal/features/auth/repository"
-	authRepoDB "github.com/zerodayz7/platform/services/auth-service/internal/features/auth/repository/db"
-
-	userRepo "github.com/zerodayz7/platform/services/auth-service/internal/features/users/repository"
-	userRepoDB "github.com/zerodayz7/platform/services/auth-service/internal/features/users/repository/db"
-
 	"gorm.io/gorm"
+
+	repo "github.com/zerodayz7/platform/services/auth-service/internal/repository"
+	repoDB "github.com/zerodayz7/platform/services/auth-service/internal/repository/db"
 )
 
 type Repositories struct {
-	UserRepo         userRepo.UserRepository
-	RefreshTokenRepo authRepo.RefreshTokenRepository
+	UserRepo         repo.UserRepository
+	RefreshTokenRepo repo.RefreshTokenRepository
 }
 
 func NewRepositories(db *gorm.DB) *Repositories {
 	return &Repositories{
-		UserRepo:         userRepoDB.NewUserRepository(db),
-		RefreshTokenRepo: authRepoDB.NewRefreshTokenRepository(db),
+		UserRepo:         repoDB.NewUserRepository(db),
+		RefreshTokenRepo: repoDB.NewRefreshTokenRepository(db),
 	}
 }

@@ -3,20 +3,20 @@ package di
 import (
 	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/viper"
-	authHandler "github.com/zerodayz7/platform/services/auth-service/internal/features/auth/handler"
-	userHandler "github.com/zerodayz7/platform/services/auth-service/internal/features/users/handler"
+
+	handler "github.com/zerodayz7/platform/services/auth-service/internal/handler"
 )
 
 type Handlers struct {
-	AuthHandler  *authHandler.AuthHandler
-	ResetHandler *authHandler.ResetHandler
-	UserHandler  *userHandler.UserHandler
+	AuthHandler  *handler.AuthHandler
+	ResetHandler *handler.ResetHandler
+	UserHandler  *handler.UserHandler
 }
 
 func NewHandlers(services *Services, cache *redis.Cache, cfg *viper.Config) *Handlers {
 	return &Handlers{
-		AuthHandler:  authHandler.NewAuthHandler(services.AuthService, cache, cfg),
-		ResetHandler: authHandler.NewResetHandler(services.AuthService, cache),
-		UserHandler:  userHandler.NewUserHandler(services.UserService),
+		AuthHandler:  handler.NewAuthHandler(services.AuthService, cache, cfg),
+		ResetHandler: handler.NewResetHandler(services.PasswordResetService, cache),
+		UserHandler:  handler.NewUserHandler(services.UserService),
 	}
 }

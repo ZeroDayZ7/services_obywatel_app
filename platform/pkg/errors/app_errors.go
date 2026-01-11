@@ -12,6 +12,7 @@ const (
 	Internal     ErrorType = "INTERNAL"
 	BadRequest   ErrorType = "BAD_REQUEST"
 	Timeout      ErrorType = "TIMEOUT"
+	Conflict     ErrorType = "CONFLICT"
 )
 
 // Domyślne komunikaty dla typów błędów

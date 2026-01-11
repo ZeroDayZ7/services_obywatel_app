@@ -1,26 +1,33 @@
 package di
 
 import (
+	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/viper"
-	authService "github.com/zerodayz7/platform/services/auth-service/internal/features/auth/service"
-	userService "github.com/zerodayz7/platform/services/auth-service/internal/features/users/service"
+	"github.com/zerodayz7/platform/services/auth-service/internal/service"
 )
 
 type Services struct {
-	AuthService *authService.AuthService
-	UserService *userService.UserService
+	AuthService          service.AuthService
+	UserService          service.UserService
+	PasswordResetService service.PasswordResetService
 }
 
-func NewServices(repos *Repositories, cfg *viper.Config) *Services {
+func NewServices(repos *Repositories, cache *redis.Cache, cfg *viper.Config) *Services {
 	return &Services{
-		AuthService: authService.NewAuthService(
+		AuthService: service.NewAuthService(
 			repos.UserRepo,
 			repos.RefreshTokenRepo,
+			cache,
 			cfg,
 		),
-		UserService: userService.NewUserService(
+		UserService: service.NewUserService(
 			repos.UserRepo,
 			repos.RefreshTokenRepo,
+		),
+		PasswordResetService: service.NewPasswordResetService(
+			repos.UserRepo,
+			repos.RefreshTokenRepo,
+			cache,
 		),
 	}
 }

@@ -2,13 +2,19 @@ package router
 
 import (
 	"github.com/gofiber/fiber/v2"
+
 	"github.com/zerodayz7/platform/pkg/schemas"
 	"github.com/zerodayz7/platform/pkg/shared"
-	"github.com/zerodayz7/platform/services/auth-service/internal/features/auth/handler"
+
+	handler "github.com/zerodayz7/platform/services/auth-service/internal/handler"
 	"github.com/zerodayz7/platform/services/auth-service/internal/middleware"
 )
 
-func SetupAuthRoutes(app *fiber.App, h *handler.AuthHandler, resetHandler *handler.ResetHandler) {
+func SetupAuthRoutes(
+	app *fiber.App,
+	h *handler.AuthHandler,
+	resetHandler *handler.ResetHandler,
+) {
 	auth := app.Group("/auth")
 	auth.Use(shared.NewLimiter("auth", nil))
 
@@ -67,6 +73,6 @@ func SetupAuthRoutes(app *fiber.App, h *handler.AuthHandler, resetHandler *handl
 
 	reset.Post("/final",
 		middleware.ValidateBody[schemas.ResetPasswordFinalRequest](),
-		resetHandler.ResetPassword,
+		resetHandler.FinalizeReset,
 	)
 }

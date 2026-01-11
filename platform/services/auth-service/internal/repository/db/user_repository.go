@@ -6,9 +6,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/zerodayz7/platform/services/auth-service/internal/features/auth/model"
-	authModel "github.com/zerodayz7/platform/services/auth-service/internal/features/auth/model"
-	"github.com/zerodayz7/platform/services/auth-service/internal/features/users/repository"
+	"github.com/zerodayz7/platform/services/auth-service/internal/model"
+	repository "github.com/zerodayz7/platform/services/auth-service/internal/repository"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -45,6 +44,14 @@ func (r *UserRepo) GetByID(ctx context.Context, id uuid.UUID) (*model.User, erro
 }
 
 func (r *UserRepo) GetByEmail(ctx context.Context, email string) (*model.User, error) {
+	var u model.User
+	if err := r.db.WithContext(ctx).Where("email = ?", email).First(&u).Error; err != nil {
+		return nil, err
+	}
+	return &u, nil
+}
+
+func (r *UserRepo) GetUserByEmail(ctx context.Context, email string) (*model.User, error) {
 	var u model.User
 	if err := r.db.WithContext(ctx).Where("email = ?", email).First(&u).Error; err != nil {
 		return nil, err
@@ -104,21 +111,14 @@ func (r *UserRepo) SaveDevice(ctx context.Context, device *model.UserDevice) err
 	}).Create(device).Error
 }
 
-func (r *UserRepo) IncrementFailedLogin(userID uuid.UUID) error {
-	// Używamy gorm.Expr dla bezpieczeństwa (atomowość)
-	return r.db.Model(&model.User{}).
-		Where("id = ?", userID).
-		Update("failed_login_attempts", gorm.Expr("failed_login_attempts + ?", 1)).Error
-}
-
 func (r *UserRepo) ResetFailedLogin(userID uuid.UUID) error {
 	return r.db.Model(&model.User{}).
 		Where("id = ?", userID).
 		Update("failed_login_attempts", 0).Error
 }
 
-func (r *UserRepo) GetDeviceByFingerprint(ctx context.Context, userID uuid.UUID, fingerprint string) (*authModel.UserDevice, error) {
-	var device authModel.UserDevice
+func (r *UserRepo) GetDeviceByFingerprint(ctx context.Context, userID uuid.UUID, fingerprint string) (*model.UserDevice, error) {
+	var device model.UserDevice
 	// Poprawka: używamy r.db (małe litery, zgodnie z definicją struktury)
 	err := r.db.WithContext(ctx).
 		Where("user_id = ? AND device_fingerprint = ? AND is_active = ?", userID, fingerprint, true).
@@ -130,7 +130,7 @@ func (r *UserRepo) GetDeviceByFingerprint(ctx context.Context, userID uuid.UUID,
 }
 
 func (r *UserRepo) UpdateDeviceStatus(ctx context.Context, deviceID uuid.UUID, publicKey string, deviceName string, isActive bool, isVerified bool) error {
-	return r.db.WithContext(ctx).Model(&authModel.UserDevice{}).
+	return r.db.WithContext(ctx).Model(&model.UserDevice{}).
 		Where("id = ?", deviceID).
 		Updates(map[string]interface{}{
 			"public_key":            publicKey,
@@ -139,4 +139,18 @@ func (r *UserRepo) UpdateDeviceStatus(ctx context.Context, deviceID uuid.UUID, p
 			"is_verified":           isVerified,
 			"last_used_at":          time.Now(),
 		}).Error
+}
+
+// Zmień z IncrementFailedLogin na:
+func (r *UserRepo) IncrementUserFailedLogin(userID uuid.UUID) error {
+	return r.db.Model(&model.User{}).
+		Where("id = ?", userID).
+		Update("failed_login_attempts", gorm.Expr("failed_login_attempts + ?", 1)).Error
+}
+
+// Zmień z ResetFailedLogin na:
+func (r *UserRepo) ResetFailedLoginAttempts(userID uuid.UUID) error {
+	return r.db.Model(&model.User{}).
+		Where("id = ?", userID).
+		Update("failed_login_attempts", 0).Error
 }

@@ -7,56 +7,38 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/zerodayz7/platform/pkg/constants"
 	"github.com/zerodayz7/platform/pkg/errors"
-	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/pkg/utils"
-	"github.com/zerodayz7/platform/services/auth-service/internal/features/users/http"
-	"github.com/zerodayz7/platform/services/auth-service/internal/features/users/service"
+	"github.com/zerodayz7/platform/services/auth-service/internal/http"
+	"github.com/zerodayz7/platform/services/auth-service/internal/service"
 )
 
 type UserHandler struct {
-	userService *service.UserService
+	userService service.UserService // Korzystamy z INTERFEJSU (bez *)
 }
 
-func NewUserHandler(userService *service.UserService) *UserHandler {
+func NewUserHandler(userService service.UserService) *UserHandler {
 	return &UserHandler{userService: userService}
 }
 
-// GET /user/sessions
 func (h *UserHandler) GetSessions(c *fiber.Ctx) error {
-	// 1. Context i Logger
 	ctx, cancel := context.WithTimeout(c.UserContext(), 3*time.Second)
 	defer cancel()
-	log := shared.GetLogger()
 
-	// 2. Autoryzacja (UserID z middleware)
+	// 1. Dane z HTTP
 	userID, err := utils.GetUserID(c)
 	if err != nil {
 		return errors.SendAppError(c, errors.ErrInvalidToken)
 	}
+	fingerprint := c.Get(constants.HeaderDeviceFingerprint)
 
-	// 3. Wywołanie serwisu
-	sessions, err := h.userService.GetSessions(ctx, userID)
+	// 2. Wywołanie serwisu (Przekazujemy fingerprint jako parametr biznesowy)
+	sessions, err := h.userService.GetSessions(ctx, userID, fingerprint)
 	if err != nil {
-		log.ErrorObj("GetSessions service error", err)
 		return errors.SendAppError(c, errors.ErrInternal)
 	}
 
-	// 4. Mapowanie na DTO
-	currentFingerprint := c.Get(constants.HeaderDeviceFingerprint)
-	var response []http.SessionResponse
-
-	for _, s := range sessions {
-		response = append(response, http.SessionResponse{
-			ID:        s.SessionID,
-			Device:    s.DeviceNameEncrypted,
-			Platform:  s.Platform,
-			IsCurrent: s.Fingerprint == currentFingerprint,
-			CreatedAt: s.CreatedAt,
-			LastUsed:  s.LastUsedAt,
-		})
-	}
-
-	return c.JSON(response)
+	// 3. Prosta odpowiedź (Serwis zwrócił już gotowe dane)
+	return c.JSON(sessions)
 }
 
 // POST /user/sessions/terminate

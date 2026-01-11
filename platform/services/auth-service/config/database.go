@@ -7,7 +7,7 @@ import (
 
 	// Zmień te ścieżki na Twoje faktyczne ścieżki w projekcie!
 	"github.com/zerodayz7/platform/pkg/shared"
-	"github.com/zerodayz7/platform/services/auth-service/internal/features/auth/model"
+	"github.com/zerodayz7/platform/services/auth-service/internal/model"
 )
 
 func SeedData(db *gorm.DB) error {

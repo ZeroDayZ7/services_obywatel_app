@@ -49,3 +49,13 @@ type RegisterDeviceRequest struct {
 	DeviceNameEncrypted string `json:"encrypted_name" validate:"required"`
 	Platform            string `json:"platform" validate:"required"`
 }
+
+type FinalizeResetRequest struct {
+	Token       string `json:"token" validate:"required"`
+	Password    string `json:"password" validate:"required,min=8"`
+	Signature   string `json:"signature" validate:"required"`
+	Fingerprint string `json:"fingerprint" validate:"required"`
+	PublicKey   string `json:"public_key" validate:"required"`
+	DeviceName  string `json:"device_name" validate:"required"`
+	Platform    string `json:"platform" validate:"required"`
+}
