@@ -11,4 +11,5 @@ bin/*
 # Ignore logs
 **/logs/
 **/combined.txt
+**/temp.md
 

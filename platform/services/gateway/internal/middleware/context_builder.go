@@ -7,8 +7,8 @@ import (
 	"github.com/gofiber/fiber/v2"
 	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/zerodayz7/platform/pkg/constants"
 	"github.com/zerodayz7/platform/pkg/context"
-	"github.com/zerodayz7/platform/pkg/types" // Nasza wspólna lista
 )
 
 func ContextBuilder() fiber.Handler {
@@ -20,11 +20,11 @@ func ContextBuilder() fiber.Handler {
 			// Używamy Locals("requestid"), bo fiber middleware 'requestid' tam go wrzuca
 			RequestID: fmt.Sprintf("%v", c.Locals("requestid")),
 			IP:        c.IP(),
-			DeviceID:  c.Get("X-Device-Fingerprint"),
+			DeviceID:  c.Get(constants.HeaderDeviceFingerprint),
 		}
 
 		// 2. Jeśli ścieżka jest publiczna, pomijamy wyciąganie danych usera
-		if slices.Contains(types.PublicPaths, path) {
+		if slices.Contains(constants.PublicPaths, path) {
 			c.Locals("requestContext", ctx)
 			return c.Next()
 		}

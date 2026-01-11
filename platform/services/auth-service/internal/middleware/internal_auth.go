@@ -4,14 +4,16 @@ import (
 	"encoding/base64"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/zerodayz7/platform/pkg/constants"
 	reqctx "github.com/zerodayz7/platform/pkg/context"
+	"github.com/zerodayz7/platform/pkg/shared"
 )
 
 func InternalAuthMiddleware(hmacSecret []byte) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		// 1. Pobierz nagłówki z Gatewaya
-		encodedCtx := c.Get("X-Internal-Context")
-		signature := c.Get("X-Internal-Signature")
+		log := shared.GetLogger()
+		encodedCtx := c.Get(constants.HeaderInternalContext)
+		signature := c.Get(constants.HeaderInternalSignature)
 
 		if encodedCtx == "" || signature == "" {
 			// Jeśli brak, a to nie jest ścieżka publiczna - odrzuć
@@ -34,9 +36,15 @@ func InternalAuthMiddleware(hmacSecret []byte) fiber.Handler {
 		// 4. Deserializuj do struktury
 		ctx, err := reqctx.Decode(payload)
 		if err != nil {
+			log.Error("Context decoding failed",
+				"error", err,
+				"raw_payload", base64.StdEncoding.EncodeToString(payload),
+			)
 			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "context corruption"})
 		}
 
+		// WYSYP CAŁOŚCI (używając Twojej dedykowanej metody)
+		log.DebugResponse("Context Dump", ctx)
 		// 5. Wrzuć do Locals, żeby Handler go widział
 		c.Locals("requestContext", ctx)
 

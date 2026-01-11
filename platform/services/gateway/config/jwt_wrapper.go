@@ -5,7 +5,7 @@ import (
 
 	jwtware "github.com/gofiber/contrib/jwt"
 	"github.com/gofiber/fiber/v2"
-	"github.com/zerodayz7/platform/pkg/types"
+	"github.com/zerodayz7/platform/pkg/constants"
 )
 
 var SkipJWT = false
@@ -19,7 +19,7 @@ func JWTMiddlewareWithExclusions() fiber.Handler {
 
 	jwtHandler := jwtware.New(NewJWTConfig())
 	return func(c *fiber.Ctx) error {
-		if slices.Contains(types.PublicPaths, c.Path()) {
+		if slices.Contains(constants.PublicPaths, c.Path()) {
 			return c.Next()
 		}
 		return jwtHandler(c)

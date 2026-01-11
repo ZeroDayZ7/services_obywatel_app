@@ -199,6 +199,7 @@ func isSensitive(name string) bool {
 		"secret",
 		"code",
 		"authorization",
+		"Authorization",
 		"credential",
 		"apikey",
 	}
@@ -302,6 +303,31 @@ func (l *Logger) DebugResponse(msg string, res any) {
 	fmt.Printf("\x1b[35m---------------------------------\x1b[0m\n\n")
 }
 
+// DebugRequest ładnie formatuje przetworzone żądanie w konsoli (kolory ANSI)
+func (l *Logger) DebugRequest(msg string, method, path string, status int, latency string, body any) {
+	// Sprawdzamy czy poziom Debug jest włączony, żeby nie marnować CPU
+	if !l.Core().Enabled(zapcore.DebugLevel) {
+		return
+	}
+
+	fmt.Printf("\n\x1b[34m--- [DEBUG] HTTP Request Processed ---\x1b[0m\n")
+	fmt.Printf("Message: %s\n", msg)
+	fmt.Printf("  \x1b[32mMethod:\x1b[0m  %s\n", method)
+	fmt.Printf("  \x1b[32mPath:\x1b[0m    %s\n", path)
+	fmt.Printf("  \x1b[32mStatus:\x1b[0m  %d\n", status)
+	fmt.Printf("  \x1b[32mLatency:\x1b[0m %s\n", latency)
+
+	if body != nil {
+		fmt.Printf("  \x1b[32mBody:\x1b[0m")
+		fields := convertStructToFields(body)
+		for _, f := range fields {
+			fmt.Printf("\n    \x1b[36m%s\x1b[0m:", f.Key)
+			l.printValue(f, 2)
+		}
+	}
+	fmt.Printf("\x1b[34m--------------------------------------\x1b[0m\n\n")
+}
+
 // Pomocnicza metoda do ładnego wypisywania zagnieżdżonych danych
 func (l *Logger) printValue(f zap.Field, indent int) {
 	spaces := strings.Repeat("  ", indent)
@@ -312,18 +338,18 @@ func (l *Logger) printValue(f zap.Field, indent int) {
 	case zapcore.BoolType:
 		fmt.Printf(" %v\n", f.Integer == 1)
 	case zapcore.InlineMarshalerType, zapcore.ObjectMarshalerType:
-		// Jeśli to zagnieżdżony obiekt
-		fmt.Printf("\n")
 		if subFields, ok := f.Interface.([]zap.Field); ok {
+			fmt.Print("\n")
 			for _, sf := range subFields {
 				fmt.Printf("%s\x1b[36m%s\x1b[0m:", spaces+"  ", sf.Key)
 				l.printValue(sf, indent+1)
 			}
+		} else {
+			fmt.Print(" {}\n")
 		}
 	default:
-		// Dla map i innych
 		if f.Interface == nil {
-			fmt.Printf(" null\n")
+			fmt.Print(" null\n")
 		} else {
 			fmt.Printf(" %v\n", f.Interface)
 		}

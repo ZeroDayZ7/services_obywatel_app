@@ -14,6 +14,8 @@ func SetSharedDefaults(serviceName string) {
 	viper.SetDefault("CASE_SENSITIVE", true)
 	viper.SetDefault("STRICT_ROUTING", false)
 
+	viper.SetDefault("CORS_ALLOW_ORIGINS", "*")
+
 	// Czas z jednostkami (s = sekundy, m = minuty, h = godziny)
 	viper.SetDefault("IDLE_TIMEOUT", "30s")
 	viper.SetDefault("READ_TIMEOUT", "15s")

@@ -39,11 +39,7 @@ func NewAuthService(
 }
 
 // Pobranie użytkownika po ID
-func (s *AuthService) UpdatePassword(
-	ctx context.Context,
-	userID uuid.UUID,
-	newPassword string,
-) error {
+func (s *AuthService) UpdatePassword(ctx context.Context, userID uuid.UUID, newPassword string) error {
 	log := shared.GetLogger()
 
 	// Pobranie użytkownika po ID

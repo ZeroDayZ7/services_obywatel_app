@@ -1,4 +1,4 @@
-package types
+package constants
 
 var PublicPaths = []string{
 	"/auth/login",

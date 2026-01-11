@@ -10,6 +10,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
+	"github.com/zerodayz7/platform/pkg/constants"
 	"github.com/zerodayz7/platform/pkg/errors"
 	"github.com/zerodayz7/platform/pkg/events"
 	"github.com/zerodayz7/platform/pkg/redis"
@@ -64,7 +65,7 @@ func (h *AuthHandler) RegisterDevice(c *fiber.Ctx) error {
 		}
 	}
 
-	clientIP := c.Get("X-Real-IP")
+	clientIP := c.Get(constants.HeaderXRealIP)
 	if clientIP == "" {
 		clientIP = c.IP()
 	}
@@ -225,7 +226,7 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 
 	// 1. Pobieramy body (używając Twojego schemasa)
 	body := c.Locals("validatedBody").(schemas.LoginRequest)
-	fingerprint := c.Get("X-Device-Fingerprint")
+	fingerprint := c.Get(constants.HeaderDeviceFingerprint)
 
 	// Czyszczenie hasła z RAM po zakończeniu funkcji
 	defer func() {
@@ -349,7 +350,7 @@ func (h *AuthHandler) Verify2FA(c *fiber.Ctx) error {
 
 	// 2. POBIERAMY FINGERPRINT Z NAGŁÓWKA
 	// To rozwiązuje błąd "not enough arguments in call to h.authService.CreateAccessToken"
-	fingerprint := c.Get("X-Device-Fingerprint")
+	fingerprint := c.Get(constants.HeaderDeviceFingerprint)
 
 	// ✅ KLUCZOWE: Zerowanie kodu 2FA z pamięci na koniec funkcji
 	defer func() {
@@ -474,7 +475,7 @@ func (h *AuthHandler) RefreshToken(c *fiber.Ctx) error {
 
 	// 1. Pobieramy fingerprint z nagłówka
 	// Musi być wysłany przez klienta (np. Interceptor Dio we Flutterze)
-	fingerprint := c.Get("X-Device-Fingerprint")
+	fingerprint := c.Get(constants.HeaderDeviceFingerprint)
 	if fingerprint == "" {
 		log.Warn("Refresh attempt without fingerprint header")
 		return errors.SendAppError(c, errors.ErrInvalidToken)

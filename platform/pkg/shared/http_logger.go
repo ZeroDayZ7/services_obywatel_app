@@ -79,13 +79,13 @@ func RequestLoggerMiddleware() fiber.Handler {
 		// log (Strukturalny)
 		if isDev {
 			// W DEV logujemy wszystko na DEBUG (z body i czasem)
-			log.Debug("Request processed",
-				zap.String("method", c.Method()),
-				zap.String("path", c.Path()),
-				zap.Int("status", c.Response().StatusCode()),
-				zap.String("latency", latency.String()),
-				zap.Any("request_id", c.Locals("requestid")),
-				body,
+			log.DebugRequest(
+				"Request processed",
+				c.Method(),
+				c.Path(),
+				c.Response().StatusCode(),
+				latency.String(),
+				body, // Twoja struktura body zostanie automatycznie zdekodowana i zmaskowana
 			)
 		} else {
 			// Na PROD logujemy tylko Info (bez Body dla oszczędności, ale ze statusem i czasem)

@@ -10,6 +10,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/proxy"
+	"github.com/zerodayz7/platform/pkg/constants"
 	reqctx "github.com/zerodayz7/platform/pkg/context"
 	apperr "github.com/zerodayz7/platform/pkg/errors"
 	"github.com/zerodayz7/platform/pkg/shared"
@@ -27,9 +28,9 @@ func ReverseProxyFiber(container *di.Container, target string) fiber.Handler {
 
 		// 3. Dodajemy Twoje customowe nagłówki przed wysłaniem
 		if ctx != nil {
-			c.Request().Header.Set("X-Request-Id", ctx.RequestID)
-			c.Request().Header.Set("X-Forwarded-For", ctx.IP)
-			c.Request().Header.Set("X-Real-IP", ctx.IP)
+			c.Request().Header.Set(constants.HeaderRequestID, ctx.RequestID)
+			c.Request().Header.Set(constants.HeaderXForwardedFor, ctx.IP)
+			c.Request().Header.Set(constants.HeaderXRealIP, ctx.IP)
 		}
 
 		// Wymusić przekazanie User-Agent i Fingerprint,
@@ -65,9 +66,9 @@ func ReverseProxy(container *di.Container, target string) fiber.Handler {
 		}
 
 		if ctx != nil {
-			req.Header.Set("X-Request-Id", ctx.RequestID)
-			req.Header.Set("X-Forwarded-For", ctx.IP)
-			req.Header.Set("X-Real-IP", ctx.IP)
+			req.Header.Set(constants.HeaderRequestID, ctx.RequestID)
+			req.Header.Set(constants.HeaderXForwardedFor, ctx.IP)
+			req.Header.Set(constants.HeaderXRealIP, ctx.IP)
 		}
 
 		return executeProxyRequest(c, container, req, log)
@@ -106,9 +107,9 @@ func ReverseProxySecure(container *di.Container, target string) fiber.Handler {
 		}
 
 		// --- Nagłówki kontrolowane  ---
-		req.Header.Set("X-Request-Id", ctx.RequestID)
-		req.Header.Set("X-Forwarded-For", ctx.IP)
-		req.Header.Set("X-Real-IP", ctx.IP)
+		req.Header.Set(constants.HeaderRequestID, ctx.RequestID)
+		req.Header.Set(constants.HeaderXForwardedFor, ctx.IP)
+		req.Header.Set(constants.HeaderXRealIP, ctx.IP)
 
 		if ctx.UserID != nil {
 			req.Header.Set("X-User-Id", ctx.UserID.String())
@@ -122,8 +123,8 @@ func ReverseProxySecure(container *di.Container, target string) fiber.Handler {
 		}
 
 		// ---  Zero trust: auth-related ---
-		req.Header.Del("Authorization")
-		req.Header.Del("Cookie")
+		req.Header.Del(constants.HeaderAuth)
+		req.Header.Del(constants.HeaderCookie)
 
 		// --- podpisany kontekst ---
 		payload, err := reqctx.Encode(*ctx)
@@ -132,8 +133,8 @@ func ReverseProxySecure(container *di.Container, target string) fiber.Handler {
 			return apperr.SendAppError(c, apperr.ErrInternal)
 		}
 		sig := reqctx.Sign(payload, container.InternalSecret)
-		req.Header.Set("X-Internal-Context", base64.StdEncoding.EncodeToString(payload))
-		req.Header.Set("X-Internal-Signature", sig)
+		req.Header.Set(constants.HeaderInternalContext, base64.StdEncoding.EncodeToString(payload))
+		req.Header.Set(constants.HeaderInternalSignature, sig)
 
 		return executeProxyRequest(c, container, req, log)
 	}

@@ -4,14 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-
 	"slices"
 
 	"github.com/gofiber/fiber/v2"
 	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/redis/go-redis/v9"
+	"github.com/zerodayz7/platform/pkg/constants"
 	"github.com/zerodayz7/platform/pkg/shared"
-	"github.com/zerodayz7/platform/pkg/types"
 )
 
 type UserSession struct {
@@ -26,12 +25,12 @@ func AuthRedisMiddleware(rdb *redis.Client) fiber.Handler {
 		path := c.Path()
 
 		// 1. Skip public paths
-		if slices.Contains(types.PublicPaths, path) {
+		if slices.Contains(constants.PublicPaths, path) {
 			return c.Next()
 		}
 
 		// 2. Pobierz fingerprint wysłany przez klienta (Dio Interceptor)
-		clientFingerprint := c.Get("X-Device-Fingerprint")
+		clientFingerprint := c.Get(constants.HeaderDeviceFingerprint)
 		if clientFingerprint == "" {
 			log.Warn("Missing X-Device-Fingerprint header")
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "device identification missing"})

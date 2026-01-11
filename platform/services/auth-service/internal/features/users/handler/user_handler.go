@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/zerodayz7/platform/pkg/constants"
 	"github.com/zerodayz7/platform/pkg/errors"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/pkg/utils"
@@ -41,7 +42,7 @@ func (h *UserHandler) GetSessions(c *fiber.Ctx) error {
 	}
 
 	// 4. Mapowanie na DTO
-	currentFingerprint := c.Get("X-Device-Fingerprint")
+	currentFingerprint := c.Get(constants.HeaderDeviceFingerprint)
 	var response []http.SessionResponse
 
 	for _, s := range sessions {

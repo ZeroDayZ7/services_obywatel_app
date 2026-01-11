@@ -17,7 +17,7 @@ type InternalSecurityConfig struct {
 	EncryptionKey string `mapstructure:"INTERNAL_ENCRYPTION_KEY" validate:"required,len=32"`
 
 	// HashSalt używany do "solenia" hashy PESEL/Email (zapobiega rainbow tables)
-	HashSalt string `mapstructure:"INTERNAL_HASH_SALT" validate:"required,min=16"`
+	HashSalt string `mapstructure:"INTERNAL_HASH_SALT" validate:"omitempty,min=16"`
 }
 
 type OTELConfig struct {
