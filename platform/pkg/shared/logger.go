@@ -19,6 +19,22 @@ type Logger struct {
 var (
 	instance *Logger
 	once     sync.Once
+
+	SensitiveKeys = []string{
+		"password",
+		"token",
+		"secret",
+		"code",
+		"authorization",
+		"credential",
+		"apikey",
+	}
+)
+
+const (
+	colorGreen  = "\x1b[32m"
+	colorYellow = "\x1b[33m"
+	colorRed    = "\x1b[31m"
 )
 
 func InitBootstrapLogger(env string) *Logger {
@@ -52,63 +68,58 @@ func InitBootstrapLogger(env string) *Logger {
 // InitLogger inicjalizuje singleton loggera z dynamicznym poziomem logowania
 func InitLogger(env string) *Logger {
 	once.Do(func() {
+		isProd := strings.ToLower(env) == "production"
+
 		var consoleLevel zapcore.Level
-		if strings.ToLower(env) == "production" {
+		if isProd {
 			consoleLevel = zapcore.InfoLevel
 		} else {
 			consoleLevel = zapcore.DebugLevel
 		}
 
-		// consoleEncoderConfig := zapcore.EncoderConfig{
-		// 	MessageKey:  "msg",
-		// 	LevelKey:    "level",
-		// 	TimeKey:     "time",
-		// 	EncodeTime:  zapcore.ISO8601TimeEncoder,
-		// 	EncodeLevel: zapcore.CapitalColorLevelEncoder,
-		// }
+		// --- 1. Konfiguracja dla Konsoli ---
+		var consoleEncoder zapcore.Encoder
 
-		consoleEncoderConfig := zapcore.EncoderConfig{
-			MessageKey:     "msg",
-			LevelKey:       "level",
-			TimeKey:        "time",
-			NameKey:        "logger",
-			CallerKey:      "caller",
-			FunctionKey:    zapcore.OmitKey,
-			StacktraceKey:  "stacktrace",
-			LineEnding:     zapcore.DefaultLineEnding,
-			EncodeLevel:    zapcore.CapitalColorLevelEncoder,
-			EncodeTime:     zapcore.ISO8601TimeEncoder,
-			EncodeDuration: zapcore.StringDurationEncoder,
-			EncodeCaller:   zapcore.ShortCallerEncoder,
+		if isProd {
+			// Na PRODUKCJI
+			consoleEncoder = zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig())
+		} else {
+			// W DEVIE
+			consoleEncoderConfig := zapcore.EncoderConfig{
+				MessageKey:     "msg",
+				LevelKey:       "level",
+				TimeKey:        "",
+				NameKey:        "logger",
+				CallerKey:      "",
+				LineEnding:     zapcore.DefaultLineEnding,
+				EncodeLevel:    zapcore.CapitalColorLevelEncoder,
+				EncodeTime:     zapcore.ISO8601TimeEncoder,
+				EncodeDuration: zapcore.StringDurationEncoder,
+				EncodeCaller:   zapcore.ShortCallerEncoder,
+			}
+			consoleEncoder = zapcore.NewConsoleEncoder(consoleEncoderConfig)
 		}
 
-		// Rdzeń dla Konsoli
-		consoleCore := zapcore.NewCore(
-			zapcore.NewConsoleEncoder(consoleEncoderConfig),
-			zapcore.AddSync(os.Stdout),
-			consoleLevel,
-		)
+		consoleCore := zapcore.NewCore(consoleEncoder, zapcore.AddSync(os.Stdout), consoleLevel)
 
-		// Konfiguracja rotacji plików (Lumberjack)
+		// --- 2. Konfiguracja dla Pliku (Zawsze JSON) ---
 		logFile := &lumberjack.Logger{
 			Filename:   "logs/app.log",
-			MaxSize:    10, // megabytes
+			MaxSize:    10,
 			MaxBackups: 5,
-			MaxAge:     7, // days
 			Compress:   true,
 		}
-
-		// Rdzeń dla Pliku (zawsze JSON, zawsze od Info wzwyż dla wydajności)
 		fileCore := zapcore.NewCore(
 			zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()),
 			zapcore.AddSync(logFile),
-			zapcore.InfoLevel,
+			zap.InfoLevel,
 		)
 
-		// Połączenie rdzeni
+		// --- 3. Połączenie ---
 		core := zapcore.NewTee(consoleCore, fileCore)
 
-		// Dodajemy AddCaller, aby widzieć linię kodu, z której pochodzi log
+		// AddCallerSkip(1) jest ważne, żeby w logach widzieć miejsce wywołania log.Info,
+		// a nie wnętrze Twojej paczki shared/logger
 		zapLogger := zap.New(core, zap.AddCaller(), zap.AddCallerSkip(1))
 		instance = &Logger{zapLogger}
 	})
@@ -123,7 +134,153 @@ func GetLogger() *Logger {
 	return instance
 }
 
-// convertStructToFields zamienia struct/map na []zap.Field z MASKOWANIEM SEKRETÓW
+// --- Metody logowania ---
+// region METODY
+func (l *Logger) Info(msg string, args ...any)  { l.Logger.Info(msg, l.parseArgs(args...)...) }
+func (l *Logger) Debug(msg string, args ...any) { l.Logger.Debug(msg, l.parseArgs(args...)...) }
+func (l *Logger) Warn(msg string, args ...any)  { l.Logger.Warn(msg, l.parseArgs(args...)...) }
+func (l *Logger) Error(msg string, args ...any) { l.Logger.Error(msg, l.parseArgs(args...)...) }
+
+func (l *Logger) InfoMap(msg string, m map[string]any)  { l.Logger.Info(msg, toFields(m)...) }
+func (l *Logger) DebugMap(msg string, m map[string]any) { l.Logger.Debug(msg, toFields(m)...) }
+func (l *Logger) WarnMap(msg string, m map[string]any)  { l.Logger.Warn(msg, toFields(m)...) }
+func (l *Logger) ErrorMap(msg string, m map[string]any) { l.Logger.Error(msg, toFields(m)...) }
+
+func (l *Logger) InfoObj(msg string, obj any)  { l.Logger.Info(msg, convertStructToFields(obj)...) }
+func (l *Logger) DebugObj(msg string, obj any) { l.Logger.Debug(msg, convertStructToFields(obj)...) }
+func (l *Logger) WarnObj(msg string, obj any)  { l.Logger.Warn(msg, convertStructToFields(obj)...) }
+func (l *Logger) ErrorObj(msg string, obj any) { l.Logger.Error(msg, convertStructToFields(obj)...) }
+
+// region DEBUG
+func (l *Logger) DebugPretty(msg string, m map[string]any) {
+	l.Logger.Debug(msg, toFields(m)...)
+}
+
+func (l *Logger) DebugEmpty(msg string, key string) {
+	l.Logger.Debug(msg, zap.String(key, "NULL/EMPTY ∅"))
+}
+
+// Dodaj to do shared/logger.go
+func (l *Logger) DebugResponse(msg string, res any) {
+	if !l.Core().Enabled(zap.DebugLevel) {
+		return
+	}
+
+	fmt.Printf("\n\x1b[35m--- [DEBUG] Outgoing Response ---\x1b[0m\n")
+	fmt.Printf("Message: %s\n", msg)
+
+	fields := convertStructToFields(res)
+	for _, f := range fields {
+		fmt.Printf("  \x1b[32m%s\x1b[0m:", f.Key)
+		l.printValue(f, 1) // 1 to poziom wcięcia
+	}
+	fmt.Printf("\x1b[35m---------------------------------\x1b[0m\n\n")
+}
+
+// DebugRequest ładnie formatuje przetworzone żądanie w konsoli (kolory ANSI)
+func (l *Logger) DebugRequest(msg string, method, path string, status int, latency string, body any) {
+	if !l.Core().Enabled(zapcore.DebugLevel) {
+		return
+	}
+
+	fmt.Printf("\n\x1b[34m--- [DEBUG] HTTP Request Processed ---\x1b[0m\n")
+	fmt.Printf("Message: %s\n", msg)
+	fmt.Printf("  \x1b[32mMethod:\x1b[0m   %s\n", method)
+	fmt.Printf("  \x1b[32mPath:\x1b[0m     %s\n", path)
+	fmt.Printf("  \x1b[32mStatus:\x1b[0m   %d\n", status)
+	fmt.Printf("  \x1b[32mLatency:\x1b[0m  %s\n", latency)
+
+	if body != nil {
+		fmt.Printf("  \x1b[32mBody:\x1b[0m")
+		fields := convertStructToFields(body)
+		for _, f := range fields {
+			fmt.Printf("\n    \x1b[36m%s\x1b[0m:", f.Key)
+			l.printValue(f, 0)
+		}
+		fmt.Println()
+	}
+
+	fmt.Printf("\x1b[34m--------------------------------------\x1b[0m\n\n")
+}
+
+// DebugInfo - Zielona ramka (idealna do kodów 2FA, sukcesów w testach)
+func (l *Logger) DebugInfo(msg string, data any) {
+	l.printFramedLog("INFO", msg, data, colorGreen)
+}
+
+// DebugWarn - Żółta ramka (ostrzeżenia, ważne punkty w logice)
+func (l *Logger) DebugWarn(msg string, data any) {
+	l.printFramedLog("WARN", msg, data, colorYellow)
+}
+
+// DebugError - Czerwona ramka (błędy, które chcesz widzieć wizualnie)
+func (l *Logger) DebugError(msg string, data any) {
+	l.printFramedLog("ERROR", msg, data, colorRed)
+}
+
+// region FATAL
+func (l *Logger) Fatal(msg string, args ...any) {
+	l.Logger.Fatal(msg, l.parseArgs(args...)...)
+}
+
+func (l *Logger) FatalMap(msg string, m map[string]any) {
+	l.Logger.Fatal(msg, toFields(m)...)
+}
+
+func (l *Logger) FatalObj(msg string, obj any) {
+	l.Logger.Fatal(msg, convertStructToFields(obj)...)
+}
+
+// region = HELPERY =
+
+// region printFramedLog
+func (l *Logger) printFramedLog(label, msg string, data any, color string) {
+	if !l.Core().Enabled(zapcore.DebugLevel) {
+		return
+	}
+
+	fmt.Printf("\n%s--- [DEBUG %s] %s ---\x1b[0m\n", color, label, strings.Repeat("-", 10))
+	fmt.Printf("Message: %s", msg)
+
+	if data != nil {
+		fields := convertStructToFields(data)
+		for _, f := range fields {
+			fmt.Printf("\n  \x1b[32m%s\x1b[0m:", f.Key)
+			l.printValue(f, 1)
+		}
+		fmt.Println()
+	}
+	fmt.Printf("%s------------------------------------------\x1b[0m\n\n", color)
+}
+
+// region printValue
+func (l *Logger) printValue(f zap.Field, indent int) {
+	switch f.Type {
+	case zapcore.StringType:
+		fmt.Printf(" %v", f.String)
+	case zapcore.BoolType:
+		fmt.Printf(" %v", f.Integer == 1)
+	case zapcore.InlineMarshalerType, zapcore.ObjectMarshalerType:
+		if subFields, ok := f.Interface.([]zap.Field); ok {
+			// Przy zagnieżdżeniu robimy nową linię i wcięcie
+			for _, sf := range subFields {
+				spaces := strings.Repeat("  ", indent+3)
+				fmt.Printf("\n%s\x1b[36m%s\x1b[0m:", spaces, sf.Key)
+				l.printValue(sf, indent+1)
+			}
+		} else {
+			fmt.Print(" {}")
+		}
+	default:
+		if f.Interface == nil {
+			fmt.Print(" null")
+		} else {
+			fmt.Printf(" %v", f.Interface)
+		}
+	}
+}
+
+// region convertStructToFields
 func convertStructToFields(obj any) []zap.Field {
 	fields := []zap.Field{}
 
@@ -188,23 +345,11 @@ func convertStructToFields(obj any) []zap.Field {
 	return fields
 }
 
-// isSensitive sprawdza, czy nazwa pola sugeruje dane wrażliwe
+// region isSensitive
 func isSensitive(name string) bool {
 	n := strings.ToLower(name)
 
-	// Lista słów, które oznaczają dane wrażliwe
-	sensitiveKeys := []string{
-		"password",
-		"token",
-		"secret",
-		"code",
-		"authorization",
-		"Authorization",
-		"credential",
-		"apikey",
-	}
-
-	for _, key := range sensitiveKeys {
+	for _, key := range SensitiveKeys {
 		if strings.Contains(n, key) {
 			return true
 		}
@@ -213,6 +358,7 @@ func isSensitive(name string) bool {
 	return false
 }
 
+// region toFields
 // --- Helper konwertujący mapy na zap.Fields (również z maskowaniem) ---
 func toFields(m map[string]any) []zap.Field {
 	fields := make([]zap.Field, 0, len(m))
@@ -222,7 +368,6 @@ func toFields(m map[string]any) []zap.Field {
 			continue
 		}
 
-		// Jeśli wartością jest kolejna mapa, spłaszczamy ją lub logujemy jako Any
 		if v == nil {
 			fields = append(fields, zap.String(k, "null"))
 		} else {
@@ -232,12 +377,12 @@ func toFields(m map[string]any) []zap.Field {
 	return fields
 }
 
+// region parseArgs
 func (l *Logger) parseArgs(args ...any) []zap.Field {
 	fields := []zap.Field{}
 	for _, arg := range args {
 		switch v := arg.(type) {
 		case error:
-			// AUTOMATYCZNIE zamieniamy każdy błąd na profesjonalne pole zap.Error
 			fields = append(fields, zap.Error(v))
 		case zap.Field:
 			fields = append(fields, v)
@@ -248,122 +393,4 @@ func (l *Logger) parseArgs(args ...any) []zap.Field {
 		}
 	}
 	return fields
-}
-
-// --- Metody logowania ---
-
-func (l *Logger) Info(msg string, args ...any) {
-	l.Logger.Info(msg, l.parseArgs(args...)...)
-}
-
-func (l *Logger) Debug(msg string, args ...any) {
-	l.Logger.Debug(msg, l.parseArgs(args...)...)
-}
-
-func (l *Logger) Warn(msg string, args ...any) {
-	l.Logger.Warn(msg, l.parseArgs(args...)...)
-}
-
-func (l *Logger) Error(msg string, args ...any) {
-	l.Logger.Error(msg, l.parseArgs(args...)...)
-}
-
-func (l *Logger) InfoMap(msg string, m map[string]any)  { l.Logger.Info(msg, toFields(m)...) }
-func (l *Logger) DebugMap(msg string, m map[string]any) { l.Logger.Debug(msg, toFields(m)...) }
-func (l *Logger) WarnMap(msg string, m map[string]any)  { l.Logger.Warn(msg, toFields(m)...) }
-func (l *Logger) ErrorMap(msg string, m map[string]any) { l.Logger.Error(msg, toFields(m)...) }
-
-func (l *Logger) InfoObj(msg string, obj any)  { l.Logger.Info(msg, convertStructToFields(obj)...) }
-func (l *Logger) DebugObj(msg string, obj any) { l.Logger.Debug(msg, convertStructToFields(obj)...) }
-func (l *Logger) WarnObj(msg string, obj any)  { l.Logger.Warn(msg, convertStructToFields(obj)...) }
-func (l *Logger) ErrorObj(msg string, obj any) { l.Logger.Error(msg, convertStructToFields(obj)...) }
-
-func (l *Logger) DebugPretty(msg string, m map[string]any) {
-	l.Logger.Debug(msg, toFields(m)...)
-}
-
-func (l *Logger) DebugEmpty(msg string, key string) {
-	l.Logger.Debug(msg, zap.String(key, "NULL/EMPTY ∅"))
-}
-
-// Dodaj to do shared/logger.go
-func (l *Logger) DebugResponse(msg string, res any) {
-	if !l.Core().Enabled(zap.DebugLevel) {
-		return
-	}
-
-	fmt.Printf("\n\x1b[35m--- [DEBUG] Outgoing Response ---\x1b[0m\n")
-	fmt.Printf("Message: %s\n", msg)
-
-	fields := convertStructToFields(res)
-	for _, f := range fields {
-		fmt.Printf("  \x1b[32m%s\x1b[0m:", f.Key)
-		l.printValue(f, 1) // 1 to poziom wcięcia
-	}
-	fmt.Printf("\x1b[35m---------------------------------\x1b[0m\n\n")
-}
-
-// DebugRequest ładnie formatuje przetworzone żądanie w konsoli (kolory ANSI)
-func (l *Logger) DebugRequest(msg string, method, path string, status int, latency string, body any) {
-	// Sprawdzamy czy poziom Debug jest włączony, żeby nie marnować CPU
-	if !l.Core().Enabled(zapcore.DebugLevel) {
-		return
-	}
-
-	fmt.Printf("\n\x1b[34m--- [DEBUG] HTTP Request Processed ---\x1b[0m\n")
-	fmt.Printf("Message: %s\n", msg)
-	fmt.Printf("  \x1b[32mMethod:\x1b[0m  %s\n", method)
-	fmt.Printf("  \x1b[32mPath:\x1b[0m    %s\n", path)
-	fmt.Printf("  \x1b[32mStatus:\x1b[0m  %d\n", status)
-	fmt.Printf("  \x1b[32mLatency:\x1b[0m %s\n", latency)
-
-	if body != nil {
-		fmt.Printf("  \x1b[32mBody:\x1b[0m")
-		fields := convertStructToFields(body)
-		for _, f := range fields {
-			fmt.Printf("\n    \x1b[36m%s\x1b[0m:", f.Key)
-			l.printValue(f, 2)
-		}
-	}
-	fmt.Printf("\x1b[34m--------------------------------------\x1b[0m\n\n")
-}
-
-// Pomocnicza metoda do ładnego wypisywania zagnieżdżonych danych
-func (l *Logger) printValue(f zap.Field, indent int) {
-	spaces := strings.Repeat("  ", indent)
-
-	switch f.Type {
-	case zapcore.StringType:
-		fmt.Printf(" %v\n", f.String)
-	case zapcore.BoolType:
-		fmt.Printf(" %v\n", f.Integer == 1)
-	case zapcore.InlineMarshalerType, zapcore.ObjectMarshalerType:
-		if subFields, ok := f.Interface.([]zap.Field); ok {
-			fmt.Print("\n")
-			for _, sf := range subFields {
-				fmt.Printf("%s\x1b[36m%s\x1b[0m:", spaces+"  ", sf.Key)
-				l.printValue(sf, indent+1)
-			}
-		} else {
-			fmt.Print(" {}\n")
-		}
-	default:
-		if f.Interface == nil {
-			fmt.Print(" null\n")
-		} else {
-			fmt.Printf(" %v\n", f.Interface)
-		}
-	}
-}
-
-func (l *Logger) Fatal(msg string, args ...any) {
-	l.Logger.Fatal(msg, l.parseArgs(args...)...)
-}
-
-func (l *Logger) FatalMap(msg string, m map[string]any) {
-	l.Logger.Fatal(msg, toFields(m)...)
-}
-
-func (l *Logger) FatalObj(msg string, obj any) {
-	l.Logger.Fatal(msg, convertStructToFields(obj)...)
 }

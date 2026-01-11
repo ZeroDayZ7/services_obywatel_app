@@ -30,7 +30,7 @@
       },
       "buildFlags": "-tags=dev",
       "cwd": "${workspaceFolder}/platform/services/auth-service",
-      "showLog": true,
+      "showLog": false,
       "output": "${workspaceFolder}/platform/services/auth-service/bin/auth_debug.exe"
     },
     {

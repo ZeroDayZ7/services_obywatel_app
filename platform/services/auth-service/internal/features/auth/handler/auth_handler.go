@@ -291,7 +291,7 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 			TwoFAToken:    twoFAToken,
 		}
 
-		log.DebugMap("Generated 2FA code", map[string]any{
+		log.DebugInfo("Generated 2FA code", map[string]any{
 			"email": body.Email,
 			"test":  code,
 			"token": twoFAToken,

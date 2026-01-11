@@ -11,7 +11,7 @@
       "**/.env.example": true,
       "**/.env.dev.example": true,
       "**/.gitattributes": true,
-      "**/logs": true,
+      // "**/logs": true,
       "**/bin": true,
       "**/LICENSE": true,
       "**/go.sum": true,

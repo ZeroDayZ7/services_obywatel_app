@@ -75,27 +75,27 @@ func RequestLoggerMiddleware() fiber.Handler {
 
 		// Obliczenie czasu trwania zapytania
 		latency := time.Since(start)
-
+		requestID := c.Locals("requestid")
 		// log (Strukturalny)
+		// 1. ZAWSZE logujemy strukturalnie do Zap (pójdzie do konsoli i do pliku JSON)
+		log.Info("Request completed",
+			zap.String("method", c.Method()),
+			zap.String("path", c.Path()),
+			zap.Int("status", c.Response().StatusCode()),
+			zap.String("latency", latency.String()),
+			zap.Any("request_id", requestID),
+			zap.String("ip", c.IP()),
+		)
+
+		// 2. TYLKO W DEV wypisujemy dodatkowo "ładny" blok do konsoli
 		if isDev {
-			// W DEV logujemy wszystko na DEBUG (z body i czasem)
 			log.DebugRequest(
-				"Request processed",
+				"Request Detail",
 				c.Method(),
 				c.Path(),
 				c.Response().StatusCode(),
 				latency.String(),
-				body, // Twoja struktura body zostanie automatycznie zdekodowana i zmaskowana
-			)
-		} else {
-			// Na PROD logujemy tylko Info (bez Body dla oszczędności, ale ze statusem i czasem)
-			log.Info("Request completed",
-				zap.String("method", c.Method()),
-				zap.String("path", c.Path()),
-				zap.Int("status", c.Response().StatusCode()),
-				zap.String("latency", latency.String()),
-				zap.Any("request_id", c.Locals("requestid")),
-				zap.String("ip", c.IP()),
+				body,
 			)
 		}
 
