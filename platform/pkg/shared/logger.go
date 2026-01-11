@@ -1,6 +1,7 @@
 package shared
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"reflect"
@@ -22,9 +23,9 @@ var (
 
 	SensitiveKeys = []string{
 		"password",
-		"token",
+		// "token",
 		"secret",
-		"code",
+		// "code",
 		"authorization",
 		"credential",
 		"apikey",
@@ -218,7 +219,28 @@ func (l *Logger) DebugError(msg string, data any) {
 	l.printFramedLog("ERROR", msg, data, colorRed)
 }
 
+func (l *Logger) DebugJSON(msg string, obj any) {
+	if !l.Core().Enabled(zapcore.DebugLevel) {
+		return
+	}
+
+	// Marshalling do JSONa z wcięciami
+	jsonBytes, err := json.MarshalIndent(obj, "", "  ")
+	if err != nil {
+		fmt.Printf("\n\x1b[31m--- [DEBUG JSON ERROR] ---\x1b[0m\n")
+		fmt.Printf("Message: %s\nError: %v\n", msg, err)
+		return
+	}
+
+	fmt.Printf("\n\x1b[35m--- [DEBUG RAW JSON] ---\x1b[0m\n")
+	fmt.Printf("Message: \x1b[33m%s\x1b[0m\n", msg)
+	fmt.Printf("\x1b[32m%s\x1b[0m\n", string(jsonBytes)) // Zielony kolor dla treści JSON
+	fmt.Printf("\x1b[35m------------------------\x1b[0m\n\n")
+}
+
+// ===========================================
 // region FATAL
+// ===========================================
 func (l *Logger) Fatal(msg string, args ...any) {
 	l.Logger.Fatal(msg, l.parseArgs(args...)...)
 }

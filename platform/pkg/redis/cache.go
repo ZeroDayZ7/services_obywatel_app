@@ -3,6 +3,7 @@ package redis
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"time"
 
 	goredis "github.com/redis/go-redis/v9"
@@ -142,7 +143,6 @@ func (c *Client) ReadStream(
 	group string,
 	consumer string,
 ) ([]goredis.XMessage, error) {
-
 	res, err := c.XReadGroup(ctx, &goredis.XReadGroupArgs{
 		Group:    group,
 		Consumer: consumer,
@@ -150,7 +150,6 @@ func (c *Client) ReadStream(
 		Count:    10,
 		Block:    5 * time.Second,
 	}).Result()
-
 	if err != nil {
 		if err == goredis.Nil {
 			return nil, nil
@@ -215,25 +214,38 @@ func (c *Cache) Publish(ctx context.Context, stream string, payload any) error {
 	}).Err()
 }
 
-func (c *Cache) Verify2FAAttempt(ctx context.Context, key string, maxAttempts int, ttl time.Duration) (string, error) {
-	_, err := c.client.Eval(
+func (c *Cache) Verify2FAAttempt(
+	ctx context.Context,
+	key string,
+	maxAttempts int,
+	ttl time.Duration,
+) (string, error) {
+	res, err := c.client.Eval(
 		ctx,
 		verify2FAScript,
 		[]string{key},
-		"", // kod weryfikujesz w Go
 		maxAttempts,
 		int(ttl.Seconds()),
 	).Result()
-
 	if err != nil {
-		if err.Error() == "NOT_FOUND" {
-			return "not_found", nil
-		}
-		if err.Error() == "LOCKED" {
-			return "locked", nil
-		}
-		return "", err
+		return "", err // prawdziwy Redis error
 	}
 
-	return "attempt_updated", nil
+	arr, ok := res.([]interface{})
+	if !ok || len(arr) == 0 {
+		return "", errors.New("invalid lua response")
+	}
+
+	status := arr[0].(string)
+
+	switch status {
+	case "NOT_FOUND":
+		return "not_found", nil
+	case "LOCKED":
+		return "locked", nil
+	case "ATTEMPT_UPDATED":
+		return "attempt_updated", nil
+	default:
+		return "", errors.New("unknown lua status")
+	}
 }

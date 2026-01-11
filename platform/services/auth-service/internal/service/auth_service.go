@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	stderrors "errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -24,7 +25,6 @@ import (
 	repo "github.com/zerodayz7/platform/services/auth-service/internal/repository"
 
 	"github.com/zerodayz7/platform/services/auth-service/internal/shared/security"
-	"golang.org/x/crypto/bcrypt"
 )
 
 // AuthService definiuje pełny kontrakt biznesowy modułu autoryzacji.
@@ -257,31 +257,41 @@ func (s *authService) Logout(ctx context.Context, refreshToken, userID, sessionI
 }
 
 func (s *authService) Verify2FA(ctx context.Context, token string, code []byte, fingerprint string, ip string) (*http.Verify2FAResponse, error) {
+	log := shared.GetLogger()
 	// 1. Pobieranie sesji 2FA z Cache
 	key := fmt.Sprintf("login:2fa:%s", token)
 	data, err := s.cache.Get(ctx, key)
 	if err != nil {
 		return nil, errors.ErrInvalidCredentials
 	}
-
+	log.DebugInfo("Body", key)
 	var session redis.TwoFASession
 	if err := json.Unmarshal([]byte(data), &session); err != nil {
 		return nil, errors.ErrInternal
 	}
-
+	codeStr := strings.TrimSpace(string(code))
+	log.DebugInfo("2FA compare", map[string]any{
+		"plain": codeStr,
+		"hash":  session.CodeHash,
+	})
 	// 2. Weryfikacja kodu bcryptem
-	if err := bcrypt.CompareHashAndPassword([]byte(session.CodeHash), code); err != nil {
+	valid, err := security.VerifyPassword(code, session.CodeHash)
+
+	if err != nil || !valid {
+		// Logika blokowania po błędnych próbach
 		status, _ := s.cache.Verify2FAAttempt(ctx, key, 5, 5*time.Minute)
+		log.DebugInfo("2FA verification failed", map[string]any{
+			"status": status,
+			"token":  token,
+		})
+
 		switch status {
 		case "locked":
 			return nil, errors.Err2FALocked
-		case "not_found":
-			return nil, errors.ErrInvalidCredentials
 		default:
 			return nil, errors.ErrInvalid2FACode
 		}
 	}
-
 	// 3. Czyszczenie sesji 2FA
 	_ = s.cache.Del(ctx, key)
 
@@ -297,7 +307,7 @@ func (s *authService) Verify2FA(ctx context.Context, token string, code []byte, 
 	_ = s.userRepo.Update(ctx, user)
 
 	// 5. Generowanie tokenów i sesji głównej
-	accessToken, sessionID, err := s.CreateAccessToken(uid, fingerprint)
+	setupToken, sessionID, err := s.CreateAccessToken(uid, fingerprint)
 	if err != nil {
 		return nil, errors.ErrInternal
 	}
@@ -307,18 +317,29 @@ func (s *authService) Verify2FA(ctx context.Context, token string, code []byte, 
 		return nil, errors.ErrInternal
 	}
 
-	// 6. Generowanie Challenge dla mObywatela (Ed25519)
+	// 6. Generowanie Challenge (Ed25519)
 	challenge := shared.GenerateUuid()
 	if err := s.cache.Set(ctx, fmt.Sprintf("challenge:%s", uid), challenge, 5*time.Minute); err != nil {
 		return nil, errors.ErrInternal
 	}
 
-	return &http.Verify2FAResponse{
-		Success:     true,
-		AccessToken: accessToken,
-		Challenge:   challenge,
-		IsTrusted:   false,
-	}, nil
+	response := &http.Verify2FAResponse{
+		Success:    true,
+		SetupToken: setupToken,
+		Challenge:  challenge,
+		IsTrusted:  false,
+	}
+
+	// DEBUG INFO: Wypisujemy dokładnie to, co idzie do klienta
+	log.DebugJSON("[DEBUG] Sending 2FA Response:",
+		response,
+	)
+
+	// Opcjonalnie: zrzut do JSONa w logach, żeby sprawdzić klucze
+	// responseJson, _ := json.Marshal(response)
+	// log.Printf("[DEBUG] Full JSON: %s", string(responseJson))
+
+	return response, nil
 }
 
 func (s *authService) AttemptLogin(ctx context.Context, email string, password []byte, fingerprint string) (*http.LoginResponse, error) {
@@ -354,10 +375,6 @@ func (s *authService) prepare2FASession(ctx context.Context, user *model.User, f
 	// 1. Generujemy 6-cyfrowy kod (bezpiecznie)
 	code := fmt.Sprintf("%06d", shared.RandInt(100000, 999999))
 
-	log.DebugInfo("Generated 2FA code", map[string]any{
-		"KOD": code,
-	})
-
 	// 2. Hashujemy kod przed zapisem (Security: At-Rest protection)
 	hashedCode, err := security.HashPassword(code) // Używamy bcrypt, który już masz
 	if err != nil {
@@ -368,8 +385,11 @@ func (s *authService) prepare2FASession(ctx context.Context, user *model.User, f
 	token := shared.GenerateUuid()
 	session := redis.TwoFASession{
 		UserID:      user.ID.String(),
+		Email:       user.Email,
+		Token:       token,
 		CodeHash:    hashedCode,
 		Fingerprint: fingerprint,
+		Attempts:    0,
 	}
 
 	// 4. Zapis do Redis (np. na 5 minut)
@@ -383,11 +403,15 @@ func (s *authService) prepare2FASession(ctx context.Context, user *model.User, f
 	// s.emailService.Send2FACode(user.Email, code)
 
 	// DEBUG: W fazie deweloperskiej wypisz kod w konsoli
-	fmt.Printf(" [2FA DEBUG] Kod dla %s: %s \n", user.Email, code)
+	log.DebugInfo("Generated 2FA code", map[string]any{
+		"email": user.Email,
+		"token": token,
+		"code":  code,
+	})
 
 	return &http.LoginResponse{
 		TwoFARequired: true,
-		TwoFAToken:    token, // To musi trafić do Fluttera, by wiedział o jaki token pytać w Verify2FA
+		TwoFAToken:    token,
 	}, nil
 }
 

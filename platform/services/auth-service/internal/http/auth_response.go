@@ -12,10 +12,10 @@ type LoginResponse struct {
 
 // Verify2FAResponse defines the challenge and access data returned after successful 2FA verification.
 type Verify2FAResponse struct {
-	Success     bool   `json:"success"`
-	AccessToken string `json:"access_token"`
-	Challenge   string `json:"challenge"`
-	IsTrusted   bool   `json:"is_trusted"`
+	Success    bool   `json:"success"`
+	SetupToken string `json:"setup_token"`
+	Challenge  string `json:"challenge"`
+	IsTrusted  bool   `json:"is_trusted"`
 }
 
 // RegisterDeviceResponse defines the outcome of a cryptographic device pairing process.
