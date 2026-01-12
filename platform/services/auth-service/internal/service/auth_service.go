@@ -25,6 +25,7 @@ import (
 )
 
 // AuthService definiuje pełny kontrakt biznesowy modułu autoryzacji.
+// region interface
 type AuthService interface {
 	// Główne procesy BIZNESOWE (zostawiamy tylko to, co ma logikę)
 	AttemptLogin(ctx context.Context, email string, password []byte, fingerprint string) (*http.LoginResponse, error)
@@ -46,6 +47,7 @@ type AuthService interface {
 	CanUserLogin(user *model.User) error
 }
 
+// region struct
 type authService struct {
 	// Zmiana: używaj interfejsu z repozytorium
 	userRepo    repo.UserRepository
@@ -54,21 +56,13 @@ type authService struct {
 	cfg         *viper.Config
 }
 
-func NewAuthService(
-	userRepo repo.UserRepository,
-	refreshRepo repo.RefreshTokenRepository,
-	cache *redis.Cache,
-	cfg *viper.Config,
-) AuthService {
+func NewAuthService(userRepo repo.UserRepository, refreshRepo repo.RefreshTokenRepository, cache *redis.Cache, cfg *viper.Config) AuthService {
 	return &authService{
-		userRepo:    userRepo,
-		refreshRepo: refreshRepo,
-		cache:       cache,
-		cfg:         cfg,
+		userRepo: userRepo, refreshRepo: refreshRepo, cache: cache, cfg: cfg,
 	}
 }
 
-// --- Implementacja Metod ---
+// region RefreshToken
 func (s *authService) RefreshToken(ctx context.Context, tokenStr string, fingerprint string) (*http.RefreshResponse, error) {
 	log := shared.GetLogger()
 
@@ -113,6 +107,7 @@ func (s *authService) RefreshToken(ctx context.Context, tokenStr string, fingerp
 	}, nil
 }
 
+// region RegisterDevice
 func (s *authService) RegisterDevice(ctx context.Context, userID uuid.UUID, sessionID string, clientIP string, req schemas.RegisterDeviceRequest) (*http.RegisterDeviceResponse, error) {
 	log := shared.GetLogger()
 
@@ -208,6 +203,7 @@ func (s *authService) RegisterDevice(ctx context.Context, userID uuid.UUID, sess
 	}, nil
 }
 
+// region Logout
 func (s *authService) Logout(ctx context.Context, refreshToken, userID, sessionID string) error {
 	// 1. Usuń refresh token z DB (Revoke)
 	if err := s.RevokeRefreshToken(refreshToken); err != nil {
@@ -237,6 +233,7 @@ func (s *authService) Logout(ctx context.Context, refreshToken, userID, sessionI
 	return nil
 }
 
+// region Verify2FA
 func (s *authService) Verify2FA(ctx context.Context, token string, code []byte, fingerprint string, ip string) (*http.Verify2FAResponse, error) {
 	log := shared.GetLogger()
 	// 1. Pobieranie sesji 2FA z Cache
@@ -323,6 +320,7 @@ func (s *authService) Verify2FA(ctx context.Context, token string, code []byte, 
 	return response, nil
 }
 
+// region AttemptLogin
 func (s *authService) AttemptLogin(ctx context.Context, email string, password []byte, fingerprint string) (*http.LoginResponse, error) {
 	user, err := s.userRepo.GetUserByEmail(ctx, email)
 	if err != nil {
@@ -350,7 +348,7 @@ func (s *authService) AttemptLogin(ctx context.Context, email string, password [
 	return s.finalizeLogin(ctx, user, fingerprint)
 }
 
-// prepare2FASession - Naprawiono błędy unusedparams używając _ lub logiki
+// region prepare2FASession
 func (s *authService) prepare2FASession(ctx context.Context, user *model.User, fingerprint string) (*http.LoginResponse, error) {
 	log := shared.GetLogger()
 	// 1. Generujemy 6-cyfrowy kod (bezpiecznie)
@@ -396,6 +394,7 @@ func (s *authService) prepare2FASession(ctx context.Context, user *model.User, f
 	}, nil
 }
 
+// region finalizeLogin
 func (s *authService) finalizeLogin(ctx context.Context, user *model.User, fingerprint string) (*http.LoginResponse, error) {
 	accessToken, sessionID, err := s.CreateAccessToken(user.ID, fingerprint)
 	if err != nil {
@@ -421,6 +420,7 @@ func (s *authService) finalizeLogin(ctx context.Context, user *model.User, finge
 	}, nil
 }
 
+// region UpdatePassword
 func (s *authService) UpdatePassword(ctx context.Context, userID uuid.UUID, newPassword string) error {
 	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil || user == nil {
@@ -436,6 +436,7 @@ func (s *authService) UpdatePassword(ctx context.Context, userID uuid.UUID, newP
 	return s.userRepo.Update(ctx, user)
 }
 
+// region CreateAccessToken
 func (s *authService) CreateAccessToken(userID uuid.UUID, fingerprint string) (string, string, error) {
 	sessionID := shared.GenerateUuid()
 	claims := jwt.MapClaims{
@@ -448,6 +449,7 @@ func (s *authService) CreateAccessToken(userID uuid.UUID, fingerprint string) (s
 	return token, sessionID, err
 }
 
+// region CreateRefreshToken
 func (s *authService) CreateRefreshToken(userID uuid.UUID, fingerprint string) (*model.RefreshToken, error) {
 	rawToken, _ := security.GenerateRefreshToken()
 	hash := sha256.Sum256([]byte(rawToken))
@@ -467,10 +469,12 @@ func (s *authService) CreateRefreshToken(userID uuid.UUID, fingerprint string) (
 	return rt, nil
 }
 
+// region GetRefreshToken
 func (s *authService) GetRefreshToken(token string) (*model.RefreshToken, error) {
 	return s.refreshRepo.GetByToken(token)
 }
 
+// region RevokeRefreshToken
 func (s *authService) RevokeRefreshToken(token string) error {
 	rt, err := s.refreshRepo.GetByToken(token)
 	if err != nil {
@@ -480,10 +484,12 @@ func (s *authService) RevokeRefreshToken(token string) error {
 	return s.refreshRepo.Update(rt)
 }
 
+// region UpdateRefreshTokensFingerprint
 func (s *authService) UpdateRefreshTokensFingerprint(userID uuid.UUID, oldFP, newFP string) error {
 	return s.refreshRepo.UpdateFingerprintByUser(userID, oldFP, newFP)
 }
 
+// region Register
 func (s *authService) Register(username, email, rawPassword string) (*model.User, error) {
 	hash, _ := security.HashPassword(rawPassword)
 	u := &model.User{Username: username, Email: email, Password: hash}
@@ -491,6 +497,7 @@ func (s *authService) Register(username, email, rawPassword string) (*model.User
 	return u, err
 }
 
+// region RegisterUserDevice
 func (s *authService) RegisterUserDevice(ctx context.Context, userID uuid.UUID, fingerprint, publicKey, deviceName, platform string, isVerified bool, lastIp string) error {
 	device := model.UserDevice{
 		UserID: userID, DeviceFingerprint: fingerprint, PublicKey: publicKey,
@@ -500,6 +507,7 @@ func (s *authService) RegisterUserDevice(ctx context.Context, userID uuid.UUID, 
 	return s.userRepo.SaveDevice(ctx, &device)
 }
 
+// region CanUserLogin
 func (s *authService) CanUserLogin(user *model.User) error {
 	switch user.Status {
 	case model.StatusActive:

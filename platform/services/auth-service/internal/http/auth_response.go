@@ -21,7 +21,6 @@ type Verify2FAResponse struct {
 // RegisterDeviceResponse defines the outcome of a cryptographic device pairing process.
 type RegisterDeviceResponse struct {
 	Success      bool           `json:"success"`
-	Message      string         `json:"message"`
 	AccessToken  string         `json:"access_token"`
 	RefreshToken string         `json:"refresh_token"`
 	IsTrusted    bool           `json:"is_trusted"`

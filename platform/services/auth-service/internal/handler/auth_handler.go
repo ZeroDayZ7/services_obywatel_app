@@ -80,7 +80,7 @@ func (h *AuthHandler) RegisterDevice(c *fiber.Ctx) error {
 		return errors.SendAppError(c, err)
 	}
 
-	log.DebugInfo("response", response)
+	log.DebugJSON("response", response)
 
 	return c.Status(fiber.StatusOK).JSON(response)
 }
