@@ -4,11 +4,9 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/sha256"
-	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	stderrors "errors"
 	"fmt"
 	"strings"
 	"time"
@@ -23,7 +21,6 @@ import (
 	"github.com/zerodayz7/platform/services/auth-service/internal/http"
 	"github.com/zerodayz7/platform/services/auth-service/internal/model"
 	repo "github.com/zerodayz7/platform/services/auth-service/internal/repository"
-
 	"github.com/zerodayz7/platform/services/auth-service/internal/shared/security"
 )
 
@@ -148,34 +145,18 @@ func (s *authService) RegisterDevice(ctx context.Context, userID uuid.UUID, sess
 	// Usuwamy challenge
 	_ = s.cache.Del(ctx, challengeKey)
 
-	// 2. REJESTRACJA/AKTYWACJA URZĄDZENIA
-	existingDevice, err := s.userRepo.GetDeviceByFingerprint(ctx, userID, req.DeviceFingerprint)
-
-	// Naprawa błędu logicznego: sprawdzamy błąd bazy danych
-	if err != nil && !stderrors.Is(err, sql.ErrNoRows) {
-		log.ErrorObj("Database error while fetching device", err)
-		return nil, errors.ErrInternal
-	}
-
-	// Decydujemy o akcji (Update lub Save)
-	if existingDevice != nil {
-		err = s.userRepo.UpdateDeviceStatus(ctx, existingDevice.ID, req.PublicKey, req.DeviceNameEncrypted, true, true)
-	} else {
-		err = s.userRepo.SaveDevice(ctx, &model.UserDevice{
-			UserID:              userID,
-			DeviceFingerprint:   req.DeviceFingerprint,
-			PublicKey:           req.PublicKey,
-			DeviceNameEncrypted: req.DeviceNameEncrypted,
-			Platform:            req.Platform,
-			IsVerified:          true,
-			IsActive:            true,
-			LastIp:              clientIP,
-		})
-	}
-
-	// Sprawdzamy błąd po operacji DB (Update/Save)
+	err = s.userRepo.SaveDevice(ctx, &model.UserDevice{
+		UserID:              userID,
+		DeviceFingerprint:   req.DeviceFingerprint,
+		PublicKey:           req.PublicKey,
+		DeviceNameEncrypted: req.DeviceNameEncrypted,
+		Platform:            req.Platform,
+		IsVerified:          true,
+		IsActive:            true,
+		LastIp:              clientIP,
+	})
 	if err != nil {
-		log.ErrorObj("Failed to save/update device status", err)
+		log.ErrorObj("Failed to save device", err)
 		return nil, errors.ErrInternal
 	}
 

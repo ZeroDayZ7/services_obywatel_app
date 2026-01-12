@@ -6,11 +6,11 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/zerodayz7/platform/pkg/constants"
+	cts "github.com/zerodayz7/platform/pkg/context"
 	"github.com/zerodayz7/platform/pkg/errors"
 	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/schemas"
 	"github.com/zerodayz7/platform/pkg/shared"
-	"github.com/zerodayz7/platform/pkg/utils"
 	"github.com/zerodayz7/platform/pkg/viper"
 	"github.com/zerodayz7/platform/services/auth-service/internal/http"
 	service "github.com/zerodayz7/platform/services/auth-service/internal/service"
@@ -59,28 +59,29 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 
 // #region REGISTER DEVICE
 func (h *AuthHandler) RegisterDevice(c *fiber.Ctx) error {
+	log := shared.GetLogger()
 	ctx, cancel := context.WithTimeout(c.Context(), 5*time.Second)
 	defer cancel()
 
+	rc := cts.MustFromFiber(c)
+	if rc.UserID == nil {
+		return errors.SendAppError(c, errors.ErrUnauthorized)
+	}
+
 	body := c.Locals("validatedBody").(schemas.RegisterDeviceRequest)
-	userID, err := utils.GetUserID(c) // Tutaj upewnij się, że utils zwraca uuid.UUID
-	if err != nil {
-		return errors.SendAppError(c, errors.ErrInvalidToken)
-	}
-
-	sessionID := c.Get("X-Session-Id")
-	clientIP := c.Get(constants.HeaderXRealIP)
-	if clientIP == "" {
-		clientIP = c.IP()
-	}
-
-	// Serwis robi całą robotę
-	response, err := h.authService.RegisterDevice(ctx, userID, sessionID, clientIP, body)
+	response, err := h.authService.RegisterDevice(
+		ctx,
+		*rc.UserID,
+		rc.SessionID,
+		rc.IP,
+		body,
+	)
 	if err != nil {
 		return errors.SendAppError(c, err)
 	}
 
-	// Eventy zostawiamy w Handlerze lub przenosimy do Serwisu (lepiej do serwisu)
+	log.DebugInfo("response", response)
+
 	return c.Status(fiber.StatusOK).JSON(response)
 }
 

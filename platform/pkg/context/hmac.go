@@ -12,7 +12,21 @@ func Sign(payload []byte, secret []byte) string {
 	return base64.StdEncoding.EncodeToString(h.Sum(nil))
 }
 
+// func Verify(payload []byte, signature string, secret []byte) bool {
+// 	expected := Sign(payload, secret)
+// 	return hmac.Equal([]byte(expected), []byte(signature))
+// }
+
 func Verify(payload []byte, signature string, secret []byte) bool {
-	expected := Sign(payload, secret)
-	return hmac.Equal([]byte(expected), []byte(signature))
+	expectedMAC, err := base64.StdEncoding.DecodeString(Sign(payload, secret))
+	if err != nil {
+		return false
+	}
+
+	providedMAC, err := base64.StdEncoding.DecodeString(signature)
+	if err != nil {
+		return false
+	}
+
+	return hmac.Equal(expectedMAC, providedMAC)
 }

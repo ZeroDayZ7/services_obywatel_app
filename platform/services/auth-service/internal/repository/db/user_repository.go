@@ -3,7 +3,6 @@ package db
 import (
 	"context"
 	"errors"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/services/auth-service/internal/model"
@@ -119,7 +118,6 @@ func (r *UserRepo) ResetFailedLogin(userID uuid.UUID) error {
 
 func (r *UserRepo) GetDeviceByFingerprint(ctx context.Context, userID uuid.UUID, fingerprint string) (*model.UserDevice, error) {
 	var device model.UserDevice
-	// Poprawka: używamy r.db (małe litery, zgodnie z definicją struktury)
 	err := r.db.WithContext(ctx).
 		Where("user_id = ? AND device_fingerprint = ? AND is_active = ?", userID, fingerprint, true).
 		First(&device).Error
@@ -127,18 +125,6 @@ func (r *UserRepo) GetDeviceByFingerprint(ctx context.Context, userID uuid.UUID,
 		return nil, err
 	}
 	return &device, nil
-}
-
-func (r *UserRepo) UpdateDeviceStatus(ctx context.Context, deviceID uuid.UUID, publicKey string, deviceName string, isActive bool, isVerified bool) error {
-	return r.db.WithContext(ctx).Model(&model.UserDevice{}).
-		Where("id = ?", deviceID).
-		Updates(map[string]interface{}{
-			"public_key":            publicKey,
-			"device_name_encrypted": deviceName,
-			"is_active":             isActive,
-			"is_verified":           isVerified,
-			"last_used_at":          time.Now(),
-		}).Error
 }
 
 // Zmień z IncrementFailedLogin na:

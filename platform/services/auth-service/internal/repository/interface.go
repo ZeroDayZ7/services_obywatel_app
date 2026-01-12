@@ -35,5 +35,4 @@ type UserRepository interface {
 	ResetFailedLoginAttempts(userID uuid.UUID) error
 
 	GetDeviceByFingerprint(ctx context.Context, userID uuid.UUID, fingerprint string) (*model.UserDevice, error)
-	UpdateDeviceStatus(ctx context.Context, deviceID uuid.UUID, publicKey string, deviceName string, isActive bool, isVerified bool) error
 }

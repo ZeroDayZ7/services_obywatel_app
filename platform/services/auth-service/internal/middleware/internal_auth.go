@@ -44,9 +44,9 @@ func InternalAuthMiddleware(hmacSecret []byte) fiber.Handler {
 		}
 
 		// WYSYP CAŁOŚCI (używając Twojej dedykowanej metody)
-		log.DebugResponse("Context Dump", ctx)
+		log.DebugInfo("Context Dump", ctx)
 		// 5. Wrzuć do Locals, żeby Handler go widział
-		c.Locals("requestContext", ctx)
+		c.Locals(reqctx.FiberRequestContextKey, ctx)
 
 		return c.Next()
 	}
