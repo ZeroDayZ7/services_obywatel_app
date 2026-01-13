@@ -16,6 +16,7 @@ type Verify2FAResponse struct {
 	SetupToken string `json:"setup_token"`
 	Challenge  string `json:"challenge"`
 	IsTrusted  bool   `json:"is_trusted"`
+	UserID     string `json:"user_id"`
 }
 
 // RegisterDeviceResponse defines the outcome of a cryptographic device pairing process.

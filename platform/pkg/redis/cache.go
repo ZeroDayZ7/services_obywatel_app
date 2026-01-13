@@ -228,7 +228,7 @@ func (c *Cache) Verify2FAAttempt(
 		int(ttl.Seconds()),
 	).Result()
 	if err != nil {
-		return "", err // prawdziwy Redis error
+		return "", err
 	}
 
 	arr, ok := res.([]interface{})

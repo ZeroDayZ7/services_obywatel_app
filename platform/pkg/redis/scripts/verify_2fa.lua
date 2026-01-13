@@ -16,4 +16,5 @@ end
 session.attempts = session.attempts + 1
 redis.call("SET", KEYS[1], cjson.encode(session), "EX", ARGV[2])
 
-return { "ATTEMPT_UPDATED", session.attempts }
+-- return { "ATTEMPT_UPDATED", session.attempts }
+return { "ATTEMPT_UPDATED", tostring(session.attempts) }

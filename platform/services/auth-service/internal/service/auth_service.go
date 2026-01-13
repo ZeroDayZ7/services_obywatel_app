@@ -306,6 +306,7 @@ func (s *authService) Verify2FA(ctx context.Context, token string, code []byte, 
 		SetupToken: setupToken,
 		Challenge:  challenge,
 		IsTrusted:  false,
+		UserID:     user.ID.String(),
 	}
 
 	// DEBUG INFO: Wypisujemy dokładnie to, co idzie do klienta

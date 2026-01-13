@@ -88,16 +88,16 @@ func RequestLoggerMiddleware() fiber.Handler {
 		)
 
 		// 2. TYLKO W DEV wypisujemy dodatkowo "ładny" blok do konsoli
-		if isDev {
-			log.DebugRequest(
-				"Request Detail",
-				c.Method(),
-				c.Path(),
-				c.Response().StatusCode(),
-				latency.String(),
-				body,
-			)
-		}
+		// if isDev {
+		// 	log.DebugRequest(
+		// 		"Request Detail",
+		// 		c.Method(),
+		// 		c.Path(),
+		// 		c.Response().StatusCode(),
+		// 		latency.String(),
+		// 		body,
+		// 	)
+		// }
 
 		return err
 	}
