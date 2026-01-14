@@ -6,8 +6,8 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/zerodayz7/platform/pkg/constants"
-	cts "github.com/zerodayz7/platform/pkg/context"
-	"github.com/zerodayz7/platform/pkg/errors"
+	reqctx "github.com/zerodayz7/platform/pkg/context"
+	apperr "github.com/zerodayz7/platform/pkg/errors"
 	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/schemas"
 	"github.com/zerodayz7/platform/pkg/shared"
@@ -37,23 +37,52 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	log := shared.GetLogger()
 
 	body := c.Locals("validatedBody").(schemas.LoginRequest)
-	fingerprint := c.Get(constants.HeaderDeviceFingerprint)
+	rc := reqctx.MustFromFiber(c)
 
-	defer func() {
-		if len(body.Password) > 0 {
-			for i := range body.Password {
-				body.Password[i] = 0
-			}
-		}
-	}()
+	// 2. Pobierz DeviceID (fingerprint)s
+	fingerprint := rc.DeviceID
+
+	if fingerprint == "" {
+		return apperr.SendAppError(c, apperr.ErrInvalidDeviceFingerprint)
+	}
 
 	response, err := h.authService.AttemptLogin(ctx, body.Email, []byte(body.Password), fingerprint)
 	if err != nil {
 		log.WarnObj("Login failed", map[string]any{"email": body.Email, "err": err.Error()})
-		return errors.SendAppError(c, err)
+		return apperr.SendAppError(c, err)
 	}
 
 	log.InfoMap("Login successful", map[string]any{"email": body.Email})
+	return c.JSON(response)
+}
+
+// #region VerifyDevice
+func (h *AuthHandler) VerifyDevice(c *fiber.Ctx) error {
+	ctx, cancel := context.WithTimeout(c.UserContext(), 2*time.Second)
+	defer cancel()
+
+	// 1. Dane z Body (od Użytkownika)
+	var body schemas.VerifyDeviceRequest
+	if err := c.BodyParser(&body); err != nil {
+		return apperr.SendAppError(c, apperr.ErrInvalidRequestBody)
+	}
+
+	// 2. Dane z Contextu (Zaufane, od Gatewaya przez middleware)
+	rc := reqctx.MustFromFiber(c)
+
+	// 3. Delegacja - przekazujemy czyste parametry
+	// Wyciągamy DeviceID (fingerprint), który u Ciebie jest w RequestContext
+	response, err := h.authService.VerifyDeviceSignature(
+		ctx,
+		rc.UserID.String(), // ID użytkownika
+		rc.Challenge,       // Zaufany challenge z tokena
+		body.Signature,     // Podpis od użytkownika
+		rc.DeviceID,        // Fingerprint urządzenia
+	)
+	if err != nil {
+		return apperr.SendAppError(c, err)
+	}
+
 	return c.JSON(response)
 }
 
@@ -63,9 +92,9 @@ func (h *AuthHandler) RegisterDevice(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(c.Context(), 5*time.Second)
 	defer cancel()
 
-	rc := cts.MustFromFiber(c)
+	rc := reqctx.MustFromFiber(c)
 	if rc.UserID == nil {
-		return errors.SendAppError(c, errors.ErrUnauthorized)
+		return apperr.SendAppError(c, apperr.ErrUnauthorized)
 	}
 
 	body := c.Locals("validatedBody").(schemas.RegisterDeviceRequest)
@@ -77,7 +106,7 @@ func (h *AuthHandler) RegisterDevice(c *fiber.Ctx) error {
 		body,
 	)
 	if err != nil {
-		return errors.SendAppError(c, err)
+		return apperr.SendAppError(c, err)
 	}
 
 	log.DebugJSON("response", response)
@@ -111,7 +140,7 @@ func (h *AuthHandler) Verify2FA(c *fiber.Ctx) error {
 	)
 	if err != nil {
 		log.WarnObj("2FA failed", map[string]any{"token": body.Token, "err": err.Error()})
-		return errors.SendAppError(c, err)
+		return apperr.SendAppError(c, err)
 	}
 
 	return c.JSON(response)
@@ -127,13 +156,13 @@ func (h *AuthHandler) RefreshToken(c *fiber.Ctx) error {
 	fingerprint := c.Get(constants.HeaderDeviceFingerprint)
 
 	if fingerprint == "" {
-		return errors.SendAppError(c, errors.ErrInvalidToken)
+		return apperr.SendAppError(c, apperr.ErrInvalidToken)
 	}
 
 	// Wywołanie logiki biznesowej
 	response, err := h.authService.RefreshToken(ctx, body.RefreshToken, fingerprint)
 	if err != nil {
-		return errors.SendAppError(c, err)
+		return apperr.SendAppError(c, err)
 	}
 
 	return c.JSON(response)
@@ -155,7 +184,7 @@ func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 	// Wywołanie serwisu
 	err := h.authService.Logout(c.Context(), body.RefreshToken, userID, sessionID)
 	if err != nil {
-		return errors.SendAppError(c, err)
+		return apperr.SendAppError(c, err)
 	}
 
 	log.InfoMap("Logout successful", map[string]any{
@@ -176,11 +205,11 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 	// Próba rejestracji użytkownika
 	user, err := h.authService.Register(body.Username, body.Email, body.Password)
 	if err != nil {
-		if appErr, ok := err.(*errors.AppError); ok {
-			errors.AttachRequestMeta(c, appErr, "requestID")
+		if appErr, ok := err.(*apperr.AppError); ok {
+			apperr.AttachRequestMeta(c, appErr, "requestID")
 			return appErr
 		}
-		return errors.ErrInternal
+		return apperr.ErrInternal
 	}
 
 	// Przygotowanie minimalistycznej odpowiedzi DTO

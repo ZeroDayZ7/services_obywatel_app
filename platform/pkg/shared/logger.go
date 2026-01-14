@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"time"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -153,6 +154,28 @@ func (l *Logger) WarnObj(msg string, obj any)  { l.Logger.Warn(msg, convertStruc
 func (l *Logger) ErrorObj(msg string, obj any) { l.Logger.Error(msg, convertStructToFields(obj)...) }
 
 // region DEBUG
+const colorCyan = "\x1b[36m"
+
+// DebugDB - Niebieska ramka (idealna do logowania modeli z bazy, query result itp.)
+func (l *Logger) DebugDB(msg string, data any) {
+	if !l.Core().Enabled(zapcore.DebugLevel) {
+		return
+	}
+
+	fmt.Printf("\n%s--- [DATABASE] %s ---\x1b[0m\n", colorCyan, strings.Repeat("-", 10))
+	fmt.Printf("Action: %s", msg)
+
+	if data != nil {
+		fields := convertStructToFields(data)
+		for _, f := range fields {
+			fmt.Printf("\n  \x1b[32m%s\x1b[0m:", f.Key)
+			l.printValue(f, 1)
+		}
+		fmt.Println()
+	}
+	fmt.Printf("%s------------------------------------------\x1b[0m\n\n", colorCyan)
+}
+
 func (l *Logger) DebugPretty(msg string, m map[string]any) {
 	l.Logger.Debug(msg, toFields(m)...)
 }
@@ -306,18 +329,12 @@ func (l *Logger) printValue(f zap.Field, indent int) {
 func convertStructToFields(obj any) []zap.Field {
 	fields := []zap.Field{}
 
-	// 🔹 Obsługa nil
 	if obj == nil {
 		fields = append(fields, zap.Any("value", nil))
 		return fields
 	}
 
 	val := reflect.ValueOf(obj)
-	if !val.IsValid() {
-		fields = append(fields, zap.Any("value", nil))
-		return fields
-	}
-
 	// Obsługa wskaźników
 	if val.Kind() == reflect.Pointer {
 		if val.IsNil() {
@@ -327,6 +344,15 @@ func convertStructToFields(obj any) []zap.Field {
 		val = val.Elem()
 	}
 
+	if !val.IsValid() {
+		return fields
+	}
+
+	// 🔹 SPECJALNA OBSŁUGA CZASU (aby uniknąć napisu "Local")
+	if t, ok := val.Interface().(time.Time); ok {
+		return []zap.Field{zap.String("time", t.Format("2006-01-02 15:04:05"))}
+	}
+
 	typ := val.Type()
 
 	switch val.Kind() {
@@ -334,12 +360,8 @@ func convertStructToFields(obj any) []zap.Field {
 		for _, key := range val.MapKeys() {
 			k := key.String()
 			v := val.MapIndex(key).Interface()
-
 			if isSensitive(k) {
 				fields = append(fields, zap.String(k, "********"))
-			} else if childMap, ok := v.(map[string]any); ok {
-				childFields := convertStructToFields(childMap)
-				fields = append(fields, zap.Any(k, childFields))
 			} else {
 				fields = append(fields, zap.Any(k, v))
 			}
@@ -347,20 +369,28 @@ func convertStructToFields(obj any) []zap.Field {
 	case reflect.Struct:
 		for i := 0; i < val.NumField(); i++ {
 			field := typ.Field(i)
-			fieldName := field.Name
 			fieldVal := val.Field(i)
+
 			if !fieldVal.CanInterface() {
 				continue
 			}
 
-			if isSensitive(fieldName) {
-				fields = append(fields, zap.String(fieldName, "********"))
+			name := field.Name
+			value := fieldVal.Interface()
+
+			// 🔹 Obsługa dat wewnątrz struktur
+			if t, ok := value.(time.Time); ok {
+				fields = append(fields, zap.String(name, t.Format("2006-01-02 15:04:05")))
+				continue
+			}
+
+			if isSensitive(name) {
+				fields = append(fields, zap.String(name, "********"))
 			} else {
-				fields = append(fields, zap.Any(fieldName, fieldVal.Interface()))
+				fields = append(fields, zap.Any(name, value))
 			}
 		}
 	default:
-		// Dla stringów, intów, itp.
 		fields = append(fields, zap.Any("value", obj))
 	}
 

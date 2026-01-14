@@ -119,6 +119,7 @@ func ReverseProxySecure(container *di.Container, target string) fiber.Handler {
 		}
 
 		if ctx.DeviceID != "" {
+			req.Header.Set(constants.HeaderDeviceFingerprint, ctx.DeviceID)
 			req.Header.Set("X-Device-Id", ctx.DeviceID)
 		}
 
@@ -164,18 +165,19 @@ func executeProxyRequest(c *fiber.Ctx, container *di.Container, req *http.Reques
 	resp, err := container.HTTPClient.Do(req)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			return c.Status(fiber.StatusGatewayTimeout).JSON(fiber.Map{
-				"error": "Upstream service timeout",
-			})
+			return apperr.SendAppError(c, apperr.ErrUpstreamTimeout)
 		}
 
 		log.ErrorObj("Upstream request failed", err)
 
-		return c.Status(fiber.StatusBadGateway).JSON(fiber.Map{
-			"error": "Upstream service unreachable",
-		})
+		return apperr.SendAppError(c, apperr.ErrUpstreamUnreachable)
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode == fiber.StatusForbidden {
+		log.Error("Security Alert: Upstream rejected internal signature or context")
+		return apperr.SendAppError(c, apperr.ErrInternal)
+	}
 
 	for k, v := range resp.Header {
 		if isHopByHop(k) {
@@ -186,11 +188,8 @@ func executeProxyRequest(c *fiber.Ctx, container *di.Container, req *http.Reques
 		}
 	}
 
-	// 3. Przekazanie statusu i body
 	c.Status(resp.StatusCode)
 
-	// io.Copy przesyła dane kawałek po kawałku (stream),
-	// co jest świetne dla pamięci RAM przy dużych odpowiedziach.
 	_, err = io.Copy(c.Response().BodyWriter(), resp.Body)
 	return err
 }

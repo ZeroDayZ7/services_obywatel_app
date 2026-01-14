@@ -24,8 +24,10 @@ func NewCache(client *Client, prefix string, defaultTTL time.Duration) *Cache {
 }
 
 type UserSession struct {
-	UserID      string `json:"user_id"`
-	Fingerprint string `json:"fingerprint"`
+	UserID      string   `json:"user_id"`
+	Fingerprint string   `json:"fingerprint"`
+	Roles       []string `json:"roles,omitempty"`
+	IP          string   `json:"ip,omitempty"`
 }
 
 type TwoFASession struct {
@@ -41,11 +43,12 @@ func (c *Cache) key(k string) string {
 	return c.prefix + k
 }
 
-// SetSession teraz przyjmuje fingerprint i zapisuje JSON
-func (c *Cache) SetSession(ctx context.Context, sessionID string, userID string, fingerprint string, ttl time.Duration) error {
+// SetSession teraz przyjmuje również role
+func (c *Cache) SetSession(ctx context.Context, sessionID string, userID string, fingerprint string, roles []string, ttl time.Duration) error {
 	session := UserSession{
 		UserID:      userID,
 		Fingerprint: fingerprint,
+		Roles:       roles, // Zapisujemy role w JSON
 	}
 
 	data, err := json.Marshal(session)
@@ -53,7 +56,7 @@ func (c *Cache) SetSession(ctx context.Context, sessionID string, userID string,
 		return err
 	}
 
-	// Używamy c.Set, która już dodaje prefix
+	// Używamy prefixu sesji, aby utrzymać porządek w Redis
 	return c.Set(ctx, sessionID, data, ttl)
 }
 

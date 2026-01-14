@@ -1,6 +1,11 @@
 package shared
 
-import "github.com/google/uuid"
+import (
+	"crypto/rand"
+	"encoding/base64"
+
+	"github.com/google/uuid"
+)
 
 // GenerateCSRFToken zwraca losowy token CSRF
 func GenerateUuid() string {
@@ -19,4 +24,13 @@ func MustGenerateUuidV7() uuid.UUID {
 		return uuid.New()
 	}
 	return u
+}
+
+func GenerateRandomChallenge(length int) (string, error) {
+	bytes := make([]byte, length)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", err
+	}
+	// Zwracamy Base64, bo łatwo go przesłać w JSON i podpisać we Flutterze
+	return base64.StdEncoding.EncodeToString(bytes), nil
 }

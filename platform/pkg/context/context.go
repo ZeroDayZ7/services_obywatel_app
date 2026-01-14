@@ -10,4 +10,5 @@ type RequestContext struct {
 	IP        string
 	Roles     []string
 	RiskScore int
+	Challenge string
 }

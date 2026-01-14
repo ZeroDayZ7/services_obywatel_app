@@ -87,14 +87,8 @@ func (r *RefreshTokenRepository) RevokeSession(ctx context.Context, userID uuid.
 		Update("revoked", true).Error
 }
 
-func (r *RefreshTokenRepository) UpdateFingerprintByUser(userID uuid.UUID, oldFingerprint string, newFingerprint string) error {
+func (r *RefreshTokenRepository) RevokeByFingerprint(ctx context.Context, userID uuid.UUID, fingerprint string) error {
 	return r.DB.Model(&model.RefreshToken{}).
-		Where(
-			"user_id = ? AND device_fingerprint = ? AND revoked = ?",
-			userID,
-			oldFingerprint,
-			false,
-		).
-		Update("device_fingerprint", newFingerprint).
-		Error
+		Where("user_id = ? AND device_fingerprint = ? AND revoked = ?", userID, fingerprint, false).
+		Update("revoked", true).Error
 }

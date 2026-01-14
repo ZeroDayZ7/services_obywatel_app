@@ -11,6 +11,10 @@ type LoginRequest struct {
 	Password []byte `json:"password" validate:"required"`
 }
 
+type VerifyDeviceRequest struct {
+	Signature string `json:"signature" validate:"required"`
+}
+
 type TwoFARequest struct {
 	Code  []byte `json:"code" validate:"required,numeric_byte,len=6"`
 	Token string `json:"token" validate:"required"`

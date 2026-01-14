@@ -13,7 +13,7 @@ type RefreshTokenRepository interface {
 	Revoke(token string) error
 	GetByToken(token string) (*model.RefreshToken, error)
 	Update(rt *model.RefreshToken) error
-	UpdateFingerprintByUser(userID uuid.UUID, oldFingerprint string, newFingerprint string) error
+	RevokeByFingerprint(ctx context.Context, userID uuid.UUID, fingerprint string) error
 	RevokeAllUserTokens(ctx context.Context, userID uuid.UUID) error
 	GetSessions(ctx context.Context, userID uuid.UUID) ([]model.UserSessionDTO, error)
 	RevokeSession(ctx context.Context, userID uuid.UUID, sessionID uint) error
