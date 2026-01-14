@@ -46,7 +46,6 @@ func SetSharedDefaults(serviceName string) {
 	viper.SetDefault("PROXY_REQUEST_TIMEOUT", "30s")
 
 	// Session
-	viper.SetDefault("REDIS_SESSION_PREFIX", "session:")
 	viper.SetDefault("REDIS_SESSION_TTL", "60m")
 
 	// Services URLs

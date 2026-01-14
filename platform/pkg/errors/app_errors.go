@@ -86,6 +86,7 @@ var (
 	ErrInternalContextCorruption = newErr("INTERNAL_CONTEXT_CORRUPTION", Unauthorized, "Uszkodzony kontekst wewnętrzny.")
 	ErrInvalidRequestBody        = newErr("INVALID_REQUEST_BODY", BadRequest, "Nieprawidłowy format treści żądania.")
 	ErrInvalidSession            = newErr("INVALID_SESSION", Unauthorized, "Nieprawidłowa lub niekompletna sesja urządzenia.")
+	ErrInvalidChallenge          = newErr("INVALID_CHALLENGE", Unauthorized, "Challenge wygasł lub jest nieprawidłowy.")
 )
 
 // --- Błędy specyficzne dla auth ---

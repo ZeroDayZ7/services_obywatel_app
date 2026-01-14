@@ -35,7 +35,7 @@ func SetupRoutes(app *fiber.App, container *di.Container) {
 
 	app.Post("/auth/verify-device",
 		middleware.ValidateBody[schemas.VerifyDeviceRequest](),
-		ReverseProxy(container, auth),
+		ReverseProxySecure(container, auth),
 	)
 
 	app.Post("/auth/2fa-verify",

@@ -19,7 +19,6 @@ type Container struct {
 func NewContainer(db *gorm.DB, redisClient *redis.Client, cfg *viper.Config) *Container {
 	cache := redis.NewCache(
 		redisClient,
-		cfg.Session.Prefix,
 		cfg.Session.TTL,
 	)
 

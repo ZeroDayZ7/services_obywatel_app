@@ -16,7 +16,7 @@ type Container struct {
 }
 
 func NewContainer(redisClient *redis.Client, cfg *viper.Config) *Container {
-	cache := redis.NewCache(redisClient, cfg.Session.Prefix, cfg.Session.TTL)
+	cache := redis.NewCache(redisClient, cfg.Session.TTL)
 
 	return &Container{
 		Redis: redisClient,

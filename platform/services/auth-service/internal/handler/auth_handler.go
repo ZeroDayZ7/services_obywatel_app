@@ -74,10 +74,10 @@ func (h *AuthHandler) VerifyDevice(c *fiber.Ctx) error {
 	// Wyciągamy DeviceID (fingerprint), który u Ciebie jest w RequestContext
 	response, err := h.authService.VerifyDeviceSignature(
 		ctx,
-		rc.UserID.String(), // ID użytkownika
-		rc.Challenge,       // Zaufany challenge z tokena
-		body.Signature,     // Podpis od użytkownika
-		rc.DeviceID,        // Fingerprint urządzenia
+		rc.UserID.String(),
+		rc.SessionID,
+		body.Signature,
+		rc.DeviceID,
 	)
 	if err != nil {
 		return apperr.SendAppError(c, err)
@@ -171,24 +171,28 @@ func (h *AuthHandler) RefreshToken(c *fiber.Ctx) error {
 // #region LOGOUT
 func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 	log := shared.GetLogger()
-	body := c.Locals("validatedBody").(schemas.RefreshTokenRequest)
 
-	// Pobranie danych z headerów (dodanych przez Middleware lub klienta)
-	userID := c.Get("X-User-Id")
-	sessionID := c.Get("X-Session-Id")
-
-	if userID == "" || sessionID == "" || body.RefreshToken == "" {
-		return fiber.NewError(fiber.StatusBadRequest, "Missing required session data")
+	// Pobranie zwalidowanego kontekstu (skoro register tak robi, my też)
+	rc := reqctx.MustFromFiber(c)
+	if rc.UserID == nil {
+		return apperr.SendAppError(c, apperr.ErrUnauthorized)
 	}
 
-	// Wywołanie serwisu
-	err := h.authService.Logout(c.Context(), body.RefreshToken, userID, sessionID)
+	// Wyciągamy sessionID z headerów (bo to specyficzny identyfikator tej konkretnej sesji)
+	sessionID := c.Get("X-Session-Id")
+	if sessionID == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "Missing session ID")
+	}
+
+	// Wywołanie serwisu z "czystymi" danymi z rc (Request Context)
+	// rc.UserID jest już typu *uuid.UUID, więc robimy dereferencję *rc.UserID
+	err := h.authService.Logout(c.Context(), *rc.UserID, sessionID, rc.DeviceID)
 	if err != nil {
 		return apperr.SendAppError(c, err)
 	}
 
 	log.InfoMap("Logout successful", map[string]any{
-		"user_id":    userID,
+		"user_id":    rc.UserID,
 		"session_id": sessionID,
 	})
 

@@ -55,6 +55,11 @@ func SetupAuthRoutes(
 		h.RegisterDevice,
 	)
 
+	auth.Post("/verify-device",
+		middleware.ValidateBody[schemas.VerifyDeviceRequest](),
+		h.VerifyDevice,
+	)
+
 	// ==========================
 	// RESET PASSWORD
 	// ==========================

@@ -42,8 +42,7 @@ type ProxyConfig struct {
 }
 
 type SessionConfig struct {
-	Prefix string        `mapstructure:"REDIS_SESSION_PREFIX" validate:"required"`
-	TTL    time.Duration `mapstructure:"REDIS_SESSION_TTL" validate:"required"`
+	TTL time.Duration `mapstructure:"REDIS_SESSION_TTL" validate:"required"`
 }
 
 type ServerConfig struct {

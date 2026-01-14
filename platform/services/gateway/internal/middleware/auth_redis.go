@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"slices"
@@ -10,6 +9,7 @@ import (
 	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/redis/go-redis/v9"
 	"github.com/zerodayz7/platform/pkg/constants"
+	apperr "github.com/zerodayz7/platform/pkg/errors"
 	"github.com/zerodayz7/platform/pkg/shared"
 )
 
@@ -18,6 +18,7 @@ type UserSession struct {
 	Fingerprint string `json:"fingerprint"`
 }
 
+// AuthRedisMiddleware - middleware do weryfikacji sesji w Redis
 // AuthRedisMiddleware - middleware do weryfikacji sesji w Redis
 func AuthRedisMiddleware(rdb *redis.Client) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -29,56 +30,59 @@ func AuthRedisMiddleware(rdb *redis.Client) fiber.Handler {
 			return c.Next()
 		}
 
-		// 2. Pobierz fingerprint wysłany przez klienta (Dio Interceptor)
+		// 2. Walidacja Fingerprintu - UŻYWAMY ErrInvalidDeviceFingerprint
 		clientFingerprint := c.Get(constants.HeaderDeviceFingerprint)
 		if clientFingerprint == "" {
 			log.Warn("Missing X-Device-Fingerprint header")
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "device identification missing"})
+			return apperr.SendAppError(c, apperr.ErrInvalidDeviceFingerprint)
 		}
 
-		// 3. Wyciągnij sessionID z JWT (ustawionego wcześniej przez JWTMiddleware)
+		// 3. Wyciągnij sessionID z JWT
 		jwtPayload := c.Locals("user")
 		if jwtPayload == nil {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
+			return apperr.SendAppError(c, apperr.ErrUnauthorized)
 		}
 		jwtToken := jwtPayload.(*jwt.Token)
 		claims := jwtToken.Claims.(jwt.MapClaims)
 		sessionID, _ := claims["sid"].(string)
 
+		// DYNAMICZNY WYBÓR PREFIXU (z Twojego poprzedniego pytania)
+		redisPrefix := "session:"
+		if path == "/auth/register-device" {
+			redisPrefix = "setup:session:"
+		}
+
 		// 4. Pobierz dane sesji z Redis
-		ctx := context.Background()
-		jsonData, err := rdb.Get(ctx, "session:"+sessionID).Result()
+		ctx := c.Context()
+		jsonData, err := rdb.Get(ctx, redisPrefix+sessionID).Result()
 		if err != nil {
 			if errors.Is(err, redis.Nil) {
-				return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "session expired"})
+				// UŻYWAMY ErrSessionExpired lub ErrInvalidSession
+				log.WarnMap("Session not found", map[string]any{"sid": sessionID, "path": path})
+				return apperr.SendAppError(c, apperr.ErrSessionExpired)
 			}
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "redis error"})
+			return apperr.SendAppError(c, apperr.ErrInternal)
 		}
 
-		// 5. PARSOWANIE JSON I WERYFIKACJA FINGERPRINTU
+		// 5. Parsowanie i weryfikacja Fingerprintu
 		var session UserSession
 		if err := json.Unmarshal([]byte(jsonData), &session); err != nil {
-			log.Error("Failed to unmarshal session from redis")
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "session data corrupted"})
+			return apperr.SendAppError(c, apperr.ErrInternal)
 		}
 
-		// --- KLUCZOWY MOMENT ---
 		if session.Fingerprint != clientFingerprint {
 			log.WarnMap("Fingerprint mismatch!", map[string]any{
-				"sessionID": sessionID,
-				"expected":  session.Fingerprint,
-				"received":  clientFingerprint,
+				"expected": session.Fingerprint,
+				"received": clientFingerprint,
 			})
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid device binding"})
+			// UŻYWAMY ErrInvalidSession lub ErrUntrustedDevice
+			return apperr.SendAppError(c, apperr.ErrUntrustedDevice)
 		}
 
-		// 6. Ustawienie danych dla downstreamu (Gateway przekaże to w nagłówkach do mikroserwisów)
+		// 6. Ustawienie danych dla downstreamu
 		c.Locals("userID", session.UserID)
 		c.Locals("sessionID", sessionID)
-
-		// Opcjonalnie: ustaw nagłówki dla mikroserwisów, żeby wiedziały kto pyta
-		c.Request().Header.Set("X-User-Id", session.UserID)
-		c.Request().Header.Set("X-Session-Id", sessionID)
+		c.Locals("deviceID", session.Fingerprint)
 
 		return c.Next()
 	}
