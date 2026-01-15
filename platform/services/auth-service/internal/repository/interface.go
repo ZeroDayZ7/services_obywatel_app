@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/services/auth-service/internal/model"
@@ -31,8 +32,11 @@ type UserRepository interface {
 	SaveDevice(ctx context.Context, device *model.UserDevice) error
 
 	// Dopasuj te nazwy dokładnie do tego, co wywołujesz w AuthService
-	IncrementUserFailedLogin(userID uuid.UUID) error
+
+	IncrementUserFailedLogin(userID uuid.UUID) (int8, error)
+	LockUserTemporarily(userID uuid.UUID, duration time.Duration) error
 	ResetFailedLoginAttempts(userID uuid.UUID) error
+	PermanentLock(userID uuid.UUID) error
 
 	GetDeviceByFingerprint(ctx context.Context, userID uuid.UUID, fingerprint string) (*model.UserDevice, error)
 }

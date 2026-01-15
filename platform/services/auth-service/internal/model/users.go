@@ -23,6 +23,7 @@ const (
 	StatusSuspended UserStatus = "SUSPENDED" // zawieszony – konto tymczasowo zablokowane
 	StatusPending   UserStatus = "PENDING"   // oczekujący – np. konto czeka na weryfikację
 	StatusBanned    UserStatus = "BANNED"    // zbanowany – konto trwale zablokowane
+	StatusLocked    UserStatus = "LOCKED"
 )
 
 type Permission string
@@ -43,8 +44,9 @@ type User struct {
 	Role                UserRole   `gorm:"type:varchar(20);not null;default:'user'"`
 	Status              UserStatus `gorm:"type:varchar(20);not null;default:'ACTIVE'"`
 	FailedLoginAttempts int8       `gorm:"not null;default:0"`
+	LockedUntil         *time.Time `gorm:"index"`
 	LastLogin           time.Time
-	PasswordChangedAt   time.Time
+	PasswordChangedAt   *time.Time
 	LastIP              string           `gorm:"size:45"`
 	TwoFactorEnabled    bool             `gorm:"not null;default:false"`
 	TwoFactorSecret     string           `gorm:"size:64"`

@@ -472,7 +472,18 @@ func (s *authService) AttemptLogin(ctx context.Context, email string, password [
 
 	valid, err := security.VerifyPassword(password, user.Password)
 	if err != nil || !valid {
-		_ = s.userRepo.IncrementUserFailedLogin(user.ID)
+		// 1. Zwiększ licznik prób
+		attempts, incErr := s.userRepo.IncrementUserFailedLogin(user.ID)
+		if incErr != nil {
+			log.Error("Failed to increment failed attempts", incErr)
+		}
+
+		// 2. Sprawdź czy przekroczono próg (np. 5 prób)
+		if attempts >= 5 {
+			// MODEL BANKOWY:
+			_ = s.userRepo.PermanentLock(user.ID)
+			return nil, errors.ErrAccountLocked // "Konto zablokowane, skontaktuj się z obsługą"
+		}
 		return nil, errors.ErrInvalidCredentials
 	}
 
@@ -500,7 +511,7 @@ func (s *authService) AttemptLogin(ctx context.Context, email string, password [
 			return nil, errors.ErrInternal
 		}
 
-		// 3. Zapisujemy w Redis pod kluczem SESJI (najbezpieczniej)
+		// 3. Zapisujemy w Redis pod kluczem SESJI
 		if err := s.cache.SetChallenge(ctx, sessionID, challenge, 5*time.Minute); err != nil {
 			log.ErrorObj("Failed to save challenge in Redis", err)
 			return nil, errors.ErrInternal
@@ -536,7 +547,7 @@ func (s *authService) prepare2FASession(ctx context.Context, user *model.User, f
 		return nil, errors.ErrInternal
 	}
 	// 2. Hashujemy kod przed zapisem (Security: At-Rest protection)
-	hashedCode, err := security.HashPassword(code) // Używamy bcrypt, który już masz
+	hashedCode, err := security.HashPassword(code)
 	if err != nil {
 		return nil, errors.ErrInternal
 	}
@@ -561,7 +572,7 @@ func (s *authService) prepare2FASession(ctx context.Context, user *model.User, f
 	// 5. TODO: Wyślij kod do użytkownika
 	// s.emailService.Send2FACode(user.Email, code)
 
-	// DEBUG: W fazie deweloperskiej wypisz kod w konsoli
+	// DEBUG
 	log.DebugInfo("Generated 2FA code", map[string]any{
 		"email": user.Email,
 		"token": token,
@@ -708,14 +719,37 @@ func (s *authService) RegisterUserDevice(ctx context.Context, userID uuid.UUID, 
 
 // region CanUserLogin
 func (s *authService) CanUserLogin(user *model.User) error {
+	// 1. Najpierw sprawdzamy statusy stałe
 	switch user.Status {
-	case model.StatusActive:
-		return nil
-	case model.StatusSuspended:
-		return errors.ErrAccountSuspended
 	case model.StatusBanned:
 		return errors.ErrAccountBanned
-	default:
-		return errors.ErrInternal
+	case model.StatusLocked:
+		return errors.ErrAccountLocked
+	case model.StatusPending:
+		return errors.ErrAccountPending
 	}
+
+	// 2. Obsługa StatusSuspended (Blokada czasowa)
+	if user.Status == model.StatusSuspended {
+		// Sprawdzamy, czy czas blokady już minął
+		if user.LockedUntil != nil && user.LockedUntil.After(time.Now()) {
+			// Obliczamy pozostały czas (opcjonalnie do metadanych)
+			remaining := time.Until(*user.LockedUntil).Minutes()
+
+			// Zwracamy błąd czasowy z informacją o minutach
+			return errors.ErrAccountTemporarilyLocked.WithMeta("remaining_minutes", int(remaining))
+		}
+
+		// Jeśli czas blokady minął, pozwalamy na login
+		// (Status zostanie zaktualizowany na ACTIVE po poprawnym sprawdzeniu hasła)
+		return nil
+	}
+
+	// 3. Jeśli status to ACTIVE
+	if user.Status == model.StatusActive {
+		return nil
+	}
+
+	// 4. Fallback dla nieznanych statusów
+	return errors.ErrInternal
 }

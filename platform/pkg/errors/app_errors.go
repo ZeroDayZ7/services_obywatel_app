@@ -87,6 +87,7 @@ var (
 	ErrInvalidRequestBody        = newErr("INVALID_REQUEST_BODY", BadRequest, "Nieprawidłowy format treści żądania.")
 	ErrInvalidSession            = newErr("INVALID_SESSION", Unauthorized, "Nieprawidłowa lub niekompletna sesja urządzenia.")
 	ErrInvalidChallenge          = newErr("INVALID_CHALLENGE", Unauthorized, "Challenge wygasł lub jest nieprawidłowy.")
+	ErrAccountTemporarilyLocked  = newErr("ACCOUNT_TEMPORARILY_LOCKED", Unauthorized, "Konto tymczasowo zablokowane. Spróbuj ponownie za 15 minut.")
 )
 
 // --- Błędy specyficzne dla auth ---

@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/services/auth-service/internal/model"
@@ -127,11 +128,35 @@ func (r *UserRepo) GetDeviceByFingerprint(ctx context.Context, userID uuid.UUID,
 	return &device, nil
 }
 
-// Zmień z IncrementFailedLogin na:
-func (r *UserRepo) IncrementUserFailedLogin(userID uuid.UUID) error {
+func (r *UserRepo) IncrementUserFailedLogin(userID uuid.UUID) (int8, error) {
+	var user model.User
+	// Wykonujemy update i pobieramy aktualną wartość w jednej operacji (RETURNING)
+	err := r.db.Model(&user).
+		Where("id = ?", userID).
+		Update("failed_login_attempts", gorm.Expr("failed_login_attempts + ?", 1)).
+		Select("failed_login_attempts").
+		First(&user).Error
+
+	return user.FailedLoginAttempts, err
+}
+
+func (r *UserRepo) LockUserTemporarily(userID uuid.UUID, duration time.Duration) error {
+	until := time.Now().Add(duration)
 	return r.db.Model(&model.User{}).
 		Where("id = ?", userID).
-		Update("failed_login_attempts", gorm.Expr("failed_login_attempts + ?", 1)).Error
+		Updates(map[string]any{
+			"status":       model.StatusSuspended,
+			"locked_until": until,
+		}).Error
+}
+
+func (r *UserRepo) PermanentLock(userID uuid.UUID) error {
+	return r.db.Model(&model.User{}).
+		Where("id = ?", userID).
+		Updates(map[string]any{
+			"status":                model.StatusLocked,
+			"failed_login_attempts": 0,
+		}).Error
 }
 
 // Zmień z ResetFailedLogin na:

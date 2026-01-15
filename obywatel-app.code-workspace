@@ -31,6 +31,19 @@
       "**/LICENSE": true,
       "**/go.sum": true,
       "**/README.md": true,
-    }
+    },
+    "sqltools.connections": [
+      {
+        "ssh": "Disabled",
+        "previewLimit": 50,
+        "server": "localhost",
+        "port": 5432,
+        "driver": "PostgreSQL",
+        "database": "auth-database",
+        "username": "admin",
+        "name": "Auth",
+        "password": "secret123"
+      }
+    ]
   }
 }
