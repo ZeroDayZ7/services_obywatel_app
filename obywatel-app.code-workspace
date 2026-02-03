@@ -1,7 +1,14 @@
 {
   "folders": [
-    { "path": "../../obywatel_app" },
-    { "path": "." },
+    {
+      "path": "../../obywatel_app"
+    },
+    {
+      "path": "."
+    },
+    {
+      "path": "../../rust/http_server_rs"
+    }
   ],
   "settings": {
     "go.formatTool": "gofmt",
@@ -11,7 +18,7 @@
       "**/.env.example": true,
       "**/.env.dev.example": true,
       "**/.gitattributes": true,
-      "**/logs": true,
+      // "**/logs": true,
       "**/bin": true,
       "**/LICENSE": true,
       "**/go.sum": true,
