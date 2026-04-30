@@ -21,11 +21,16 @@ func SetSharedDefaults(serviceName string) {
 	viper.SetDefault("READ_TIMEOUT", "15s")
 	viper.SetDefault("WRITE_TIMEOUT", "15s")
 
-	// Wspólne dla wszystkich mikroserwisów
+	// Redis
 	viper.SetDefault("REDIS_HOST", "127.0.0.1")
 	viper.SetDefault("REDIS_PORT", "6379")
 	viper.SetDefault("REDIS_PASSWORD", "")
 	viper.SetDefault("REDIS_DB", 0)
+
+	viper.SetDefault("REDIS_POOL_SIZE", 10)
+	viper.SetDefault("REDIS_MIN_IDLE_CONNS", 2)
+	viper.SetDefault("REDIS_POOL_TIMEOUT", "4s")
+	viper.SetDefault("REDIS_TIMEOUT", "5s")
 
 	// OTEL
 	viper.SetDefault("OTEL_ENABLED", true)

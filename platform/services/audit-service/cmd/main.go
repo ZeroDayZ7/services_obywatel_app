@@ -12,43 +12,46 @@ import (
 )
 
 func main() {
-	// 0. Boostrap Logger
+	// Bootstrap logger for startup errors
 	bootLog := shared.InitBootstrapLogger(os.Getenv("ENV"))
 	defer func() { _ = bootLog.Sync() }()
-	// 1. Config
+
+	// Load global configuration
 	if err := config.LoadConfigGlobal(); err != nil {
 		bootLog.Fatal("Config load failed", "error", err)
 	}
 
-	// Inicjalizacja loggera
+	// Initialize production logger
 	log := shared.InitLogger(config.AppConfig.Server.Env)
 
-	// Inicjalizacja bazy danych
+	// Initialize Database
 	db, closeDB := config.MustInitDB(config.AppConfig.Database)
 	defer closeDB()
 
-	// Inicjalizacja kontenera DI
+	// Initialize DI container
 	container := di.NewContainer(db, nil, log, &config.AppConfig)
 
-	// Bezpieczne uruchomienie workera w tle
+	// Start background worker
 	utils.SafeGo(log, container.AuditWorker.Start)
 
-	// Inicjalizacja aplikacji Fiber i routing
+	// Initialize app and routes
 	app := config.NewAuditApp(container)
 	router.SetupRoutes(app, container)
 
-	// Konfiguracja Graceful Shutdown
-	server.SetupGracefulShutdown(app, config.AppConfig.Shutdown, closeDB)
-
-	// Uruchomienie serwera
-	address := ":" + config.AppConfig.Server.Port
-	log.Info("Service started", map[string]any{
-		"app":     config.AppConfig.Server.AppName,
-		"address": address,
-		"env":     config.AppConfig.Server.Env,
-	})
-
-	if err := app.Listen(address); err != nil {
-		log.ErrorObj("Critical server failure", err)
-	}
+	// Start server with unified run handler
+	server.Run(
+		app,
+		server.Config{
+			Port:       config.AppConfig.Server.Port,
+			AppName:    config.AppConfig.Server.AppName,
+			AppVersion: config.AppConfig.Server.AppVersion,
+			Env:        config.AppConfig.Server.Env,
+			Shutdown:   config.AppConfig.Shutdown,
+		},
+		*log,
+		func() {
+			closeDB()
+			// Additional resource cleanup can be added here
+		},
+	)
 }

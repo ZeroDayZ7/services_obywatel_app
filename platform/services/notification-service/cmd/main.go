@@ -10,21 +10,23 @@ import (
 	"github.com/zerodayz7/platform/services/notification-service/config"
 	"github.com/zerodayz7/platform/services/notification-service/internal/di"
 	"github.com/zerodayz7/platform/services/notification-service/internal/router"
+	// "github.com/zerodayz7/platform/pkg/telemetry" // Uncomment when telemetry is used
 )
 
 func main() {
-	// 0. Boostrap Logger
+	// Bootstrap logger for startup errors
 	bootLog := shared.InitBootstrapLogger(os.Getenv("ENV"))
 	defer func() { _ = bootLog.Sync() }()
-	// 1. Config
+
+	// Load global configuration
 	if err := config.LoadConfigGlobal(); err != nil {
 		bootLog.Fatal("Config load failed", "error", err)
 	}
 
-	// 2. Logger
+	// Initialize production logger
 	log := shared.InitLogger(config.AppConfig.Server.Env)
 
-	// 3. Telemetry (Tracer)
+	// Telemetry (Tracer) - Keep commented out as requested
 	// if config.AppConfig.OTEL.Enabled {
 	// 	cleanup := telemetry.InitTracer(
 	// 		config.AppConfig.Server.AppName,
@@ -33,45 +35,42 @@ func main() {
 	// 	defer cleanup()
 	// }
 
-	// 4. Infrastruktura (Redis & DB)
+	// Initialize Redis
 	redisClient, err := redis.New(redis.Config(config.AppConfig.Redis))
 	if err != nil {
 		log.ErrorObj("Redis failed", err)
 	}
 	defer redisClient.Close()
 
+	// Initialize Database
 	db, closeDB := config.MustInitDB(config.AppConfig.Database)
 	defer closeDB()
 
-	// Dependency Injection
+	// Dependency Injection setup
 	container := di.NewContainer(db, redisClient, log, &config.AppConfig)
 
-	// Start Notification Worker w tle
+	// Start background workers
 	utils.SafeGo(log, container.Workers.NotificationWorker.Start)
 
-	// Fiber App
+	// Initialize Fiber app and routes
 	app := config.NewNotificationApp(container)
-
-	// Routes
 	router.SetupRoutes(app, container)
 
-	// Graceful Shutdown
-	server.SetupGracefulShutdown(
+	// Start server with unified run handler
+	server.Run(
 		app,
-		config.AppConfig.Shutdown,
-		closeDB,
-		func() { _ = redisClient.Close() },
+		server.Config{
+			Port:       config.AppConfig.Server.Port,
+			AppName:    config.AppConfig.Server.AppName,
+			AppVersion: config.AppConfig.Server.AppVersion,
+			Env:        config.AppConfig.Server.Env,
+			Shutdown:   config.AppConfig.Shutdown,
+		},
+		*log,
+		func() {
+			closeDB()
+			_ = redisClient.Close()
+			// Additional resource cleanup can be added here
+		},
 	)
-	// Start Server
-
-	address := "0.0.0.0:" + config.AppConfig.Server.Port
-	log.Info("Service started", map[string]any{
-		"app":     config.AppConfig.Server.AppName,
-		"version": config.AppConfig.Server.AppVersion,
-		"address": address,
-		"env":     config.AppConfig.Server.Env,
-	})
-	if err := app.Listen(address); err != nil {
-		log.ErrorObj("Failed to start server", err)
-	}
 }

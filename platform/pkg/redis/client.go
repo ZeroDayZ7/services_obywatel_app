@@ -19,6 +19,12 @@ type Config struct {
 	Port     string
 	Password string
 	DB       int
+
+	PoolSize     int
+	MinIdleConns int
+	PoolTimeout  time.Duration
+
+	Timeout time.Duration
 }
 
 type Client struct {
@@ -27,13 +33,15 @@ type Client struct {
 
 func New(cfg Config) (*Client, error) {
 	rdb := redis.NewClient(&redis.Options{
-		Addr:     fmt.Sprintf("%s:%s", cfg.Host, cfg.Port),
-		Password: cfg.Password,
-		DB:       cfg.DB,
-		PoolSize: 10,
+		Addr:         fmt.Sprintf("%s:%s", cfg.Host, cfg.Port),
+		Password:     cfg.Password,
+		DB:           cfg.DB,
+		PoolSize:     cfg.PoolSize,
+		MinIdleConns: cfg.MinIdleConns,
+		PoolTimeout:  cfg.PoolTimeout,
 	})
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.Timeout)
 	defer cancel()
 
 	if err := rdb.Ping(ctx).Err(); err != nil {

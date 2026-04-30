@@ -13,18 +13,19 @@ import (
 )
 
 func main() {
-	// 0. Boostrap Logger
+	// Bootstrap logger for startup errors
 	bootLog := shared.InitBootstrapLogger(os.Getenv("ENV"))
 	defer func() { _ = bootLog.Sync() }()
-	// 1. Config
+
+	// Load global configuration
 	if err := config.LoadConfigGlobal(); err != nil {
 		bootLog.Fatal("Config load failed", "error", err)
 	}
 
-	// 2. Logger
+	// Initialize production logger
 	log := shared.InitLogger(config.AppConfig.Server.Env)
 
-	// 3. Telemetry (Tracer)
+	// Initialize telemetry if enabled
 	if config.AppConfig.OTEL.Enabled {
 		cleanup := telemetry.InitTracer(
 			config.AppConfig.Server.AppName,
@@ -33,39 +34,39 @@ func main() {
 		defer cleanup()
 	}
 
-	// 4. Infrastruktura (Redis & DB)
+	// Initialize Redis
 	redisClient, err := redis.New(redis.Config(config.AppConfig.Redis))
 	if err != nil {
 		log.ErrorObj("Redis failed", err)
 	}
 	defer redisClient.Close()
 
+	// Initialize Database
 	db, closeDB := config.MustInitDB(config.AppConfig.Database)
 	defer closeDB()
 
-	// 5. DI & App
+	// Dependency Injection & App Setup
 	container := di.NewContainer(db, redisClient, &config.AppConfig)
 	app := config.NewAuthApp(container)
 
-	// 6. Routes
+	// Register routes
 	router.SetupRoutes(app, container)
-	// 7. Graceful shutdown
-	server.SetupGracefulShutdown(
-		app,
-		config.AppConfig.Shutdown,
-		func() { closeDB() },
-		func() { _ = redisClient.Close() },
-	)
 
-	address := "0.0.0.0:" + config.AppConfig.Server.Port
-	log.Info("Service started", map[string]any{
-		"app":     config.AppConfig.Server.AppName,
-		"version": config.AppConfig.Server.AppVersion,
-		"address": address,
-		"env":     config.AppConfig.Server.Env,
-	})
-	// Start serwera
-	if err := app.Listen(address); err != nil {
-		log.ErrorObj("Failed to start server", err)
-	}
+	// Start server with unified run handler
+	server.Run(
+		app,
+		server.Config{
+			Port:       config.AppConfig.Server.Port,
+			AppName:    config.AppConfig.Server.AppName,
+			AppVersion: config.AppConfig.Server.AppVersion,
+			Env:        config.AppConfig.Server.Env,
+			Shutdown:   config.AppConfig.Shutdown,
+		},
+		*log,
+		func() {
+			closeDB()
+			_ = redisClient.Close()
+			// Additional resource cleanup can be added here
+		},
+	)
 }

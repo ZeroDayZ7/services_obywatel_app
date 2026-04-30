@@ -61,10 +61,14 @@ type ServerConfig struct {
 }
 
 type RedisConfig struct {
-	Host     string `mapstructure:"REDIS_HOST" validate:"required"`
-	Port     string `mapstructure:"REDIS_PORT" validate:"required,numeric"`
-	Password string `mapstructure:"REDIS_PASSWORD"`
-	DB       int    `mapstructure:"REDIS_DB" validate:"min=0"`
+	Host         string        `mapstructure:"REDIS_HOST" validate:"required"`
+	Port         string        `mapstructure:"REDIS_PORT" validate:"required,numeric"`
+	Password     string        `mapstructure:"REDIS_PASSWORD"`
+	DB           int           `mapstructure:"REDIS_DB" validate:"min=0"`
+	PoolSize     int           `mapstructure:"REDIS_POOL_SIZE" validate:"min=1"`
+	MinIdleConns int           `mapstructure:"REDIS_MIN_IDLE_CONNS" validate:"min=0"`
+	PoolTimeout  time.Duration `mapstructure:"REDIS_POOL_TIMEOUT" validate:"required"`
+	Timeout      time.Duration `mapstructure:"REDIS_TIMEOUT" validate:"required"`
 }
 
 type JWTConfig struct {

@@ -16,10 +16,12 @@ func main() {
 	// 0. Boostrap Logger
 	bootLog := shared.InitBootstrapLogger(os.Getenv("ENV"))
 	defer func() { _ = bootLog.Sync() }()
+
 	// 1. Config
 	if err := config.LoadConfigGlobal(); err != nil {
 		bootLog.Fatal("Config load failed", "error", err)
 	}
+
 	// 2. Logger
 	log := shared.InitLogger(config.AppConfig.Server.Env)
 
@@ -32,37 +34,32 @@ func main() {
 		defer cleanup()
 	}
 
-	// Redis – z nowego pkg
+	// 4. Redis
 	redisClient, err := redis.New(redis.Config(config.AppConfig.Redis))
 	if err != nil {
 		log.ErrorObj("Redis failed", err)
 	}
 	defer redisClient.Close()
 
+	// 5. DI & App Setup
 	container := di.NewContainer(redisClient, &config.AppConfig)
-
 	app := config.NewGatewayApp(container)
-
-	// Routes
 	router.SetupRoutes(app, container)
 
-	// Graceful shutdown
-	server.SetupGracefulShutdown(
+	// 6. Run server with unified shutdown handler
+	server.Run(
 		app,
-		config.AppConfig.Shutdown,
-		func() { _ = redisClient.Close() },
+		server.Config{
+			Port:       config.AppConfig.Server.Port,
+			AppName:    config.AppConfig.Server.AppName,
+			AppVersion: config.AppConfig.Server.AppVersion,
+			Env:        config.AppConfig.Server.Env,
+			Shutdown:   config.AppConfig.Shutdown,
+		},
+		*log,
+		func() {
+			_ = redisClient.Close()
+			// Additional resource cleanup (e.g., database) can be added here in the future.
+		},
 	)
-
-	// Log start
-	address := "0.0.0.0:" + config.AppConfig.Server.Port
-	log.Info("Service started", map[string]any{
-		"app":     config.AppConfig.Server.AppName,
-		"version": config.AppConfig.Server.AppVersion,
-		"address": address,
-		"env":     config.AppConfig.Server.Env,
-	})
-	// Start serwera
-	if err := app.Listen(address); err != nil {
-		log.ErrorObj("Failed to start server", err)
-	}
 }
