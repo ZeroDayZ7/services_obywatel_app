@@ -18,26 +18,21 @@ type UserSession struct {
 	Fingerprint string `json:"fingerprint"`
 }
 
-// AuthRedisMiddleware - middleware do weryfikacji sesji w Redis
-// AuthRedisMiddleware - middleware do weryfikacji sesji w Redis
 func AuthRedisMiddleware(rdb *redis.Client) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		log := shared.GetLogger()
 		path := c.Path()
 
-		// 1. Skip public paths
 		if slices.Contains(constants.PublicPaths, path) {
 			return c.Next()
 		}
 
-		// 2. Walidacja Fingerprintu - UŻYWAMY ErrInvalidDeviceFingerprint
 		clientFingerprint := c.Get(constants.HeaderDeviceFingerprint)
 		if clientFingerprint == "" {
 			log.Warn("Missing X-Device-Fingerprint header")
 			return apperr.SendAppError(c, apperr.ErrInvalidDeviceFingerprint)
 		}
 
-		// 3. Wyciągnij sessionID z JWT
 		jwtPayload := c.Locals("user")
 		if jwtPayload == nil {
 			return apperr.SendAppError(c, apperr.ErrUnauthorized)
@@ -46,25 +41,22 @@ func AuthRedisMiddleware(rdb *redis.Client) fiber.Handler {
 		claims := jwtToken.Claims.(jwt.MapClaims)
 		sessionID, _ := claims["sid"].(string)
 
-		// DYNAMICZNY WYBÓR PREFIXU (z Twojego poprzedniego pytania)
 		redisPrefix := "session:"
 		if path == "/auth/register-device" {
 			redisPrefix = "setup:session:"
 		}
 
-		// 4. Pobierz dane sesji z Redis
 		ctx := c.Context()
 		jsonData, err := rdb.Get(ctx, redisPrefix+sessionID).Result()
 		if err != nil {
 			if errors.Is(err, redis.Nil) {
-				// UŻYWAMY ErrSessionExpired lub ErrInvalidSession
+
 				log.WarnMap("Session not found", map[string]any{"sid": sessionID, "path": path})
 				return apperr.SendAppError(c, apperr.ErrSessionExpired)
 			}
 			return apperr.SendAppError(c, apperr.ErrInternal)
 		}
 
-		// 5. Parsowanie i weryfikacja Fingerprintu
 		var session UserSession
 		if err := json.Unmarshal([]byte(jsonData), &session); err != nil {
 			return apperr.SendAppError(c, apperr.ErrInternal)
@@ -75,11 +67,10 @@ func AuthRedisMiddleware(rdb *redis.Client) fiber.Handler {
 				"expected": session.Fingerprint,
 				"received": clientFingerprint,
 			})
-			// UŻYWAMY ErrInvalidSession lub ErrUntrustedDevice
+
 			return apperr.SendAppError(c, apperr.ErrUntrustedDevice)
 		}
 
-		// 6. Ustawienie danych dla downstreamu
 		c.Locals("userID", session.UserID)
 		c.Locals("sessionID", sessionID)
 		c.Locals("deviceID", session.Fingerprint)

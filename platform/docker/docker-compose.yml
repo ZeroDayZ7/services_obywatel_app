@@ -7,15 +7,22 @@ services:
   # --- GATEWAY ---
   gateway:
     <<: *common-settings
-    build:
-      context: ../services/gateway
-      dockerfile: Dockerfile
+    image: golang:1.26.2-alpine3.23
     container_name: app-gateway
+    working_dir: /app
+    volumes:
+      - ../services/gateway:/app 
+      - ../platform:/platform
+      - go-modules:/go/pkg 
     ports:
       - "8080:8080"
+    environment:
+      - ENV=development
     depends_on:
       db-auth:
         condition: service_healthy
+      cache-redis:
+        condition: service_started
   # --- AUTHENTICATION DATABASE ---
   db-auth:
     <<: *common-settings
