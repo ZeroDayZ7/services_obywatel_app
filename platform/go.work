@@ -1,11 +1,11 @@
-go 1.25.5
+go 1.26.2
 
 use (
 	./pkg
+	./services/audit-service
 	./services/auth-service
 	./services/citizen-docs
 	./services/gateway
-	./services/version-service
 	./services/notification-service
-	./services/audit-service
+	./services/version-service
 )
