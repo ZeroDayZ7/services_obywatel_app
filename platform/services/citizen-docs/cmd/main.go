@@ -11,48 +11,36 @@ import (
 )
 
 func main() {
-	// 0. Boostrap Logger
 	bootLog := shared.InitBootstrapLogger(os.Getenv("ENV"))
 	defer func() { _ = bootLog.Sync() }()
-	// 1. Config
+
 	if err := config.LoadConfigGlobal(); err != nil {
 		bootLog.Fatal("Config load failed", "error", err)
 	}
 
-	// 2. Inicjalizacja Loggera (pobieramy środowisko z AppConfig)
 	log := shared.InitLogger(config.AppConfig.Server.Env)
 
-	// 3. Inicjalizacja bazy danych (z automatyczną migracją nowych modeli)
 	db, closeDB := config.MustInitDB(config.AppConfig.Database)
 	defer closeDB()
 
-	// 4. Inicjalizacja DI Container (przekazujemy db, log i wskaźnik na config)
-	// Upewnij się, że Twoje di.NewContainer przyjmuje (db, log, config)
 	container := di.NewContainer(db, log, &config.AppConfig)
 
-	// 5. Tworzenie instancji Fiber App (przekazujemy cały kontener DI)
 	app := config.NewDocsApp(container)
 
-	// 6. Konfiguracja routingu (używamy handlerów z kontenera)
 	router.SetupDocsRoutes(app, container.UserDocumentSvc)
 
-	// 7. Pancerne Graceful Shutdown (POPRAWIONA KOLEJNOŚĆ: app, timeout, cleanups)
-	server.SetupGracefulShutdown(
+	server.Run(
 		app,
-		config.AppConfig.Shutdown, // 2nd: time.Duration
-		closeDB,                   // 3rd: variadic func()
+		server.Config{
+			Port:       config.AppConfig.Server.Port,
+			AppName:    config.AppConfig.Server.AppName,
+			AppVersion: config.AppConfig.Server.AppVersion,
+			Env:        config.AppConfig.Server.Env,
+			Shutdown:   config.AppConfig.Shutdown,
+		},
+		*log,
+		func() {
+			closeDB()
+		},
 	)
-
-	// 8. Uruchomienie serwera
-	address := ":" + config.AppConfig.Server.Port
-	log.Info("Service started", map[string]any{
-		"app":     config.AppConfig.Server.AppName,
-		"version": config.AppConfig.Server.AppVersion,
-		"address": address,
-		"env":     config.AppConfig.Server.Env,
-	})
-
-	if err := app.Listen(address); err != nil {
-		log.ErrorObj("Critical server failure", err)
-	}
 }

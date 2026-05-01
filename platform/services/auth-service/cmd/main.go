@@ -13,19 +13,15 @@ import (
 )
 
 func main() {
-	// Bootstrap logger for startup errors
 	bootLog := shared.InitBootstrapLogger(os.Getenv("ENV"))
 	defer func() { _ = bootLog.Sync() }()
 
-	// Load global configuration
 	if err := config.LoadConfigGlobal(); err != nil {
 		bootLog.Fatal("Config load failed", "error", err)
 	}
 
-	// Initialize production logger
 	log := shared.InitLogger(config.AppConfig.Server.Env)
 
-	// Initialize telemetry if enabled
 	if config.AppConfig.OTEL.Enabled {
 		cleanup := telemetry.InitTracer(
 			config.AppConfig.Server.AppName,
@@ -34,25 +30,20 @@ func main() {
 		defer cleanup()
 	}
 
-	// Initialize Redis
 	redisClient, err := redis.New(redis.Config(config.AppConfig.Redis))
 	if err != nil {
 		log.ErrorObj("Redis failed", err)
 	}
 	defer redisClient.Close()
 
-	// Initialize Database
 	db, closeDB := config.MustInitDB(config.AppConfig.Database)
 	defer closeDB()
 
-	// Dependency Injection & App Setup
 	container := di.NewContainer(db, redisClient, &config.AppConfig)
 	app := config.NewAuthApp(container)
 
-	// Register routes
 	router.SetupRoutes(app, container)
 
-	// Start server with unified run handler
 	server.Run(
 		app,
 		server.Config{
@@ -66,7 +57,6 @@ func main() {
 		func() {
 			closeDB()
 			_ = redisClient.Close()
-			// Additional resource cleanup can be added here
 		},
 	)
 }
