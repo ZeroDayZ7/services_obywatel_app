@@ -12,12 +12,13 @@ import (
 type LimitGroup string
 
 const (
-	LimitGlobal LimitGroup = "global"
-	LimitAuth   LimitGroup = "auth"
-	LimitUsers  LimitGroup = "users"
-	LimitHealth LimitGroup = "health"
-	LimitAudit  LimitGroup = "audit"
-	LimitReset  LimitGroup = "reset"
+	LimitGlobal        LimitGroup = "global"
+	LimitAuth          LimitGroup = "auth"
+	LimitUsers         LimitGroup = "users"
+	LimitHealth        LimitGroup = "health"
+	LimitAudit         LimitGroup = "audit"
+	LimitReset         LimitGroup = "reset"
+	LimitNotifications LimitGroup = "notifications"
 )
 
 var (
@@ -50,11 +51,12 @@ func createLimiter(group LimitGroup, storage fiber.Storage) fiber.Handler {
 		Max    int
 		Window time.Duration
 	}{
-		LimitGlobal: {Max: 100, Window: 60 * time.Second},
-		LimitAuth:   {Max: 5, Window: 60 * time.Second},
-		LimitHealth: {Max: 50, Window: 30 * time.Second},
-		LimitAudit:  {Max: 50, Window: 1 * time.Minute},
-		LimitReset:  {Max: 3, Window: 1 * time.Hour},
+		LimitGlobal:        {Max: 100, Window: 60 * time.Second},
+		LimitAuth:          {Max: 5, Window: 60 * time.Second},
+		LimitHealth:        {Max: 50, Window: 30 * time.Second},
+		LimitAudit:         {Max: 50, Window: 1 * time.Minute},
+		LimitReset:         {Max: 3, Window: 1 * time.Hour},
+		LimitNotifications: {Max: 30, Window: 1 * time.Minute},
 	}
 
 	cfg, ok := presets[group]

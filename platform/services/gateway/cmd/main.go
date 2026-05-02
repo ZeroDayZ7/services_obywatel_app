@@ -14,7 +14,7 @@ import (
 
 func main() {
 	// 0. Boostrap Logger
-	bootLog := shared.InitBootstrapLogger(os.Getenv("ENV"))
+	bootLog := shared.InitBootstrapLogger(os.Getenv("ENV"), false)
 	defer func() { _ = bootLog.Sync() }()
 
 	// 1. Config
@@ -23,7 +23,7 @@ func main() {
 	}
 
 	// 2. Logger
-	log := shared.InitLogger(config.AppConfig.Server.Env)
+	log := shared.InitLogger(config.AppConfig.Server.Env, false)
 
 	// 3. Telemetry (Tracer)
 	if config.AppConfig.OTEL.Enabled {

@@ -13,14 +13,14 @@ import (
 )
 
 func main() {
-	bootLog := shared.InitBootstrapLogger(os.Getenv("ENV"))
+	bootLog := shared.InitBootstrapLogger(os.Getenv("ENV"), false)
 	defer func() { _ = bootLog.Sync() }()
 
 	if err := config.LoadConfigGlobal(); err != nil {
 		bootLog.Fatal("Config load failed", "error", err)
 	}
 
-	log := shared.InitLogger(config.AppConfig.Server.Env)
+	log := shared.InitLogger(config.AppConfig.Server.Env, false)
 
 	if config.AppConfig.OTEL.Enabled {
 		cleanup := telemetry.InitTracer(

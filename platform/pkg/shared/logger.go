@@ -24,9 +24,7 @@ var (
 
 	SensitiveKeys = []string{
 		"password",
-		// "token",
 		"secret",
-		// "code",
 		"authorization",
 		"credential",
 		"apikey",
@@ -39,7 +37,7 @@ const (
 	colorRed    = "\x1b[31m"
 )
 
-func InitBootstrapLogger(env string) *Logger {
+func InitBootstrapLogger(env string, saveToFile bool) *Logger {
 	var level zapcore.Level
 	if strings.ToLower(env) == "production" {
 		level = zapcore.InfoLevel
@@ -53,22 +51,23 @@ func InitBootstrapLogger(env string) *Logger {
 		EncodeTime: zapcore.ISO8601TimeEncoder, EncodeCaller: zapcore.ShortCallerEncoder,
 	}
 
-	// Konsola
 	consoleCore := zapcore.NewCore(zapcore.NewConsoleEncoder(encoderConfig), zapcore.AddSync(os.Stdout), level)
+	cores := []zapcore.Core{consoleCore}
 
-	// Plik (Lumberjack)
-	logFile := &lumberjack.Logger{
-		Filename: "logs/bootstrap.log",
-		MaxSize:  2, MaxBackups: 1, Compress: false,
+	if saveToFile {
+		logFile := &lumberjack.Logger{
+			Filename: "logs/bootstrap.log",
+			MaxSize:  2, MaxBackups: 1, Compress: false,
+		}
+		fileCore := zapcore.NewCore(zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()), zapcore.AddSync(logFile), zapcore.InfoLevel)
+		cores = append(cores, fileCore)
 	}
-	fileCore := zapcore.NewCore(zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()), zapcore.AddSync(logFile), zapcore.InfoLevel)
 
-	core := zapcore.NewTee(consoleCore, fileCore)
+	core := zapcore.NewTee(cores...)
 	return &Logger{zap.New(core, zap.AddCaller())}
 }
 
-// InitLogger inicjalizuje singleton loggera z dynamicznym poziomem logowania
-func InitLogger(env string) *Logger {
+func InitLogger(env string, saveToFile bool) *Logger {
 	once.Do(func() {
 		isProd := strings.ToLower(env) == "production"
 
@@ -79,14 +78,10 @@ func InitLogger(env string) *Logger {
 			consoleLevel = zapcore.DebugLevel
 		}
 
-		// --- 1. Konfiguracja dla Konsoli ---
 		var consoleEncoder zapcore.Encoder
-
 		if isProd {
-			// Na PRODUKCJI
 			consoleEncoder = zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig())
 		} else {
-			// W DEVIE
 			consoleEncoderConfig := zapcore.EncoderConfig{
 				MessageKey:     "msg",
 				LevelKey:       "level",
@@ -103,35 +98,33 @@ func InitLogger(env string) *Logger {
 		}
 
 		consoleCore := zapcore.NewCore(consoleEncoder, zapcore.AddSync(os.Stdout), consoleLevel)
+		cores := []zapcore.Core{consoleCore}
 
-		// --- 2. Konfiguracja dla Pliku (Zawsze JSON) ---
-		logFile := &lumberjack.Logger{
-			Filename:   "logs/app.log",
-			MaxSize:    10,
-			MaxBackups: 5,
-			Compress:   true,
+		if saveToFile {
+			logFile := &lumberjack.Logger{
+				Filename:   "logs/app.log",
+				MaxSize:    10,
+				MaxBackups: 5,
+				Compress:   true,
+			}
+			fileCore := zapcore.NewCore(
+				zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()),
+				zapcore.AddSync(logFile),
+				zap.InfoLevel,
+			)
+			cores = append(cores, fileCore)
 		}
-		fileCore := zapcore.NewCore(
-			zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()),
-			zapcore.AddSync(logFile),
-			zap.InfoLevel,
-		)
 
-		// --- 3. Połączenie ---
-		core := zapcore.NewTee(consoleCore, fileCore)
-
-		// AddCallerSkip(1) jest ważne, żeby w logach widzieć miejsce wywołania log.Info,
-		// a nie wnętrze Twojej paczki shared/logger
+		core := zapcore.NewTee(cores...)
 		zapLogger := zap.New(core, zap.AddCaller(), zap.AddCallerSkip(1))
 		instance = &Logger{zapLogger}
 	})
 	return instance
 }
 
-// GetLogger zwraca singleton
 func GetLogger() *Logger {
 	if instance == nil {
-		InitLogger("development")
+		InitLogger("development", false)
 	}
 	return instance
 }

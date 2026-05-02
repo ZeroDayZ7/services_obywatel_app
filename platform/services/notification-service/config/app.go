@@ -38,7 +38,7 @@ func NewNotificationApp(container *di.Container) *fiber.App {
 	// Middleware
 	app.Use(requestid.New())
 	app.Use(recover.New())
-	app.Use(shared.NewLimiter("global", nil))
+	app.Use(shared.GetLimiter(shared.LimitGlobal, nil))
 	app.Use(shared.RequestLoggerMiddleware())
 
 	// Jeśli potrzebujesz InternalAuthMiddleware w powiadomieniach:

@@ -15,7 +15,7 @@ import (
 
 func main() {
 	// Bootstrap logger for startup errors
-	bootLog := shared.InitBootstrapLogger(os.Getenv("ENV"))
+	bootLog := shared.InitBootstrapLogger(os.Getenv("ENV"), false)
 	defer func() { _ = bootLog.Sync() }()
 
 	// Load global configuration
@@ -24,7 +24,7 @@ func main() {
 	}
 
 	// Initialize production logger
-	log := shared.InitLogger(config.AppConfig.Server.Env)
+	log := shared.InitLogger(config.AppConfig.Server.Env, false)
 
 	// Telemetry (Tracer) - Keep commented out as requested
 	// if config.AppConfig.OTEL.Enabled {

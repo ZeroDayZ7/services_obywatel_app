@@ -24,7 +24,7 @@ func SetupRoutes(app *fiber.App, container *di.Container) {
 	notifications := app.Group("/notifications")
 	{
 		// Limiter specyficzny dla powiadomień
-		notifications.Use(shared.NewLimiter("notifications", nil))
+		notifications.Use(shared.GetLimiter(shared.LimitNotifications, nil))
 
 		notifications.Get("/", h.ListMyNotifications)
 		notifications.Post("/send", h.SendNotification)
