@@ -13,9 +13,9 @@ services:
     container_name: app-gateway
     working_dir: /app
     volumes:
-      - ../services/gateway:/app 
+      - ../services/gateway:/app
       - ../platform:/platform
-      - go-modules:/go/pkg 
+      - go-modules:/go/pkg
     ports:
       - "8080:8080"
     depends_on:
@@ -100,26 +100,27 @@ services:
     volumes:
       - redis_data:/data
 
-  # # --- ADMINISTRATION TOOLS ---
-  # pgadmin:
-  #   <<: *common-settings
-  #   image: dpage/pgadmin4:9.10
-  #   container_name: pgadmin-management
-  #   ports:
-  #     - "5050:80"
-  #   environment:
-  #     PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}
-  #     PGADMIN_CONFIG_ENHANCED_COOKIE_PROTECTION: "True"
-  #   secrets:
-  #     - pgadmin_root_pass
-  #   command: >
-  #     sh -c "export PGADMIN_DEFAULT_PASSWORD=$$(cat /run/secrets/pgadmin_root_pass) && 
-  #            /entrypoint.sh"
-  #   volumes:
-  #     - ./pgadmin_data:/var/lib/pgadmin
-  #   depends_on:
-  #     db-auth:
-  #       condition: service_healthy
+  # --- ADMINISTRATION TOOLS ---
+  pgadmin:
+    <<: *common-settings
+    image: dpage/pgadmin4:9.14
+    container_name: pgadmin-management
+    ports:
+      - "5050:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD_FILE: /run/secrets/pgadmin_root_pass
+      PGADMIN_CONFIG_ENHANCED_COOKIE_PROTECTION: "True"
+    secrets:
+      - pgadmin_root_pass
+    command: >
+      sh -c "export PGADMIN_DEFAULT_PASSWORD=$$(cat /run/secrets/pgadmin_root_pass) && 
+             /entrypoint.sh"
+    volumes:
+      - ./pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      db-auth:
+        condition: service_healthy
 
   # # --- OBSERVABILITY ---
   # otel-collector:
