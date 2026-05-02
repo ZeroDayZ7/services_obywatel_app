@@ -32,6 +32,16 @@
     },
     "editor.defaultFormatter": "golang.go"
   },
+  // "gopls": {
+  //   "ui.diagnostic.staticcheck": true,
+  //   "ui.completion.usePlaceholders": true,
+  //   "analyses": {
+  //     "useany": true,
+  //     "unusedparams": true,
+  //     "simplifyrange": true
+  //   },
+  //   "diagnosticsDelay": "100ms"
+  // },
   "go.formatTool": "gofumpt",
   "go.lintTool": "golangci-lint",
   "go.lintOnSave": "package",

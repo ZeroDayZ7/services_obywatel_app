@@ -17,8 +17,8 @@ func ValidateAccessToken(tokenString string, secret string) (*jwt.Token, error) 
 	})
 }
 
-func ParseJWT(tokenStr string, secret string) (map[string]interface{}, error) {
-	token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
+func ParseJWT(tokenStr string, secret string) (map[string]any, error) {
+	token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (any, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, errors.New("unexpected signing method")
 		}
