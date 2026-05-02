@@ -9,11 +9,10 @@ import (
 	"gorm.io/gorm"
 )
 
-// NewPostgres tworzy bezpieczne połączenie i zwraca instancję GORM oraz funkcję zamykającą
 func NewPostgres(cfg viper.DBConfig, models ...any) (*gorm.DB, func(), error) {
 	log := shared.GetLogger()
 
-	db, err := gorm.Open(postgres.Open(cfg.DSN), &gorm.Config{
+	db, err := gorm.Open(postgres.Open(cfg.GetDSN()), &gorm.Config{
 		PrepareStmt: true,
 	})
 	if err != nil {
@@ -25,7 +24,6 @@ func NewPostgres(cfg viper.DBConfig, models ...any) (*gorm.DB, func(), error) {
 		return nil, nil, fmt.Errorf("failed to get sql.DB: %w", err)
 	}
 
-	// Konfiguracja poola
 	sqlDB.SetMaxOpenConns(cfg.MaxOpenConns)
 	sqlDB.SetMaxIdleConns(cfg.MaxIdleConns)
 	sqlDB.SetConnMaxLifetime(cfg.ConnMaxLifetime)
@@ -34,7 +32,6 @@ func NewPostgres(cfg viper.DBConfig, models ...any) (*gorm.DB, func(), error) {
 		return nil, nil, fmt.Errorf("database ping failed: %w", err)
 	}
 
-	// Automatyczna migracja przekazanych modeli
 	if len(models) > 0 {
 		log.Info("Running database migrations...")
 		if err := db.AutoMigrate(models...); err != nil {

@@ -1,6 +1,9 @@
 package viper
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 type ServicesConfig struct {
 	Auth      string `mapstructure:"SERVICE_AUTH_URL" validate:"required,url"`
@@ -27,8 +30,12 @@ type OTELConfig struct {
 }
 
 type DBConfig struct {
-	// omitempty sprawia, że jeśli nie ma DSN (np. w Gateway), walidacja przejdzie
-	DSN             string        `mapstructure:"DATABASE_DSN" validate:"omitempty"`
+	Host            string        `mapstructure:"DB_HOST" validate:"required"`
+	Port            int           `mapstructure:"DB_PORT" validate:"required"`
+	User            string        `mapstructure:"DB_USER" validate:"required"`
+	Password        string        `mapstructure:"DB_PASSWORD" validate:"required"`
+	DBName          string        `mapstructure:"DB_NAME" validate:"required"`
+	SSLMode         string        `mapstructure:"DB_SSLMODE" validate:"required"`
 	MaxOpenConns    int           `mapstructure:"DB_MAX_OPEN_CONNS" validate:"omitempty,min=1"`
 	MaxIdleConns    int           `mapstructure:"DB_MAX_IDLE_CONNS" validate:"omitempty,min=1"`
 	ConnMaxLifetime time.Duration `mapstructure:"DB_CONN_MAX_LIFETIME"`
@@ -90,4 +97,12 @@ type Config struct {
 	Internal  InternalSecurityConfig `mapstructure:",squash"`
 	Services  ServicesConfig         `mapstructure:",squash"`
 	Database  DBConfig               `mapstructure:",squash"`
+}
+
+// GetDSN tworzy string połączenia dla GORM/Postgres
+func (cfg DBConfig) GetDSN() string {
+	return fmt.Sprintf(
+		"host=%s user=%s password=%s dbname=%s port=%d sslmode=%s",
+		cfg.Host, cfg.User, cfg.Password, cfg.DBName, cfg.Port, cfg.SSLMode,
+	)
 }

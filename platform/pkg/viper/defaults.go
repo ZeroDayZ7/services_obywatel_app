@@ -21,6 +21,17 @@ func SetSharedDefaults(serviceName string) {
 	viper.SetDefault("READ_TIMEOUT", "15s")
 	viper.SetDefault("WRITE_TIMEOUT", "15s")
 
+	// Wewnątrz SetSharedDefaults
+	viper.SetDefault("DB_HOST", "127.0.0.1")
+	viper.SetDefault("DB_PORT", 5432)
+	viper.SetDefault("DB_USER", "postgres")
+	viper.SetDefault("DB_PASSWORD", "secret")
+	viper.SetDefault("DB_NAME", "platform")
+	viper.SetDefault("DB_SSLMODE", "disable")
+	viper.SetDefault("DB_MAX_OPEN_CONNS", 10)
+	viper.SetDefault("DB_MAX_IDLE_CONNS", 5)
+	viper.SetDefault("DB_CONN_MAX_LIFETIME", "1h")
+
 	// Redis
 	viper.SetDefault("REDIS_HOST", "127.0.0.1")
 	viper.SetDefault("REDIS_PORT", "6379")
