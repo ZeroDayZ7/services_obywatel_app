@@ -8,7 +8,7 @@ import (
 
 func SetupUserRoutes(app *fiber.App, h *handler.UserHandler) {
 	user := app.Group("/user")
-	user.Use(shared.NewLimiter("users", nil))
+	user.Use(shared.GetLimiter(shared.LimitUsers, nil))
 
 	user.Get("/sessions", h.GetSessions)
 	user.Post("/sessions/terminate", h.TerminateSession)

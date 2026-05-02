@@ -16,7 +16,7 @@ func SetupAuthRoutes(
 	resetHandler *handler.ResetHandler,
 ) {
 	auth := app.Group("/auth")
-	auth.Use(shared.NewLimiter("auth", nil))
+	auth.Use(shared.GetLimiter(shared.LimitAuth, nil))
 
 	// ==========================
 	// LOGIN / REGISTER / JWT
@@ -64,7 +64,7 @@ func SetupAuthRoutes(
 	// RESET PASSWORD
 	// ==========================
 	reset := auth.Group("/reset")
-	reset.Use(shared.NewLimiter("reset", nil))
+	reset.Use(shared.GetLimiter(shared.LimitReset, nil))
 
 	reset.Post("/send",
 		middleware.ValidateBody[schemas.ResetPasswordRequest](),

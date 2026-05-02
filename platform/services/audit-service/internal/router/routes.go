@@ -24,7 +24,7 @@ func SetupRoutes(app *fiber.App, container *di.Container) {
 	auditGroup := app.Group("/audit")
 	{
 		// Nałożenie limitera z pkg/shared.
-		auditGroup.Use(shared.NewLimiter("audit", nil))
+		auditGroup.Use(shared.GetLimiter(shared.LimitAudit, nil))
 
 		// --- Odczyt logów ---
 		// Pobieranie listy wszystkich logów (z paginacją).

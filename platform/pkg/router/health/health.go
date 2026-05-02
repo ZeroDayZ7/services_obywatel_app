@@ -6,5 +6,5 @@ import (
 )
 
 func RegisterRoutes(app *fiber.App, checker *Checker) {
-	app.Get("/health", shared.NewLimiter("health", nil), checker.Handler)
+	app.Get("/health", shared.GetLimiter(shared.LimitHealth, nil), checker.Handler)
 }
