@@ -12,4 +12,4 @@ bin/*
 **/logs/
 **/combined.txt
 **/temp.md
-
+**/pgadmin_data/

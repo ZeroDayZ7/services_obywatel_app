@@ -19,7 +19,8 @@ func SeedData(db *gorm.DB) error {
 	if count == 0 {
 		log.Info("Baza danych jest pusta, rozpoczynam zasiewanie (seeding)...")
 
-		// Wspólny hash hasła z Twojego przykładu
+		// Wspólny hash hasła
+		// Hasło do testów: Zaq1@wsx
 		testPassword := "WmixUVuBuUWGZzbV2lmXrA$0okaGZfyu+EJgNRSI6aSIyB+WvMDFiBKyN0P+DW7294"
 
 		users := []model.User{
