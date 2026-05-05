@@ -47,7 +47,7 @@ services:
   # # --- CITIZEN DOCUMENTS DATABASE ---
   # db-citizen-docs:
   #   <<: *common-settings
-  #   image: postgres:18.1-alpine
+  #   image: postgres:18.3-alpine
   #   container_name: citizen-docs-database
   #   environment:
   #     POSTGRES_USER: ${CITIZEN_DB_USER}
@@ -68,7 +68,7 @@ services:
   # # --- NOTIFICATION DATABASE ---
   # db-notification:
   #   <<: *common-settings
-  #   image: postgres:18.1-alpine
+  #   image: postgres:18.3-alpine
   #   container_name: notification-database
   #   environment:
   #     POSTGRES_USER: ${NOTIFY_DB_USER}
