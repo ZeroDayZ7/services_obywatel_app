@@ -45,10 +45,10 @@ jobs:
       - name: Update Infra Repo (GitOps)
         env:
           INFRA_TOKEN: ${{ secrets.INFRA_REPO_TOKEN }}
-          OWNER: ${{ vars.GHCR_OWNER }}
-          # OWNER: ${{ steps.vars.outputs.owner_lc }}
-          IMAGE_NAME: ${{ vars.GHCR_IMAGE_GATEWAY }}
-          # IMAGE_NAME: obywatel-gateway
+          # OWNER: ${{ vars.GHCR_OWNER }}
+          OWNER: ${{ steps.vars.outputs.owner_lc }}
+          # IMAGE_NAME: ${{ vars.GHCR_IMAGE_GATEWAY }}
+          IMAGE_NAME: obywatel-gateway
           SHA: ${{ steps.vars.outputs.sha_short }}
         run: |
           git config --global user.name "github-actions"
