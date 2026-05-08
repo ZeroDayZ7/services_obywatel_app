@@ -17,9 +17,14 @@ import (
 )
 
 func NewGatewayApp(container *di.Container) (*fiber.App, error) {
-	if container.Redis == nil {
-		return nil, fmt.Errorf("redis connection is required for Gateway to start (check env REDIS_HOST/PORT)")
+	if container == nil {
+		return nil, fmt.Errorf("container is nil")
 	}
+
+	if container.Redis == nil {
+		return nil, fmt.Errorf("redis connection is required for Gateway to start")
+	}
+
 	cfg := container.Config.Server
 
 	cfgFiber := fiber.Config{
@@ -44,13 +49,14 @@ func NewGatewayApp(container *di.Container) (*fiber.App, error) {
 
 	app := fiber.New(cfgFiber)
 
-	// Middleware
 	app.Use(otelfiber.Middleware())
 	app.Use(requestid.New())
 	app.Use(recover.New())
 	app.Use(helmet.New(HelmetConfig()))
 	app.Use(cors.New(CorsConfig()))
+
 	storage := container.Redis.AsFiberStorage()
+
 	app.Use(shared.GetLimiter(shared.LimitGlobal, storage))
 	app.Use(compress.New(CompressConfig()))
 	app.Use(shared.RequestLoggerMiddleware())
