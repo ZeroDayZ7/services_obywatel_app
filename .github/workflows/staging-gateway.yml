@@ -5,6 +5,7 @@ on:
     branches: [staging]
     paths:
       - "platform/services/gateway/**"
+      - ".github/workflows/staging-gateway.yaml"
 
 permissions:
   contents: write
