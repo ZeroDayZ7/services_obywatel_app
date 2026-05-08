@@ -53,23 +53,34 @@ func InitConfig(cfg any, serviceName string) error {
 
 func bindEnvs(cfg any) error {
 	v := reflect.ValueOf(cfg)
-	if v.Kind() == reflect.Ptr {
+
+	for v.Kind() == reflect.Pointer {
+		if v.IsNil() {
+			return nil
+		}
 		v = v.Elem()
 	}
-	t := v.Type()
 
+	if v.Kind() != reflect.Struct {
+		return nil
+	}
+
+	t := v.Type()
 	for i := 0; i < t.NumField(); i++ {
 		field := t.Field(i)
+		fieldVal := v.Field(i)
 
 		if field.Type.Kind() == reflect.Struct {
-			if err := bindEnvs(v.Field(i).Addr().Interface()); err != nil {
+
+			if err := bindEnvs(fieldVal.Addr().Interface()); err != nil {
 				return err
 			}
 			continue
 		}
 
 		tag := field.Tag.Get("mapstructure")
-		if tag != "" && tag != ",squash" {
+
+		if tag != "" && !strings.Contains(tag, "squash") {
 			if err := viper.BindEnv(tag); err != nil {
 				return fmt.Errorf("error binding env var %s: %w", tag, err)
 			}
