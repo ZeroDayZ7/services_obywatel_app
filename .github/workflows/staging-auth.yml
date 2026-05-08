@@ -5,7 +5,7 @@ on:
     branches: [staging]
     paths:
       - "platform/services/auth-service/**"
-      - "platform/pkg/**" # Budujemy, gdy zmieni się też wspólny kod
+      - "platform/pkg/**"
       - ".github/workflows/staging-auth.yml"
   workflow_dispatch:
 
@@ -33,7 +33,13 @@ jobs:
           echo "--- LOG: Starting metadata preparation ---"
           SHA_SHORT=$(git rev-parse --short HEAD)
           echo "sha_short=${SHA_SHORT}" >> $GITHUB_OUTPUT
-          echo "--- LOG: Metadata prepared (SHA: ${SHA_SHORT}) ---"
+          
+          # Debugging logów
+          echo "Repository: ${{ github.repository }}"
+          echo "Owner: ${{ env.OWNER }}"
+          echo "Image: ${{ env.IMAGE_NAME }}"
+          echo "SHA: ${SHA_SHORT}"
+          echo "--- LOG: Metadata prepared successfully ---"
 
       - name: 🔑 Login to GHCR
         uses: docker/login-action@v3
@@ -65,30 +71,31 @@ jobs:
           SHA: ${{ steps.vars.outputs.sha_short }}
         run: |
           echo "--- LOG: Starting GitOps Update for Auth Service ---"
-
           git config --global user.name "github-actions"
           git config --global user.email "github-actions@github.com"
 
           git clone https://$INFRA_TOKEN@github.com/${{ github.repository_owner }}/k3s-obywatel-plus-gitops.git temp_infra
-          cd temp_infra
+          
+          # Wchodzimy do katalogu overlay stagingu dla auth-service
+          cd temp_infra/overlays/staging/services/auth-service
 
-          TARGET_FILE="base/services/auth-service/deployment.yaml"
+          # Używamy kustomize do podmiany obrazu (Senior approach)
+          # Zakładamy, że w kustomization.yaml obraz bazowy to zerodayz7/obywatel-auth
+          # lub inny zdefiniowany w vars.GHCR_IMAGE_AUTH
+          echo "Updating image tag in kustomization.yaml..."
+          kustomize edit set image ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ env.IMAGE_NAME }}=${{ env.REGISTRY }}/${{ env.OWNER }}/${{ env.IMAGE_NAME }}:$SHA
 
-          if [ ! -f "$TARGET_FILE" ]; then
-            echo "❌ ERROR: Target file $TARGET_FILE not found!"
-            exit 1
-          fi
-
-          NEW_IMAGE="image: ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ env.IMAGE_NAME }}:$SHA"
-
-          # Dynamiczna podmiana obrazu dla auth-service
-          sed -i "s|image: ${{ env.REGISTRY }}/.*/${{ env.IMAGE_NAME }}:.*|$NEW_IMAGE|g" $TARGET_FILE
+          # Podgląd zmian
+          cat kustomization.yaml
 
           if git diff --quiet; then
             echo "⚠️ No changes detected."
           else
-            git add .
-            git commit -m "feat(auth): deploy version $SHA"
+            echo "--- LOG: Committing changes ---"
+            git add kustomization.yaml
+            git commit -m "feat(auth): update staging image to $SHA"
             git push origin main
             echo "✅ Successfully pushed to infra repo."
           fi
+
+          echo "--- LOG: GitOps Update Finished ---"
