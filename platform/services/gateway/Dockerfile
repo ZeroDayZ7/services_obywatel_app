@@ -42,7 +42,7 @@ COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
 COPY --from=builder /app/gateway /gateway
 
-# Kopiujemy logi (distroless ich nie stworzy sam, muszą istnieć w builderze)
+RUN mkdir -p /src/platform/services/gateway/logs
 COPY --from=builder --chown=nonroot:nonroot /src/platform/services/gateway/logs /logs
 
 USER nonroot:nonroot
