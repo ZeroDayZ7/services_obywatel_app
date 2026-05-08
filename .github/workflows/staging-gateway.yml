@@ -36,26 +36,27 @@ jobs:
           context: ./platform/services/gateway
           file: ./platform/services/gateway/Dockerfile
           push: true
-          tags: ghcr.io/${{ steps.vars.outputs.owner_lc }}/obywatel-gateway:${{ steps.vars.outputs.sha_short }}
+          tags: ghcr.io/${{ vars.GHCR_OWNER }}/${{ vars.GHCR_IMAGE_GATEWAY }}:${{ steps.vars.outputs.sha_short }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Update Infra Repo (GitOps)
         env:
           INFRA_TOKEN: ${{ secrets.INFRA_REPO_TOKEN }}
+          OWNER: ${{ vars.GHCR_OWNER }}
+          IMAGE_NAME: ${{ vars.GHCR_IMAGE_GATEWAY }}
           SHA: ${{ steps.vars.outputs.sha_short }}
-          OWNER: ${{ steps.vars.outputs.owner_lc }}
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "github-actions@github.com"
 
+          # Klonujemy repo infra
           git clone https://$INFRA_TOKEN@github.com/${{ github.repository_owner }}/k3s-obywatel-plus-gitops.git temp_infra
           cd temp_infra
 
-          # Tutaj upewnij się, że w repo infra ścieżka do pliku jest poprawna
-          # Poprzednio pisałeś o base/services/gateway/deployment.yaml
-          sed -i "s|image: ghcr.io/.*/obywatel-gateway:.*|image: ghcr.io/$OWNER/obywatel-gateway:$SHA|g" base/services/gateway/deployment.yaml
+          # Podmieniamy obraz używając dynamicznych zmiennych $IMAGE_NAME i $OWNER
+          sed -i "s|image: ghcr.io/.*/$IMAGE_NAME:.*|image: ghcr.io/$OWNER/$IMAGE_NAME:$SHA|g" base/services/gateway/deployment.yaml
 
           git add .
-          git commit -m "feat(gateway): deploy staging version $SHA" || echo "No changes"
+          git commit -m "feat(gateway): deploy version $SHA" || echo "No changes"
           git push origin main
