@@ -4,13 +4,17 @@ RUN apk add --no-cache ca-certificates git tzdata
 
 WORKDIR /src
 
-COPY go.mod go.sum ./
-RUN go mod download
+COPY platform/go.work platform/go.work.sum ./platform/
+COPY platform/pkg/go.mod platform/pkg/go.sum ./platform/pkg/
+COPY platform/services/gateway/go.mod platform/services/gateway/go.sum ./platform/services/gateway/
+
+RUN cd platform/services/gateway && go mod download
 
 COPY . .
 
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-    go build -trimpath -ldflags="-w -s" -o /app/gateway ./cmd/main.go
+    go build -trimpath -ldflags="-w -s" \
+    -o /app/gateway ./platform/services/gateway/cmd/main.go
 
 FROM gcr.io/distroless/static-debian12:latest AS final
 
@@ -25,10 +29,10 @@ WORKDIR /
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
 COPY --from=builder /app/gateway /gateway
-COPY --from=builder --chown=nonroot:nonroot /src/logs /logs
+
+COPY --from=builder --chown=nonroot:nonroot /src/platform/services/gateway/logs /logs
 
 USER nonroot:nonroot
-
 EXPOSE 8081
 
 ENTRYPOINT ["/gateway"]
