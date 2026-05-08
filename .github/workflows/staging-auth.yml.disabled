@@ -1,0 +1,94 @@
+name: Staging - Auth Service GitOps
+
+on:
+  push:
+    branches: [staging]
+    paths:
+      - "platform/services/auth-service/**"
+      - "platform/pkg/**" # Budujemy, gdy zmieni się też wspólny kod
+      - ".github/workflows/staging-auth.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    env:
+      REGISTRY: ghcr.io
+      OWNER: ${{ vars.GHCR_OWNER }}
+      IMAGE_NAME: ${{ vars.GHCR_IMAGE_AUTH }}
+
+    steps:
+      - name: 🔍 Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 🛠️ Prepare Metadata
+        id: vars
+        run: |
+          echo "--- LOG: Starting metadata preparation ---"
+          SHA_SHORT=$(git rev-parse --short HEAD)
+          echo "sha_short=${SHA_SHORT}" >> $GITHUB_OUTPUT
+          echo "--- LOG: Metadata prepared (SHA: ${SHA_SHORT}) ---"
+
+      - name: 🔑 Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 🐳 Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker-container
+
+      - name: 🏗️ Build & Push Auth Service
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./platform/services/auth-service/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.sha_short }}
+            ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ env.IMAGE_NAME }}:staging
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: 🚀 Update Infra Repo (GitOps)
+        env:
+          INFRA_TOKEN: ${{ secrets.INFRA_REPO_TOKEN }}
+          SHA: ${{ steps.vars.outputs.sha_short }}
+        run: |
+          echo "--- LOG: Starting GitOps Update for Auth Service ---"
+
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@github.com"
+
+          git clone https://$INFRA_TOKEN@github.com/${{ github.repository_owner }}/k3s-obywatel-plus-gitops.git temp_infra
+          cd temp_infra
+
+          TARGET_FILE="base/services/auth-service/deployment.yaml"
+
+          if [ ! -f "$TARGET_FILE" ]; then
+            echo "❌ ERROR: Target file $TARGET_FILE not found!"
+            exit 1
+          fi
+
+          NEW_IMAGE="image: ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ env.IMAGE_NAME }}:$SHA"
+
+          # Dynamiczna podmiana obrazu dla auth-service
+          sed -i "s|image: ${{ env.REGISTRY }}/.*/${{ env.IMAGE_NAME }}:.*|$NEW_IMAGE|g" $TARGET_FILE
+
+          if git diff --quiet; then
+            echo "⚠️ No changes detected."
+          else
+            git add .
+            git commit -m "feat(auth): deploy version $SHA"
+            git push origin main
+            echo "✅ Successfully pushed to infra repo."
+          fi
