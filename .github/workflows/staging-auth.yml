@@ -77,17 +77,19 @@ jobs:
           git clone https://$INFRA_TOKEN@github.com/${{ github.repository_owner }}/k3s-obywatel-plus-gitops.git temp_infra
           cd temp_infra/overlays/staging/services/auth-service
 
-          echo "Updating image tag in kustomization.yaml..."
+          TARGET_FILE="kustomization.yaml"
+
+          echo "Updating image tag in $TARGET_FILE..."
           kustomize edit set image ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ env.IMAGE_NAME }}=${{ env.REGISTRY }}/${{ env.OWNER }}/${{ env.IMAGE_NAME }}:$SHA
 
-          # Podgląd zmian
-          cat kustomization.yaml
+          # Sprawdzenie co się zmieniło (debug)
+          cat $TARGET_FILE
 
           if git diff --quiet; then
             echo "⚠️ No changes detected."
           else
             echo "--- LOG: Committing changes ---"
-            git add kustomization.yaml
+            git add $TARGET_FILE
             git commit -m "feat(auth): update staging image to $SHA"
             git push origin main
             echo "✅ Successfully pushed to infra repo."

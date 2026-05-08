@@ -77,11 +77,13 @@ jobs:
           git clone https://$INFRA_TOKEN@github.com/${{ github.repository_owner }}/k3s-obywatel-plus-gitops.git temp_infra
           cd temp_infra/overlays/staging/services/gateway
 
-          echo "Updating image tag in kustomization.yaml..."
+          TARGET_FILE="kustomization.yaml"
+
+          echo "Updating image tag in $TARGET_FILE..."
           kustomize edit set image ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ env.IMAGE_NAME }}=${{ env.REGISTRY }}/${{ env.OWNER }}/${{ env.IMAGE_NAME }}:$SHA
 
           # Sprawdzenie co się zmieniło (debug)
-          cat kustomization.yaml
+          cat $TARGET_FILE
 
           if git diff --quiet; then
             echo "⚠️ No changes detected."
