@@ -17,16 +17,14 @@ var (
 func LoadConfigGlobal() error {
 	log := shared.GetLogger()
 
-	// InitConfig wypełni całą strukturę AppConfig automatycznie!
-	if err := pkgConfig.InitConfig(&AppConfig, "gateway"); err != nil {
-		return err
+	if err := pkgConfig.InitConfig(&AppConfig, "auth-service"); err != nil {
+		return fmt.Errorf("failed to initialize config: %w", err)
 	}
 
-	// Walidacja krytycznych pól
 	if AppConfig.Internal.HMACSecret == "" {
 		return fmt.Errorf("INTERNAL_HMAC_SECRET is required")
 	}
 
-	log.Info("Configuration loaded")
+	log.Info("Configuration loaded successfully")
 	return nil
 }

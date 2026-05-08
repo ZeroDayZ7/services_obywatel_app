@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/zerodayz7/platform/pkg/redis"
@@ -24,9 +23,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("DEBUG: ENV REDIS_HOST: %s\n", os.Getenv("REDIS_HOST"))
-	fmt.Printf("DEBUG: VIPER REDIS_HOST: %s\n", config.AppConfig.Redis.Host)
-
 	// 2. Logger
 	log := shared.InitLogger(config.AppConfig.Server.Env, false)
 
@@ -42,7 +38,7 @@ func main() {
 	// 4. Redis
 	redisClient, err := redis.New(redis.Config(config.AppConfig.Redis))
 	if err != nil {
-		log.Error("Redis failed", "error", err)
+		log.Error("Redis initialization failed", "error", err)
 		os.Exit(1)
 	}
 
@@ -52,7 +48,9 @@ func main() {
 	}
 
 	defer func() {
-		_ = redisClient.Close()
+		if err := redisClient.Close(); err != nil {
+			log.Error("Failed to close Redis client", "error", err)
+		}
 	}()
 
 	// 5. DI & App Setup

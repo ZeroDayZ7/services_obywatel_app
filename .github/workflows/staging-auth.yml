@@ -75,13 +75,8 @@ jobs:
           git config --global user.email "github-actions@github.com"
 
           git clone https://$INFRA_TOKEN@github.com/${{ github.repository_owner }}/k3s-obywatel-plus-gitops.git temp_infra
-          
-          # Wchodzimy do katalogu overlay stagingu dla auth-service
           cd temp_infra/overlays/staging/services/auth-service
 
-          # Używamy kustomize do podmiany obrazu (Senior approach)
-          # Zakładamy, że w kustomization.yaml obraz bazowy to zerodayz7/obywatel-auth
-          # lub inny zdefiniowany w vars.GHCR_IMAGE_AUTH
           echo "Updating image tag in kustomization.yaml..."
           kustomize edit set image ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ env.IMAGE_NAME }}=${{ env.REGISTRY }}/${{ env.OWNER }}/${{ env.IMAGE_NAME }}:$SHA
 

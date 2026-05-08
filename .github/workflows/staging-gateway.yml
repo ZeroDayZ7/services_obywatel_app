@@ -5,6 +5,7 @@ on:
     branches: [staging]
     paths:
       - "platform/services/gateway/**"
+      - "platform/pkg/**"
       - ".github/workflows/staging-gateway.yml"
   workflow_dispatch:
 
@@ -35,9 +36,9 @@ jobs:
 
           # Debugging logów
           echo "Repository: ${{ github.repository }}"
-          echo "Owner from vars: $OWNER"
-          echo "Image Name from vars: $IMAGE_NAME"
-          echo "SHA: $SHA_SHORT"
+          echo "Owner: ${{ env.OWNER }}"
+          echo "Image: ${{ env.IMAGE_NAME }}"
+          echo "SHA: ${SHA_SHORT}"
           echo "--- LOG: Metadata prepared successfully ---"
 
       - name: 🔑 Login to GHCR
@@ -69,20 +70,18 @@ jobs:
           INFRA_TOKEN: ${{ secrets.INFRA_REPO_TOKEN }}
           SHA: ${{ steps.vars.outputs.sha_short }}
         run: |
-          echo "--- LOG: Starting GitOps Update ---"
+          echo "--- LOG: Starting GitOps Update for Gateway ---"
           git config --global user.name "github-actions"
           git config --global user.email "github-actions@github.com"
 
           git clone https://$INFRA_TOKEN@github.com/${{ github.repository_owner }}/k3s-obywatel-plus-gitops.git temp_infra
           cd temp_infra/overlays/staging/services/gateway
 
-          TARGET_FILE="kustomization.yaml"
-
-          echo "Updating image tag in $TARGET_FILE..."
+          echo "Updating image tag in kustomization.yaml..."
           kustomize edit set image ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ env.IMAGE_NAME }}=${{ env.REGISTRY }}/${{ env.OWNER }}/${{ env.IMAGE_NAME }}:$SHA
 
           # Sprawdzenie co się zmieniło (debug)
-          cat $TARGET_FILE
+          cat kustomization.yaml
 
           if git diff --quiet; then
             echo "⚠️ No changes detected."

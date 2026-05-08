@@ -18,6 +18,7 @@ func main() {
 
 	if err := config.LoadConfigGlobal(); err != nil {
 		bootLog.Fatal("Config load failed", "error", err)
+		os.Exit(1)
 	}
 
 	log := shared.InitLogger(config.AppConfig.Server.Env, false)
@@ -32,9 +33,20 @@ func main() {
 
 	redisClient, err := redis.New(redis.Config(config.AppConfig.Redis))
 	if err != nil {
-		log.ErrorObj("Redis failed", err)
+		log.Error("Redis initialization failed", "error", err)
+		os.Exit(1)
 	}
-	defer redisClient.Close()
+
+	if redisClient == nil {
+		log.Error("Redis client is nil")
+		os.Exit(1)
+	}
+
+	defer func() {
+		if err := redisClient.Close(); err != nil {
+			log.Error("Failed to close Redis client", "error", err)
+		}
+	}()
 
 	db, closeDB := config.MustInitDB(config.AppConfig.Database)
 	defer closeDB()

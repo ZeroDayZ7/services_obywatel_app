@@ -27,7 +27,7 @@ func InitConfig(cfg any, serviceName string) error {
 
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-			return fmt.Errorf("błąd podczas czytania pliku config: %v", err)
+			return fmt.Errorf("failed to read config file: %w", err)
 		}
 	}
 
@@ -37,7 +37,7 @@ func InitConfig(cfg any, serviceName string) error {
 	))
 
 	if err := viper.Unmarshal(cfg, decodeHook); err != nil {
-		return fmt.Errorf("nie udało się zmapować konfiguracji: %v", err)
+		return fmt.Errorf("nie udało się zmapować konfiguracji: %w", err)
 	}
 
 	if err := validate.Struct(cfg); err != nil {
