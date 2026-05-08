@@ -29,6 +29,6 @@ COPY --from=builder --chown=nonroot:nonroot /src/logs /logs
 
 USER nonroot:nonroot
 
-EXPOSE 8080
+EXPOSE 8081
 
 ENTRYPOINT ["/gateway"]
