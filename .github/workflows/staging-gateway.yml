@@ -6,6 +6,7 @@ on:
     paths:
       - "platform/services/gateway/**"
       - ".github/workflows/staging-gateway.yaml"
+  workflow_dispatch:
 
 permissions:
   contents: write
