@@ -108,3 +108,4 @@ jobs:
           fi
 
           echo "--- LOG: GitOps Update Finished ---"
+
