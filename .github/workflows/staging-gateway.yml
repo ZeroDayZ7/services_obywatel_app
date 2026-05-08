@@ -5,7 +5,7 @@ on:
     branches: [staging]
     paths:
       - "platform/services/gateway/**"
-      - ".github/workflows/staging-gateway.yaml"
+      - ".github/workflows/staging-gateway.yml"
   workflow_dispatch:
 
 permissions:
