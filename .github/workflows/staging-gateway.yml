@@ -70,48 +70,28 @@ jobs:
           SHA: ${{ steps.vars.outputs.sha_short }}
         run: |
           echo "--- LOG: Starting GitOps Update ---"
-
-          # Konfiguracja Gita
           git config --global user.name "github-actions"
           git config --global user.email "github-actions@github.com"
 
-          echo "Cloning infrastructure repository..."
-          # Używamy zmiennej OWNER dla dynamicznego budowania URL, jeśli repozytoria są w tej samej organizacji/użytkowniku
           git clone https://$INFRA_TOKEN@github.com/${{ github.repository_owner }}/k3s-obywatel-plus-gitops.git temp_infra
+          cd temp_infra/overlays/staging/services/gateway
 
-          cd temp_infra
-          echo "Current directory: $(pwd)"
-
-          TARGET_FILE="base/services/gateway/deployment.yaml"
-
-          if [ ! -f "$TARGET_FILE" ]; then
-            echo "❌ ERROR: Target file $TARGET_FILE not found!"
-            ls -R
-            exit 1
-          fi
+          TARGET_FILE="kustomization.yaml"
 
           echo "Updating image tag in $TARGET_FILE..."
-          # Senior tip: używamy konkretnego wzorca, aby uniknąć pomyłek w sed
-          OLD_IMAGE=$(grep "image: " $TARGET_FILE)
-          echo "Old image line: $OLD_IMAGE"
+          kustomize edit set image zerodayz7/obywatel-gateway=${{ env.REGISTRY }}/${{ env.OWNER }}/${{ env.IMAGE_NAME }}:$SHA
 
-          NEW_IMAGE="image: ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ env.IMAGE_NAME }}:$SHA"
+          # Sprawdzenie co się zmieniło (debug)
+          cat $TARGET_FILE
 
-          # Dynamiczna podmiana
-          sed -i "s|image: ${{ env.REGISTRY }}/.*/${{ env.IMAGE_NAME }}:.*|$NEW_IMAGE|g" $TARGET_FILE
-
-          echo "New image line: $(grep "image: " $TARGET_FILE)"
-
-          # Sprawdzenie czy zaszły zmiany
           if git diff --quiet; then
-            echo "⚠️ No changes detected in deployment manifests."
+            echo "⚠️ No changes detected."
           else
             echo "--- LOG: Committing changes ---"
-            git add .
-            git commit -m "feat(gateway): deploy version $SHA"
+            git add $TARGET_FILE
+            git commit -m "feat(gateway): update staging image to $SHA"
             git push origin main
             echo "✅ Successfully pushed to infra repo."
           fi
 
           echo "--- LOG: GitOps Update Finished ---"
-
