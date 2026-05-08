@@ -5,6 +5,7 @@ on:
     branches: [staging]
     paths:
       - "platform/services/gateway/**"
+      - ".github/workflows/staging-gateway.yaml"
 
 permissions:
   contents: write
@@ -13,54 +14,98 @@ permissions:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    env:
+      REGISTRY: ghcr.io
+      OWNER: ${{ vars.GHCR_OWNER }}
+      IMAGE_NAME: ${{ vars.GHCR_IMAGE_GATEWAY }}
 
-      - name: Prepare variables
+    steps:
+      - name: 🔍 Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 🛠️ Prepare Metadata
         id: vars
         run: |
-          echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
-          echo "owner_lc=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_OUTPUT
+          echo "--- LOG: Starting metadata preparation ---"
+          SHA_SHORT=$(git rev-parse --short HEAD)
+          echo "sha_short=${SHA_SHORT}" >> $GITHUB_OUTPUT
 
-      - name: Login to GHCR
+          # Debugging logów
+          echo "Repository: ${{ github.repository }}"
+          echo "Owner from vars: $OWNER"
+          echo "Image Name from vars: $IMAGE_NAME"
+          echo "SHA: $SHA_SHORT"
+          echo "--- LOG: Metadata prepared successfully ---"
+
+      - name: 🔑 Login to GHCR
         uses: docker/login-action@v3
         with:
-          registry: ghcr.io
+          registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build & Push Gateway
+      - name: 🏗️ Build & Push Gateway
         uses: docker/build-push-action@v5
         with:
           context: ./platform/services/gateway
           file: ./platform/services/gateway/Dockerfile
           push: true
           tags: |
-            ghcr.io/${{ steps.vars.outputs.owner_lc }}/obywatel-gateway:${{ steps.vars.outputs.sha_short }}
-            ghcr.io/${{ steps.vars.outputs.owner_lc }}/obywatel-gateway:staging
+            ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.sha_short }}
+            ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ env.IMAGE_NAME }}:staging
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Update Infra Repo (GitOps)
+      - name: 🚀 Update Infra Repo (GitOps)
         env:
           INFRA_TOKEN: ${{ secrets.INFRA_REPO_TOKEN }}
-          # OWNER: ${{ vars.GHCR_OWNER }}
-          OWNER: ${{ steps.vars.outputs.owner_lc }}
-          # IMAGE_NAME: ${{ vars.GHCR_IMAGE_GATEWAY }}
-          IMAGE_NAME: obywatel-gateway
           SHA: ${{ steps.vars.outputs.sha_short }}
         run: |
+          echo "--- LOG: Starting GitOps Update ---"
+
+          # Konfiguracja Gita
           git config --global user.name "github-actions"
           git config --global user.email "github-actions@github.com"
 
-          # Klonujemy repo infra
+          echo "Cloning infrastructure repository..."
+          # Używamy zmiennej OWNER dla dynamicznego budowania URL, jeśli repozytoria są w tej samej organizacji/użytkowniku
           git clone https://$INFRA_TOKEN@github.com/${{ github.repository_owner }}/k3s-obywatel-plus-gitops.git temp_infra
+
           cd temp_infra
+          echo "Current directory: $(pwd)"
 
-          # Podmieniamy obraz używając dynamicznych zmiennych $IMAGE_NAME i $OWNER
-          sed -i "s|image: ghcr.io/.*/$IMAGE_NAME:.*|image: ghcr.io/$OWNER/$IMAGE_NAME:$SHA|g" base/services/gateway/deployment.yaml
+          TARGET_FILE="base/services/gateway/deployment.yaml"
 
-          git add .
-          git commit -m "feat(gateway): deploy version $SHA" || echo "No changes"
-          git push origin main
+          if [ ! -f "$TARGET_FILE" ]; then
+            echo "❌ ERROR: Target file $TARGET_FILE not found!"
+            ls -R
+            exit 1
+          fi
+
+          echo "Updating image tag in $TARGET_FILE..."
+          # Senior tip: używamy konkretnego wzorca, aby uniknąć pomyłek w sed
+          OLD_IMAGE=$(grep "image: " $TARGET_FILE)
+          echo "Old image line: $OLD_IMAGE"
+
+          NEW_IMAGE="image: ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ env.IMAGE_NAME }}:$SHA"
+
+          # Dynamiczna podmiana
+          sed -i "s|image: ${{ env.REGISTRY }}/.*/${{ env.IMAGE_NAME }}:.*|$NEW_IMAGE|g" $TARGET_FILE
+
+          echo "New image line: $(grep "image: " $TARGET_FILE)"
+
+          # Sprawdzenie czy zaszły zmiany
+          if git diff --quiet; then
+            echo "⚠️ No changes detected in deployment manifests."
+          else
+            echo "--- LOG: Committing changes ---"
+            git add .
+            git commit -m "feat(gateway): deploy version $SHA"
+            git push origin main
+            echo "✅ Successfully pushed to infra repo."
+          fi
+
+          echo "--- LOG: GitOps Update Finished ---"
+
