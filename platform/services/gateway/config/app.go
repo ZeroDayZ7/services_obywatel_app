@@ -45,6 +45,9 @@ func NewGatewayApp(container *di.Container) *fiber.App {
 	app.Use(recover.New())
 	app.Use(helmet.New(HelmetConfig()))
 	app.Use(cors.New(CorsConfig()))
+	if container.Redis == nil {
+		panic("CRITICAL: Redis connection is missing! Check REDIS_ADDR environment variable.")
+	}
 	app.Use(shared.GetLimiter(shared.LimitGlobal, container.Redis.AsFiberStorage()))
 	app.Use(compress.New(CompressConfig()))
 	app.Use(shared.RequestLoggerMiddleware())

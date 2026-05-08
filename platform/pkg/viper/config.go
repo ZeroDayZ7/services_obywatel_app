@@ -18,8 +18,8 @@ func InitConfig(cfg any, serviceName string) error {
 	viper.SetConfigName(".env")
 	viper.SetConfigType("env")
 	viper.AddConfigPath(".")
-	viper.AutomaticEnv()
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	viper.AutomaticEnv()
 
 	if err := bindEnvs(cfg); err != nil {
 		return fmt.Errorf("failed to bind environment variables: %w", err)
