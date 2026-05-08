@@ -1,6 +1,8 @@
 package config
 
 import (
+	"fmt"
+
 	"github.com/gofiber/contrib/otelfiber/v2"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/compress"
@@ -14,7 +16,10 @@ import (
 	"github.com/zerodayz7/platform/services/gateway/internal/middleware"
 )
 
-func NewGatewayApp(container *di.Container) *fiber.App {
+func NewGatewayApp(container *di.Container) (*fiber.App, error) {
+	if container.Redis == nil {
+		return nil, fmt.Errorf("redis connection is required for Gateway to start (check env REDIS_HOST/PORT)")
+	}
 	cfg := container.Config.Server
 
 	cfgFiber := fiber.Config{
@@ -45,15 +50,13 @@ func NewGatewayApp(container *di.Container) *fiber.App {
 	app.Use(recover.New())
 	app.Use(helmet.New(HelmetConfig()))
 	app.Use(cors.New(CorsConfig()))
-	if container.Redis == nil {
-		panic("CRITICAL: Redis connection is missing! Check REDIS_ADDR environment variable.")
-	}
-	app.Use(shared.GetLimiter(shared.LimitGlobal, container.Redis.AsFiberStorage()))
+	storage := container.Redis.AsFiberStorage()
+	app.Use(shared.GetLimiter(shared.LimitGlobal, storage))
 	app.Use(compress.New(CompressConfig()))
 	app.Use(shared.RequestLoggerMiddleware())
 	app.Use(JWTMiddlewareWithExclusions())
 	app.Use(middleware.AuthRedisMiddleware(container.Redis.Client))
 	app.Use(middleware.ContextBuilder())
 
-	return app
+	return app, nil
 }

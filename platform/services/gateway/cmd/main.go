@@ -37,13 +37,16 @@ func main() {
 	// 4. Redis
 	redisClient, err := redis.New(redis.Config(config.AppConfig.Redis))
 	if err != nil {
-		log.ErrorObj("Redis failed", err)
+		log.Fatal("Redis failed", "error", err)
 	}
 	defer redisClient.Close()
 
 	// 5. DI & App Setup
 	container := di.NewContainer(redisClient, &config.AppConfig)
-	app := config.NewGatewayApp(container)
+	app, err := config.NewGatewayApp(container)
+	if err != nil {
+		log.Fatal("App setup failed", "error", err)
+	}
 	router.SetupRoutes(app, container)
 
 	// 6. Run server with unified shutdown handler
