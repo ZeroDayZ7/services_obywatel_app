@@ -47,6 +47,11 @@ func SetupAuthRoutes(
 	)
 
 	// ==========================
+	// SESSION / USER CONTEXT
+	// ==========================
+	auth.Get("/me", h.GetMe)
+
+	// ==========================
 	// DEVICE MANAGEMENT (NEW)
 	// ==========================
 	// Tutaj dodajemy endpoint, którego szuka Flutter

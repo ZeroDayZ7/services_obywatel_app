@@ -35,6 +35,7 @@ type AuthService interface {
 	RegisterDevice(ctx context.Context, userID uuid.UUID, sessionID string, clientIP string, req schemas.RegisterDeviceRequest) (*http.RegisterDeviceResponse, error)
 	RefreshToken(ctx context.Context, tokenStr string, fingerprint string) (*http.RefreshResponse, error)
 	VerifyDeviceSignature(ctx context.Context, userID, challenge, signature, fingerprint string) (*http.LoginResponse, error)
+	GetProfile(ctx context.Context, userID uuid.UUID) (*http.UserProfileResponse, error)
 	// Narzędzia JWT
 	CreateAccessToken(userID uuid.UUID, fingerprint string) (string, string, error)
 	CreateRefreshToken(userID uuid.UUID, fingerprint string) (*model.RefreshToken, error)
@@ -57,6 +58,31 @@ func NewAuthService(userRepo repo.UserRepository, refreshRepo repo.RefreshTokenR
 	return &authService{
 		userRepo: userRepo, refreshRepo: refreshRepo, cache: cache, cfg: cfg,
 	}
+}
+
+// region GetProfile
+func (s *authService) GetProfile(ctx context.Context, userID uuid.UUID) (*http.UserProfileResponse, error) {
+	log := shared.GetLogger()
+
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil || user == nil {
+		log.WarnMap("GetProfile: user not found", map[string]any{"user_id": userID})
+		return nil, errors.ErrUserNotFound
+	}
+
+	if err := s.CanUserLogin(user); err != nil {
+		return nil, err
+	}
+
+	return &http.UserProfileResponse{
+		UserID:      user.ID.String(),
+		Email:       user.Email,
+		DisplayName: user.Username,
+		Status:      string(user.Status),
+		Role:        string(user.Role),
+		Permissions: []string(user.Permissions), // Rzutowanie pq.StringArray na []string
+		LastLogin:   user.LastLogin.Format(time.RFC3339),
+	}, nil
 }
 
 // region VerifyDeviceSignature
@@ -250,7 +276,7 @@ func (s *authService) RegisterDevice(ctx context.Context, userID uuid.UUID, sess
 		Platform:            req.Platform,
 		IsVerified:          true,
 		IsActive:            true,
-		LastIp:              clientIP,
+		LastIP:              clientIP,
 	})
 	if err != nil {
 		log.ErrorObj("Failed to save device", err)
@@ -712,7 +738,7 @@ func (s *authService) RegisterUserDevice(ctx context.Context, userID uuid.UUID, 
 	device := model.UserDevice{
 		UserID: userID, DeviceFingerprint: fingerprint, PublicKey: publicKey,
 		DeviceNameEncrypted: deviceName, Platform: platform, IsVerified: isVerified,
-		LastIp: lastIp, IsActive: true,
+		LastIP: lastIp, IsActive: true,
 	}
 	return s.userRepo.SaveDevice(ctx, &device)
 }

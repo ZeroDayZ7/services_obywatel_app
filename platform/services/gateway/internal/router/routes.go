@@ -64,6 +64,9 @@ func SetupRoutes(app *fiber.App, container *di.Container) {
 	)
 
 	// --- AUTH SERVICE (Zabezpieczone) ---
+	app.Get("/auth/me", ReverseProxySecure(container, auth))
+
+	// --- AUTH SERVICE (Zabezpieczone) ---
 	app.Post("/auth/register-device",
 		pkgMiddleware.ValidateBody[schemas.RegisterDeviceRequest](),
 		ReverseProxySecure(container, auth),

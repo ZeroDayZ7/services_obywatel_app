@@ -11,7 +11,6 @@ func MustInitDB(cfg viper.DBConfig) (*gorm.DB, func()) {
 	// 1. Inicjalizacja z pkg - przekazujemy modele do migracji
 	db, closeDB, err := database.NewPostgres(cfg,
 		&model.User{},
-		&model.UserPermission{},
 		&model.RefreshToken{},
 		&model.UserDevice{},
 	)

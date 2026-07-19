@@ -4,60 +4,58 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/zerodayz7/platform/pkg/shared"
+	"github.com/lib/pq"
 	"gorm.io/gorm"
 )
 
 type UserRole string
 
 const (
-	RoleUser  UserRole = "user"
-	RoleClerk UserRole = "clerk"
+	RoleUser  UserRole = "operator"
 	RoleAdmin UserRole = "admin"
+	RoleRoot  UserRole = "root"
 )
 
 type UserStatus string
 
 const (
-	StatusActive    UserStatus = "ACTIVE"    // aktywny – użytkownik może normalnie korzystać z systemu
-	StatusSuspended UserStatus = "SUSPENDED" // zawieszony – konto tymczasowo zablokowane
-	StatusPending   UserStatus = "PENDING"   // oczekujący – np. konto czeka na weryfikację
-	StatusBanned    UserStatus = "BANNED"    // zbanowany – konto trwale zablokowane
+	StatusActive    UserStatus = "ACTIVE"
+	StatusSuspended UserStatus = "SUSPENDED"
+	StatusPending   UserStatus = "PENDING"
+	StatusBanned    UserStatus = "BANNED"
 	StatusLocked    UserStatus = "LOCKED"
 )
 
-type Permission string
-
-type UserPermission struct {
-	ID         uuid.UUID  `gorm:"type:uuid;primaryKey"`
-	UserID     uuid.UUID  `gorm:"type:uuid;index"`
-	Permission Permission `gorm:"type:varchar(50);not null"`
-	Scope      string     `gorm:"type:text"`
-	CreatedAt  time.Time
-}
-
 type User struct {
-	ID                  uuid.UUID  `gorm:"type:uuid;primaryKey"`
-	Username            string     `gorm:"size:30;not null;unique"`
-	Email               string     `gorm:"size:100;not null;unique"`
-	Password            string     `gorm:"size:128;not null"`
-	Role                UserRole   `gorm:"type:varchar(20);not null;default:'user'"`
-	Status              UserStatus `gorm:"type:varchar(20);not null;default:'ACTIVE'"`
-	FailedLoginAttempts int8       `gorm:"not null;default:0"`
-	LockedUntil         *time.Time `gorm:"index"`
+	ID                  uuid.UUID      `gorm:"type:uuid;primaryKey;default:uuidv7()"`
+	Username            string         `gorm:"size:30;not null;unique"`
+	Email               string         `gorm:"size:100;not null;unique"`
+	Password            string         `gorm:"size:128;not null"`
+	Role                UserRole       `gorm:"type:varchar(20);not null;default:'operator'"`
+	Departments         pq.StringArray `gorm:"type:text[]"`
+	Permissions         pq.StringArray `gorm:"type:text[]"`
+	Status              UserStatus     `gorm:"type:varchar(20);not null;default:'ACTIVE'"`
+	FailedLoginAttempts int8           `gorm:"not null;default:0"`
+	LockedUntil         *time.Time     `gorm:"index"`
 	LastLogin           time.Time
 	PasswordChangedAt   *time.Time
-	LastIP              string           `gorm:"size:45"`
-	TwoFactorEnabled    bool             `gorm:"not null;default:false"`
-	TwoFactorSecret     string           `gorm:"size:64"`
-	Permissions         []UserPermission `gorm:"foreignKey:UserID"`
-	CreatedAt           time.Time        `gorm:"autoCreateTime"`
-	UpdatedAt           time.Time        `gorm:"autoUpdateTime"`
-	DeletedAt           gorm.DeletedAt   `gorm:"index"`
+	LastIP              string         `gorm:"size:45"`
+	TwoFactorEnabled    bool           `gorm:"not null;default:false"`
+	TwoFactorSecret     string         `gorm:"size:64"`
+	CreatedAt           time.Time      `gorm:"autoCreateTime"`
+	UpdatedAt           time.Time      `gorm:"autoUpdateTime"`
+	DeletedAt           gorm.DeletedAt `gorm:"index"`
+
+	// Relacje
+	Devices       []UserDevice   `gorm:"foreignKey:UserID"`
+	RefreshTokens []RefreshToken `gorm:"foreignKey:UserID"`
 }
 
-func (u *User) BeforeCreate(tx *gorm.DB) (err error) {
-	idStr := shared.GenerateUuidV7()
-	u.ID, err = uuid.Parse(idStr)
-	return err
+type AvailablePermission struct {
+	ID          uuid.UUID `gorm:"type:uuid;primaryKey;default:uuidv7()" json:"id"`
+	Key         string    `gorm:"size:100;not null;uniqueIndex" json:"key"`
+	Department  string    `gorm:"size:50;not null;index" json:"department"`
+	Description string    `gorm:"size:255;not null" json:"description"`
+	IsSpecial   bool      `gorm:"not null;default:false" json:"is_special"`
+	CreatedAt   time.Time `gorm:"autoCreateTime" json:"created_at"`
 }
