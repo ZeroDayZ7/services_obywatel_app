@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
-	"io"
 	"net/http"
 
 	"github.com/gofiber/fiber/v2"
@@ -167,18 +166,19 @@ func executeProxyRequest(c *fiber.Ctx, container *di.Container, req *http.Reques
 		if errors.Is(err, context.DeadlineExceeded) {
 			return apperr.SendAppError(c, apperr.ErrUpstreamTimeout)
 		}
-
 		log.ErrorObj("Upstream request failed", err)
-
 		return apperr.SendAppError(c, apperr.ErrUpstreamUnreachable)
 	}
-	defer resp.Body.Close()
+	// UWAGA: Nie zamykamy resp.Body ręcznie przez defer, jeśli przekazujemy strumień do Fibera!
+	// Fiber przejmuje odpowiedzialność za zamknięcie strumienia po zakończeniu wysyłania odpowiedzi do klienta.
 
 	if resp.StatusCode == fiber.StatusForbidden {
+		resp.Body.Close() // Tu zamykamy ręcznie, bo przerywamy przepływ błędem
 		log.Error("Security Alert: Upstream rejected internal signature or context")
 		return apperr.SendAppError(c, apperr.ErrInternal)
 	}
 
+	// Przepisywanie nagłówków (wykluczając Hop-by-Hop)
 	for k, v := range resp.Header {
 		if isHopByHop(k) {
 			continue
@@ -190,8 +190,9 @@ func executeProxyRequest(c *fiber.Ctx, container *di.Container, req *http.Reques
 
 	c.Status(resp.StatusCode)
 
-	_, err = io.Copy(c.Response().BodyWriter(), resp.Body)
-	return err
+	// Wysyłanie strumieniowe zero-copy (brak wycieków pamięci i alokacji buforów w pętli)
+	c.Response().SetBodyStream(resp.Body, int(resp.ContentLength))
+	return nil
 }
 
 // Pomocnicza funkcja do filtrowania nagłówków technicznych

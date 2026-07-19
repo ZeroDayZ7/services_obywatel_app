@@ -2,11 +2,11 @@ package router
 
 import (
 	"github.com/gofiber/fiber/v2"
+	pkgMiddleware "github.com/zerodayz7/platform/pkg/middleware"
 	pkgRouter "github.com/zerodayz7/platform/pkg/router"
 	"github.com/zerodayz7/platform/pkg/router/health"
 	"github.com/zerodayz7/platform/pkg/schemas"
 	"github.com/zerodayz7/platform/services/gateway/internal/di"
-	"github.com/zerodayz7/platform/services/gateway/internal/middleware"
 )
 
 func SetupRoutes(app *fiber.App, container *di.Container) {
@@ -29,45 +29,49 @@ func SetupRoutes(app *fiber.App, container *di.Container) {
 	// --- AUTH SERVICE (Publiczne) ---
 	auth := services.Auth
 	app.Post("/auth/login",
-		middleware.ValidateBody[schemas.LoginRequest](),
+		pkgMiddleware.ValidateBody[schemas.LoginRequest](),
 		ReverseProxySecure(container, auth),
 	)
 
 	app.Post("/auth/verify-device",
-		middleware.ValidateBody[schemas.VerifyDeviceRequest](),
+		pkgMiddleware.ValidateBody[schemas.VerifyDeviceRequest](),
 		ReverseProxySecure(container, auth),
 	)
 
 	app.Post("/auth/2fa-verify",
-		middleware.ValidateBody[schemas.TwoFARequest](),
+		pkgMiddleware.ValidateBody[schemas.TwoFARequest](),
 		ReverseProxy(container, auth),
 	)
 
 	app.Post("/auth/refresh",
-		middleware.ValidateBody[schemas.RefreshTokenRequest](),
+		pkgMiddleware.ValidateBody[schemas.RefreshTokenRequest](),
 		ReverseProxy(container, auth),
 	)
 
 	app.Post("/auth/reset/send",
-		middleware.ValidateBody[schemas.ResetPasswordRequest](),
-		ReverseProxy(container, auth))
+		pkgMiddleware.ValidateBody[schemas.ResetPasswordRequest](),
+		ReverseProxy(container, auth),
+	)
 
 	app.Post("/auth/reset/verify",
-		middleware.ValidateBody[schemas.ResetCodeVerifyRequest](),
-		ReverseProxy(container, auth))
+		pkgMiddleware.ValidateBody[schemas.ResetCodeVerifyRequest](),
+		ReverseProxy(container, auth),
+	)
 
 	app.Post("/auth/reset/final",
-		middleware.ValidateBody[schemas.ResetPasswordFinalRequest](),
-		ReverseProxy(container, auth))
+		pkgMiddleware.ValidateBody[schemas.ResetPasswordFinalRequest](),
+		ReverseProxy(container, auth),
+	)
 
 	// --- AUTH SERVICE (Zabezpieczone) ---
 	app.Post("/auth/register-device",
-		middleware.ValidateBody[schemas.RegisterDeviceRequest](),
+		pkgMiddleware.ValidateBody[schemas.RegisterDeviceRequest](),
 		ReverseProxySecure(container, auth),
 	)
 	app.Post("/auth/logout",
-		middleware.ValidateBody[schemas.RefreshTokenRequest](),
-		ReverseProxySecure(container, auth))
+		pkgMiddleware.ValidateBody[schemas.RefreshTokenRequest](),
+		ReverseProxySecure(container, auth),
+	)
 
 	app.Get("/user/sessions", ReverseProxySecure(container, auth))
 	app.Post("/user/sessions/terminate", ReverseProxySecure(container, auth))
