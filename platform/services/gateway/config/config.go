@@ -21,7 +21,6 @@ func LoadConfigGlobal() error {
 		return fmt.Errorf("failed to initialize config: %w", err)
 	}
 
-	// 2. Walidacja (tylko to, czego automat nie sprawdzi)
 	if AppConfig.Internal.HMACSecret == "" {
 		return fmt.Errorf("INTERNAL_HMAC_SECRET is required")
 	}

@@ -3,28 +3,33 @@ package redis
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 )
 
 var RedisClient *redis.Client
 
-func InitRedis(host, port, password string, db int) *redis.Client {
-	if RedisClient != nil {
-		return RedisClient
+func InitRedis(host, port, password string, db int) (*redis.Client, error) {
+	if host == "" || port == "" {
+		return nil, fmt.Errorf("redis host or port is empty (host: %s, port: %s)", host, port)
 	}
 
-	RedisClient = redis.NewClient(&redis.Options{
+	client := redis.NewClient(&redis.Options{
 		Addr:     fmt.Sprintf("%s:%s", host, port),
 		Password: password,
 		DB:       db,
 	})
 
-	if err := RedisClient.Ping(context.Background()).Err(); err != nil {
-		panic(fmt.Sprintf("failed to connect to Redis: %v", err))
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := client.Ping(ctx).Err(); err != nil {
+		return nil, fmt.Errorf("failed to connect to Redis at %s:%s: %w", host, port, err)
 	}
 
-	return RedisClient
+	RedisClient = client
+	return client, nil
 }
 
 func IsTokenValid(token string) bool {

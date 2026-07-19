@@ -1,0 +1,29 @@
+# Git version control
+**/.git
+**/.gitignore
+
+# Docker configuration files
+**/Dockerfile*
+**/docker-compose*
+
+# Go & Build Artifacts
+**/bin/
+**/obj/
+**/dist/
+**/vendor/
+**/*.test
+**/*.out
+**/*.exe
+
+# Documentation
+**/*.md
+**/docs/
+
+# Local configurations and secrets
+**/.env
+**/*.local
+**/.idea/
+**/.vscode/
+
+# System-specific junk
+**/.DS_Store

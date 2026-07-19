@@ -3,10 +3,10 @@
   "files.exclude": {
     "**/go.work.sum": true,
     "**/go.sum": true,
-    "**/logs/": true,
+    // "**/logs/": true,
     "**/bin/": true,
     // "**/": true,
-    // "**/.env.example": true,
+    "**/.env.example": true,
     "**/.env.dev.example": true,
     "**/README.md": true,
     "**/LICENSE": true,
