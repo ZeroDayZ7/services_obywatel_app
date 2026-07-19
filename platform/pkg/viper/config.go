@@ -2,46 +2,45 @@ package viper
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/go-playground/validator/v10"
-	"github.com/mitchellh/mapstructure"
+	"github.com/go-viper/mapstructure/v2"
 	"github.com/spf13/viper"
 )
 
-// Inicjalizacja walidatora
 var validate = validator.New()
 
 func InitConfig(cfg any, serviceName string) error {
-	// 1. Domyślne wartości specyficzne dla serwisu
 	SetSharedDefaults(serviceName)
 
-	// 2. Konfiguracja Vipera
 	viper.SetConfigName(".env")
 	viper.SetConfigType("env")
 	viper.AddConfigPath(".")
-
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	viper.AutomaticEnv()
 
-	// 3. Odczyt pliku
+	if err := bindEnvs(cfg); err != nil {
+		return fmt.Errorf("failed to bind environment variables: %w", err)
+	}
+
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-			return fmt.Errorf("błąd podczas czytania pliku config: %v", err)
+			return fmt.Errorf("failed to read config file: %w", err)
 		}
 	}
 
-	// 4. Mapowanie z DecodeHook (obsługa time.Duration i slice'ów)
-	if err := viper.Unmarshal(cfg, viper.DecodeHook(mapstructure.ComposeDecodeHookFunc(
+	decodeHook := viper.DecodeHook(mapstructure.ComposeDecodeHookFunc(
 		mapstructure.StringToTimeDurationHookFunc(),
 		mapstructure.StringToSliceHookFunc(","),
-	))); err != nil {
-		return fmt.Errorf("nie udało się zmapować konfiguracji na strukturę: %v", err)
+	))
+
+	if err := viper.Unmarshal(cfg, decodeHook); err != nil {
+		return fmt.Errorf("nie udało się zmapować konfiguracji: %w", err)
 	}
 
-	// 5. Walidacja struktury
 	if err := validate.Struct(cfg); err != nil {
-		// Mapujemy błędy na czytelny format
 		var errorMsgs []string
 		for _, err := range err.(validator.ValidationErrors) {
 			errorMsgs = append(errorMsgs, fmt.Sprintf("- Pole '%s' nie spełnia warunku '%s' (wartość: %v)", err.Field(), err.Tag(), err.Value()))
@@ -49,5 +48,43 @@ func InitConfig(cfg any, serviceName string) error {
 		return fmt.Errorf("walidacja konfiguracji nie powiodła się:\n%s", strings.Join(errorMsgs, "\n"))
 	}
 
+	return nil
+}
+
+func bindEnvs(cfg any) error {
+	v := reflect.ValueOf(cfg)
+
+	for v.Kind() == reflect.Pointer {
+		if v.IsNil() {
+			return nil
+		}
+		v = v.Elem()
+	}
+
+	if v.Kind() != reflect.Struct {
+		return nil
+	}
+
+	t := v.Type()
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		fieldVal := v.Field(i)
+
+		if field.Type.Kind() == reflect.Struct {
+
+			if err := bindEnvs(fieldVal.Addr().Interface()); err != nil {
+				return err
+			}
+			continue
+		}
+
+		tag := field.Tag.Get("mapstructure")
+
+		if tag != "" && !strings.Contains(tag, "squash") {
+			if err := viper.BindEnv(tag); err != nil {
+				return fmt.Errorf("error binding env var %s: %w", tag, err)
+			}
+		}
+	}
 	return nil
 }

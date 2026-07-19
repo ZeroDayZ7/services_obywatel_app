@@ -38,28 +38,53 @@ const (
 )
 
 func InitBootstrapLogger(env string, saveToFile bool) *Logger {
+	env = strings.ToLower(env)
+	isProd := env == "production" || env == "staging"
+
 	var level zapcore.Level
-	if strings.ToLower(env) == "production" {
+	if isProd {
 		level = zapcore.InfoLevel
 	} else {
 		level = zapcore.DebugLevel
 	}
 
-	encoderConfig := zapcore.EncoderConfig{
-		MessageKey: "msg", LevelKey: "level", TimeKey: "time",
-		CallerKey: "caller", EncodeLevel: zapcore.CapitalColorLevelEncoder,
-		EncodeTime: zapcore.ISO8601TimeEncoder, EncodeCaller: zapcore.ShortCallerEncoder,
+	var encoder zapcore.Encoder
+	if isProd {
+		encoderConfig := zap.NewProductionEncoderConfig()
+		encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+		encoder = zapcore.NewJSONEncoder(encoderConfig)
+	} else {
+		encoderConfig := zapcore.EncoderConfig{
+			MessageKey:   "msg",
+			LevelKey:     "level",
+			TimeKey:      "time",
+			CallerKey:    "caller",
+			EncodeLevel:  zapcore.CapitalColorLevelEncoder,
+			EncodeTime:   zapcore.ISO8601TimeEncoder,
+			EncodeCaller: zapcore.ShortCallerEncoder,
+		}
+		encoder = zapcore.NewConsoleEncoder(encoderConfig)
 	}
 
-	consoleCore := zapcore.NewCore(zapcore.NewConsoleEncoder(encoderConfig), zapcore.AddSync(os.Stdout), level)
+	consoleCore := zapcore.NewCore(encoder, zapcore.AddSync(os.Stdout), level)
 	cores := []zapcore.Core{consoleCore}
 
-	if saveToFile {
-		logFile := &lumberjack.Logger{
-			Filename: "logs/bootstrap.log",
-			MaxSize:  2, MaxBackups: 1, Compress: false,
+	if saveToFile && !isProd {
+		if _, err := os.Stat("logs"); os.IsNotExist(err) {
+			_ = os.Mkdir("logs", 0755)
 		}
-		fileCore := zapcore.NewCore(zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()), zapcore.AddSync(logFile), zapcore.InfoLevel)
+
+		logFile := &lumberjack.Logger{
+			Filename:   "logs/bootstrap.log",
+			MaxSize:    2,
+			MaxBackups: 1,
+			Compress:   false,
+		}
+		fileCore := zapcore.NewCore(
+			zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()),
+			zapcore.AddSync(logFile),
+			zapcore.InfoLevel,
+		)
 		cores = append(cores, fileCore)
 	}
 
@@ -69,7 +94,8 @@ func InitBootstrapLogger(env string, saveToFile bool) *Logger {
 
 func InitLogger(env string, saveToFile bool) *Logger {
 	once.Do(func() {
-		isProd := strings.ToLower(env) == "production"
+		env = strings.ToLower(env)
+		isProd := env == "production" || env == "staging"
 
 		var consoleLevel zapcore.Level
 		if isProd {
@@ -80,7 +106,9 @@ func InitLogger(env string, saveToFile bool) *Logger {
 
 		var consoleEncoder zapcore.Encoder
 		if isProd {
-			consoleEncoder = zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig())
+			encoderConfig := zap.NewProductionEncoderConfig()
+			encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+			consoleEncoder = zapcore.NewJSONEncoder(encoderConfig)
 		} else {
 			consoleEncoderConfig := zapcore.EncoderConfig{
 				MessageKey:     "msg",
@@ -99,14 +127,18 @@ func InitLogger(env string, saveToFile bool) *Logger {
 
 		consoleCore := zapcore.NewCore(consoleEncoder, zapcore.AddSync(os.Stdout), consoleLevel)
 		cores := []zapcore.Core{consoleCore}
+		if saveToFile && !isProd {
+			if _, err := os.Stat("logs"); os.IsNotExist(err) {
+				_ = os.Mkdir("logs", 0755)
+			}
 
-		if saveToFile {
 			logFile := &lumberjack.Logger{
 				Filename:   "logs/app.log",
-				MaxSize:    10,
+				MaxSize:    10, // MB
 				MaxBackups: 5,
 				Compress:   true,
 			}
+
 			fileCore := zapcore.NewCore(
 				zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()),
 				zapcore.AddSync(logFile),
@@ -116,6 +148,7 @@ func InitLogger(env string, saveToFile bool) *Logger {
 		}
 
 		core := zapcore.NewTee(cores...)
+
 		zapLogger := zap.New(core, zap.AddCaller(), zap.AddCallerSkip(1))
 		instance = &Logger{zapLogger}
 	})

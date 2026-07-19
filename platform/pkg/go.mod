@@ -3,12 +3,12 @@ module github.com/zerodayz7/platform/pkg
 go 1.26.2
 
 require (
-	github.com/go-playground/validator/v10 v10.30.3
-	github.com/gofiber/fiber/v2 v2.52.14
-	github.com/gofiber/storage/redis/v3 v3.5.0
+	github.com/go-playground/validator/v10 v10.30.2
+	github.com/go-viper/mapstructure/v2 v2.5.0
+	github.com/gofiber/fiber/v2 v2.52.13
+	github.com/gofiber/storage/redis/v3 v3.4.5
 	github.com/google/uuid v1.6.0
-	github.com/mitchellh/mapstructure v1.5.0
-	github.com/redis/go-redis/v9 v9.21.0
+	github.com/redis/go-redis/v9 v9.19.0
 	github.com/spf13/viper v1.21.0
 	go.opentelemetry.io/otel v1.44.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.44.0
@@ -31,7 +31,6 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
-	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.29.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect

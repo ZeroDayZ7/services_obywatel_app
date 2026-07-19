@@ -13,13 +13,14 @@ import (
 )
 
 func main() {
-	// 0. Boostrap Logger
+	// 0. Bootstrap Logger
 	bootLog := shared.InitBootstrapLogger(os.Getenv("ENV"), false)
 	defer func() { _ = bootLog.Sync() }()
 
 	// 1. Config
 	if err := config.LoadConfigGlobal(); err != nil {
-		bootLog.Fatal("Config load failed", "error", err)
+		bootLog.Error("Config load failed", "error", err)
+		os.Exit(1)
 	}
 
 	// 2. Logger
@@ -37,16 +38,33 @@ func main() {
 	// 4. Redis
 	redisClient, err := redis.New(redis.Config(config.AppConfig.Redis))
 	if err != nil {
-		log.ErrorObj("Redis failed", err)
+		log.Error("Redis initialization failed", "error", err)
+		os.Exit(1)
 	}
-	defer redisClient.Close()
+
+	if redisClient == nil {
+		log.Error("Redis client is nil")
+		os.Exit(1)
+	}
+
+	defer func() {
+		if err := redisClient.Close(); err != nil {
+			log.Error("Failed to close Redis client", "error", err)
+		}
+	}()
 
 	// 5. DI & App Setup
 	container := di.NewContainer(redisClient, &config.AppConfig)
-	app := config.NewGatewayApp(container)
+
+	app, err := config.NewGatewayApp(container)
+	if err != nil {
+		log.Error("App setup failed", "error", err)
+		os.Exit(1)
+	}
+
 	router.SetupRoutes(app, container)
 
-	// 6. Run server with unified shutdown handler
+	// 6. Run server
 	server.Run(
 		app,
 		server.Config{
@@ -59,7 +77,6 @@ func main() {
 		*log,
 		func() {
 			_ = redisClient.Close()
-			// Additional resource cleanup (e.g., database) can be added here in the future.
 		},
 	)
 }

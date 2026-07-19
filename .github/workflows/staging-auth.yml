@@ -1,12 +1,12 @@
-name: Staging - Gateway GitOps
+name: Staging - Auth Service GitOps
 
 on:
   push:
     branches: [staging]
     paths:
-      - "platform/services/gateway/**"
+      - "platform/services/auth-service/**"
       - "platform/pkg/**"
-      - ".github/workflows/staging-gateway.yml"
+      - ".github/workflows/staging-auth.yml"
   workflow_dispatch:
 
 permissions:
@@ -19,7 +19,7 @@ jobs:
     env:
       REGISTRY: ghcr.io
       OWNER: ${{ vars.GHCR_OWNER }}
-      IMAGE_NAME: ${{ vars.GHCR_IMAGE_GATEWAY }}
+      IMAGE_NAME: ${{ vars.GHCR_IMAGE_AUTH }}
 
     steps:
       - name: 🔍 Checkout code
@@ -33,7 +33,7 @@ jobs:
           echo "--- LOG: Starting metadata preparation ---"
           SHA_SHORT=$(git rev-parse --short HEAD)
           echo "sha_short=${SHA_SHORT}" >> $GITHUB_OUTPUT
-
+          
           # Debugging logów
           echo "Repository: ${{ github.repository }}"
           echo "Owner: ${{ env.OWNER }}"
@@ -53,11 +53,11 @@ jobs:
         with:
           driver: docker-container
 
-      - name: 🏗️ Build & Push Gateway
+      - name: 🏗️ Build & Push Auth Service
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./platform/services/gateway/Dockerfile
+          file: ./platform/services/auth-service/Dockerfile
           push: true
           tags: |
             ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.sha_short }}
@@ -70,12 +70,12 @@ jobs:
           INFRA_TOKEN: ${{ secrets.INFRA_REPO_TOKEN }}
           SHA: ${{ steps.vars.outputs.sha_short }}
         run: |
-          echo "--- LOG: Starting GitOps Update for Gateway ---"
+          echo "--- LOG: Starting GitOps Update for Auth Service ---"
           git config --global user.name "github-actions"
           git config --global user.email "github-actions@github.com"
 
           git clone https://$INFRA_TOKEN@github.com/${{ github.repository_owner }}/k3s-obywatel-plus-gitops.git temp_infra
-          cd temp_infra/overlays/staging/services/gateway
+          cd temp_infra/overlays/staging/services/auth-service
 
           TARGET_FILE="kustomization.yaml"
 
@@ -90,7 +90,7 @@ jobs:
           else
             echo "--- LOG: Committing changes ---"
             git add $TARGET_FILE
-            git commit -m "feat(gateway): update staging image to $SHA"
+            git commit -m "feat(auth): update staging image to $SHA"
             git push origin main
             echo "✅ Successfully pushed to infra repo."
           fi
