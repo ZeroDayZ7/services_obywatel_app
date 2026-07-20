@@ -5,6 +5,7 @@ import (
 
 	"gorm.io/gorm"
 
+	"github.com/lib/pq"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/auth-service/internal/model"
 )
@@ -26,21 +27,24 @@ func SeedData(db *gorm.DB) error {
 				Username:         "root@plus.pl",
 				Email:            "root@plus.pl",
 				Password:         testPassword,
-				Role:             "root",
+				Role:             model.RoleRoot,
+				Permissions:      pq.StringArray{model.PermSystemAdmin, model.PermSystemManage, model.PermUsersRead, model.PermUsersWrite, model.PermUsersDelete},
 				TwoFactorEnabled: true,
 			},
 			{
 				Username:         "admin@plus.pl",
 				Email:            "admin@plus.pl",
 				Password:         testPassword,
-				Role:             "admin",
+				Role:             model.RoleAdmin,
+				Permissions:      pq.StringArray{model.PermUsersRead, model.PermUsersWrite, model.PermReportsView, model.PermReportsExport},
 				TwoFactorEnabled: true,
 			},
 			{
 				Username:         "user@example.com",
 				Email:            "user@example.com",
 				Password:         testPassword,
-				Role:             "user",
+				Role:             model.RoleUser,
+				Permissions:      pq.StringArray{model.PermReportsView},
 				TwoFactorEnabled: true,
 			},
 		}
@@ -49,7 +53,7 @@ func SeedData(db *gorm.DB) error {
 			if err := db.Create(&u).Error; err != nil {
 				return fmt.Errorf("failed to seed user %s: %w", u.Username, err)
 			}
-			log.Info(fmt.Sprintf("Utworzono użytkownika: %s (Role: %s, ID: %s)", u.Username, u.Role, u.ID))
+			log.Info(fmt.Sprintf("[SEED] Utworzono użytkownika: %-18s | Rola: %-6s | Uprawnienia: %v", u.Username, u.Role, u.Permissions))
 		}
 
 		log.Info("Seeding zakończony sukcesem.")
