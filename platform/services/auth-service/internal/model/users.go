@@ -11,9 +11,10 @@ import (
 type UserRole string
 
 const (
-	RoleUser  UserRole = "operator"
-	RoleAdmin UserRole = "admin"
-	RoleRoot  UserRole = "root"
+	RoleOperator UserRole = "operator"
+	RoleUser     UserRole = "user"
+	RoleAdmin    UserRole = "admin"
+	RoleRoot     UserRole = "root"
 )
 
 type UserStatus string
@@ -31,7 +32,7 @@ type User struct {
 	Username            string         `gorm:"size:30;not null;unique"`
 	Email               string         `gorm:"size:100;not null;unique"`
 	Password            string         `gorm:"size:128;not null"`
-	Role                UserRole       `gorm:"type:varchar(20);not null;default:'operator'"`
+	Role                UserRole       `gorm:"type:varchar(20);not null;default:'user'"`
 	Departments         pq.StringArray `gorm:"type:text[]"`
 	Permissions         pq.StringArray `gorm:"type:text[]"`
 	Status              UserStatus     `gorm:"type:varchar(20);not null;default:'ACTIVE'"`

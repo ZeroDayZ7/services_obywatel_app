@@ -94,22 +94,18 @@ func (s *authService) VerifyDeviceSignature(ctx context.Context, userIDStr, sess
 		return nil, errors.ErrInvalidParams
 	}
 
-	// 1. POBIERAMY CHALLENGE Z REDIS (Używając SessionID)
-	cacheKey := fmt.Sprintf("auth:challenge:%s", sessionID)
-	storedChallenge, err := s.cache.Get(ctx, cacheKey)
+	// Użycie spójnej metody wrappera z Redisa
+	storedChallenge, err := s.cache.GetChallenge(ctx, sessionID)
 	if err != nil || storedChallenge == "" {
 		log.WarnMap("Challenge not found or expired", map[string]any{"sid": sessionID})
 		return nil, errors.ErrInvalidChallenge
 	}
 
-	// 1. Pobieramy urządzenie z TWOJEGO repozytorium po Fingerprincie
 	device, err := s.userRepo.GetDeviceByFingerprint(ctx, userID, fingerprint)
 	if err != nil || device == nil {
 		log.WarnMap("Device not found or inactive", map[string]any{"user": userIDStr, "fpt": fingerprint})
 		return nil, errors.ErrUntrustedDevice
 	}
-
-	log.DebugInfo("VerifyDeviceSignature - device", device)
 
 	challengeBytes, err := base64.StdEncoding.DecodeString(storedChallenge)
 	if err != nil {
@@ -117,9 +113,6 @@ func (s *authService) VerifyDeviceSignature(ctx context.Context, userIDStr, sess
 		return nil, errors.ErrInvalidParams
 	}
 
-	log.DebugInfo("challengeBytes", challengeBytes)
-
-	// 2. Weryfikacja kryptograficzna Ed25519
 	pubKeyBytes, err := base64.StdEncoding.DecodeString(device.PublicKey)
 	if err != nil {
 		return nil, errors.ErrInternal
@@ -130,20 +123,20 @@ func (s *authService) VerifyDeviceSignature(ctx context.Context, userIDStr, sess
 		return nil, errors.ErrInvalidSignature
 	}
 
-	// Kluczowy moment: sprawdzamy czy podpis pasuje do challenge'u
 	if !ed25519.Verify(pubKeyBytes, challengeBytes, sigBytes) {
 		log.WarnMap("SECURITY ALERT: Signature mismatch", map[string]any{"userId": userIDStr})
 		return nil, errors.ErrInvalidSignature
 	}
 
-	// 3. Sukces - pobieramy dane usera i generujemy tokeny
+	// Usuwamy użyty challenge z Redis, aby zapobiec Replay Attacks
+	_ = s.cache.DeleteChallenge(ctx, sessionID)
+
 	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil {
 		return nil, errors.ErrUserNotFound
 	}
 
-	// Używamy Twoich istniejących metod w serwisie do JWT
-	accessToken, sessionID, err := s.CreateAccessToken(user.ID, fingerprint)
+	accessToken, newSessionID, err := s.CreateAccessToken(user.ID, fingerprint)
 	if err != nil {
 		return nil, errors.ErrInternal
 	}
@@ -153,10 +146,8 @@ func (s *authService) VerifyDeviceSignature(ctx context.Context, userIDStr, sess
 		return nil, errors.ErrInternal
 	}
 
-	// 4. Zapisujemy sesję w Redis (używając Twojego s.cache)
-	// Pobieramy role - na razie "USER", docelowo z bazy
-	roles := []string{"USER"}
-	err = s.cache.SetSession(ctx, sessionID, redis.UserSession{
+	roles := []string{string(user.Role)}
+	err = s.cache.SetSession(ctx, newSessionID, redis.UserSession{
 		UserID:      user.ID.String(),
 		Fingerprint: fingerprint,
 		Roles:       roles,
@@ -165,13 +156,11 @@ func (s *authService) VerifyDeviceSignature(ctx context.Context, userIDStr, sess
 		return nil, errors.ErrInternal
 	}
 
-	// 5. Zwracamy odpowiedź zgodną z Twoim http.LoginResponse
 	return &http.LoginResponse{
 		Type:         "fullSuccess",
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken.Token,
-		UserID:       fmt.Sprint(user.ID),
-		// Tu nie dodajemy UserResponse, jeśli go nie masz w strukturze http
+		UserID:       user.ID.String(),
 	}, nil
 }
 
@@ -179,44 +168,37 @@ func (s *authService) VerifyDeviceSignature(ctx context.Context, userIDStr, sess
 func (s *authService) RefreshToken(ctx context.Context, tokenStr string, fingerprint string) (*http.RefreshResponse, error) {
 	log := shared.GetLogger()
 
-	// 1. Pobranie i walidacja Refresh Tokena z bazy
-	rt, err := s.refreshRepo.GetByToken(tokenStr)
+	// Hashujemy token przed wyszukaniem w repozytorium!
+	hash := sha256.Sum256([]byte(tokenStr))
+	hashedTokenHex := hex.EncodeToString(hash[:])
+
+	rt, err := s.refreshRepo.GetByToken(hashedTokenHex)
 	if err != nil || rt.Revoked || rt.ExpiresAt.Before(time.Now()) {
 		log.WarnObj("Invalid, revoked or expired refresh token", tokenStr)
 		return nil, errors.ErrInvalidToken
 	}
 
-	// 2. Weryfikacja Fingerprint (Security Binding)
 	if rt.DeviceFingerprint != fingerprint {
 		log.WarnMap("SECURITY ALERT: Refresh token used on different device!", map[string]any{
 			"user_id":      rt.UserID,
 			"expected_fpt": rt.DeviceFingerprint,
 			"received_fpt": fingerprint,
 		})
-		// Opcjonalnie: s.RevokeAllUserTokens(rt.UserID)
 		return nil, errors.ErrInvalidToken
 	}
 
-	// 3. Generowanie nowych poświadczeń
-	// Tworzymy nowy Access Token i nowe SessionID (SID)
 	accessToken, newSessionID, err := s.CreateAccessToken(rt.UserID, fingerprint)
 	if err != nil {
 		return nil, errors.ErrInternal
 	}
 
-	// 2. Pobierz aktualne dane użytkownika z bazy
 	user, err := s.userRepo.GetByID(ctx, rt.UserID)
 	if err != nil {
 		return nil, errors.ErrInternal
 	}
 
-	// 3. Pobierz role (np. z obiektu user lub dedykowanej tabeli)
-	roles := []string{"USER"}
-	// if user.IsAdmin {
-	// 	roles = append(roles, "ADMIN")
-	// }
+	roles := []string{string(user.Role)}
 
-	// 4. Aktualizacja sesji w Redis z ROLAMI
 	err = s.cache.SetSession(ctx, newSessionID, redis.UserSession{
 		UserID:      user.ID.String(),
 		Fingerprint: fingerprint,
@@ -229,7 +211,7 @@ func (s *authService) RefreshToken(ctx context.Context, tokenStr string, fingerp
 
 	return &http.RefreshResponse{
 		AccessToken:  accessToken,
-		RefreshToken: rt.Token, // Zwracamy ten sam lub generujemy nowy (Rotation)
+		RefreshToken: rt.Token,
 		UserID:       rt.UserID.String(),
 		Roles:        roles,
 		ExpiresAt:    time.Now().Add(s.cfg.JWT.AccessTTL).Unix(),
