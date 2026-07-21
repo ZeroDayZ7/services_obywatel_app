@@ -11,6 +11,6 @@ type UserSessionDTO struct {
 	Platform            string    `json:"platform"`
 	CreatedAt           time.Time `json:"created_at"`
 	LastUsedAt          time.Time `json:"last_used_at"`
-	Fingerprint         string    `gorm:"column:fingerprint" json:"-"` // Ukrywamy w JSON, ale potrzebujemy w Go
-	IsCurrent           bool      `json:"is_current"`                  // To ustawimy w serwisie
+	Fingerprint         string    `gorm:"column:fingerprint" json:"-"`
+	IsCurrent           bool      `json:"is_current"`              
 }

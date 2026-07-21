@@ -5,7 +5,6 @@ import (
 
 	"github.com/zerodayz7/platform/pkg/database"
 	"github.com/zerodayz7/platform/pkg/viper"
-	"github.com/zerodayz7/platform/services/auth-service/internal/model"
 	"gorm.io/gorm"
 )
 
@@ -32,16 +31,12 @@ func MustInitDB(cfg viper.DBConfig) (*gorm.DB, func()) {
 	}
 
 	// 3. Wykonanie AutoMigrate dla modeli
-	if err := db.AutoMigrate(
-		&model.User{},
-		&model.RefreshToken{},
-		&model.UserDevice{},
-	); err != nil {
-		panic(fmt.Sprintf("failed to run migrations: %v", err))
+	if err := AutoMigrate(db); err != nil {
+		panic(err)
 	}
 
 	// 4. Uruchomienie seedera przy użyciu pomocnika z pkg
-	if err := database.RunSeed(db, &model.User{}, SeedData); err != nil {
+	if err := SeedData(db); err != nil {
 		panic(err)
 	}
 
