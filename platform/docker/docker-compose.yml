@@ -122,6 +122,19 @@ services:
       db-auth:
         condition: service_healthy
 
+  rabbitmq:
+    <<: *common-settings
+    image: rabbitmq:4.3.1-management
+    container_name: rabbitmq_server
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: "admin"
+      RABBITMQ_DEFAULT_PASS: "password"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+
   # # --- OBSERVABILITY ---
   # otel-collector:
   #   <<: *common-settings
@@ -160,6 +173,7 @@ volumes:
   pg_notification_data:
   redis_data:
   go-modules:
+  rabbitmq_data:
 
 networks:
   citizen-app-net:
