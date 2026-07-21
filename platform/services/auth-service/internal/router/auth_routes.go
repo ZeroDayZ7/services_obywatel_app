@@ -15,17 +15,19 @@ func SetupAuthRoutes(
 	h *handler.AuthHandler,
 	resetHandler *handler.ResetHandler,
 ) {
+	// #region Group("/auth")
 	auth := app.Group("/auth")
 	auth.Use(shared.GetLimiter(shared.LimitAuth, nil))
 
 	// ==========================
 	// LOGIN / REGISTER / JWT
 	// ==========================
+	// #region 	auth.Post("/login",
 	auth.Post("/login",
 		middleware.ValidateBody[schemas.LoginRequest](),
 		h.Login,
 	)
-
+	// #region auth.Post("/2fa-verify",
 	auth.Post("/2fa-verify",
 		middleware.ValidateBody[schemas.TwoFARequest](),
 		h.Verify2FA,
@@ -67,7 +69,8 @@ func SetupAuthRoutes(
 
 	// ==========================
 	// RESET PASSWORD
-	// ==========================
+	// =========================
+	// #region Group("/reset")
 	reset := auth.Group("/reset")
 	reset.Use(shared.GetLimiter(shared.LimitReset, nil))
 

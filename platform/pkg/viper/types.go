@@ -2,6 +2,7 @@ package viper
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -10,6 +11,26 @@ type ServicesConfig struct {
 	Documents string `mapstructure:"SERVICE_DOCS_URL" validate:"required,url"`
 	Notify    string `mapstructure:"SERVICE_NOTIFY_URL" validate:"required,url"`
 	Users     string `mapstructure:"SERVICE_USERS_URL" validate:"required,url"`
+}
+
+type RabbitMQConfig struct {
+	Enabled  bool   `mapstructure:"RABBITMQ_ENABLED"`
+	Host     string `mapstructure:"RABBITMQ_HOST" validate:"required_if=Enabled true"`
+	Port     int    `mapstructure:"RABBITMQ_PORT" validate:"required_if=Enabled true"`
+	User     string `mapstructure:"RABBITMQ_USER" validate:"required_if=Enabled true"`
+	Password string `mapstructure:"RABBITMQ_PASSWORD" validate:"required_if=Enabled true"`
+	VHost    string `mapstructure:"RABBITMQ_VHOST"`
+}
+
+func (r RabbitMQConfig) GetURL() string {
+	vhost := r.VHost
+	if vhost == "" {
+		vhost = "/"
+	}
+	if !strings.HasPrefix(vhost, "/") {
+		vhost = "/" + vhost
+	}
+	return fmt.Sprintf("amqp://%s:%s@%s:%d%s", r.User, r.Password, r.Host, r.Port, vhost)
 }
 
 type InternalSecurityConfig struct {
@@ -97,6 +118,7 @@ type Config struct {
 	Internal  InternalSecurityConfig `mapstructure:",squash"`
 	Services  ServicesConfig         `mapstructure:",squash"`
 	Database  DBConfig               `mapstructure:",squash"`
+	RabbitMQ  RabbitMQConfig         `mapstructure:",squash"`
 }
 
 // GetDSN tworzy string połączenia dla GORM/Postgres
