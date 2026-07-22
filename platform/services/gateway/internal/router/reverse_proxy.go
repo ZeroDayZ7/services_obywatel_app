@@ -41,6 +41,7 @@ func ReverseProxyFiber(container *di.Container, target string) fiber.Handler {
 }
 
 // W internal/router/proxy.go popraw ReverseProxy:
+// region ReverseProxy
 func ReverseProxy(container *di.Container, target string) fiber.Handler {
 	log := shared.GetLogger()
 	return func(c *fiber.Ctx) error {
@@ -68,6 +69,17 @@ func ReverseProxy(container *di.Container, target string) fiber.Handler {
 			req.Header.Set(constants.HeaderRequestID, ctx.RequestID)
 			req.Header.Set(constants.HeaderXForwardedFor, ctx.IP)
 			req.Header.Set(constants.HeaderXRealIP, ctx.IP)
+			if ctx.DeviceID != "" {
+				req.Header.Set(constants.HeaderDeviceFingerprint, ctx.DeviceID)
+			}
+
+			// PODPISYWANIE I PRZEKAZYWANIE KONTEKSTU DLA KAZDEGO ZĄDANIA
+			payload, err := reqctx.Encode(*ctx)
+			if err == nil {
+				sig := reqctx.Sign(payload, container.InternalSecret)
+				req.Header.Set(constants.HeaderInternalContext, base64.StdEncoding.EncodeToString(payload))
+				req.Header.Set(constants.HeaderInternalSignature, sig)
+			}
 		}
 
 		return executeProxyRequest(c, container, req, log)

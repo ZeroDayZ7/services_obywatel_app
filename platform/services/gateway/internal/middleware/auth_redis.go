@@ -35,10 +35,22 @@ func AuthRedisMiddleware(rdb *redis.Client) fiber.Handler {
 
 		jwtPayload := c.Locals("user")
 		if jwtPayload == nil {
+			log.WarnMap("JWT payload missing in c.Locals('user')", map[string]any{"path": path})
 			return apperr.SendAppError(c, apperr.ErrUnauthorized)
 		}
-		jwtToken := jwtPayload.(*jwt.Token)
-		claims := jwtToken.Claims.(jwt.MapClaims)
+
+		jwtToken, ok := jwtPayload.(*jwt.Token)
+		if !ok {
+			log.ErrorMap("Failed to cast jwtPayload to *jwt.Token", map[string]any{"payload": jwtPayload})
+			return apperr.SendAppError(c, apperr.ErrInternal)
+		}
+
+		claims, ok := jwtToken.Claims.(jwt.MapClaims)
+		if !ok {
+			log.ErrorMap("Failed to cast claims to jwt.MapClaims", map[string]any{"claims": jwtToken.Claims})
+			return apperr.SendAppError(c, apperr.ErrInternal)
+		}
+
 		sessionID, _ := claims["sid"].(string)
 
 		redisPrefix := "session:"
@@ -46,28 +58,48 @@ func AuthRedisMiddleware(rdb *redis.Client) fiber.Handler {
 			redisPrefix = "setup:session:"
 		}
 
+		fullRedisKey := redisPrefix + sessionID
+
+		// LOG DIAGNOSTYCZNY - Sprawdzenie dokładnego klucza
+		log.DebugMap("[AuthRedisMiddleware] Fetching session from Redis", map[string]any{
+			"path":           path,
+			"sid_from_jwt":   sessionID,
+			"redis_prefix":   redisPrefix,
+			"full_redis_key": fullRedisKey,
+		})
+
 		ctx := c.Context()
-		jsonData, err := rdb.Get(ctx, redisPrefix+sessionID).Result()
+		jsonData, err := rdb.Get(ctx, fullRedisKey).Result()
 		if err != nil {
 			if errors.Is(err, redis.Nil) {
-
-				log.WarnMap("Session not found", map[string]any{"sid": sessionID, "path": path})
+				log.WarnMap("[AuthRedisMiddleware] Key not found in Redis", map[string]any{
+					"looked_for_key": fullRedisKey,
+					"sid":            sessionID,
+					"path":           path,
+				})
 				return apperr.SendAppError(c, apperr.ErrSessionExpired)
 			}
+			log.ErrorMap("[AuthRedisMiddleware] Redis command error", map[string]any{
+				"key": fullRedisKey,
+				"err": err.Error(),
+			})
 			return apperr.SendAppError(c, apperr.ErrInternal)
 		}
 
 		var session UserSession
 		if err := json.Unmarshal([]byte(jsonData), &session); err != nil {
+			log.ErrorMap("[AuthRedisMiddleware] JSON unmarshal failed", map[string]any{
+				"raw_json": jsonData,
+				"err":      err.Error(),
+			})
 			return apperr.SendAppError(c, apperr.ErrInternal)
 		}
 
 		if session.Fingerprint != clientFingerprint {
-			log.WarnMap("Fingerprint mismatch!", map[string]any{
+			log.WarnMap("[AuthRedisMiddleware] Fingerprint mismatch", map[string]any{
 				"expected": session.Fingerprint,
 				"received": clientFingerprint,
 			})
-
 			return apperr.SendAppError(c, apperr.ErrUntrustedDevice)
 		}
 
