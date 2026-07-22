@@ -13,7 +13,6 @@ import (
 func SetupRoutes(app *fiber.App, container *di.Container) {
 	services := container.Config.Services
 
-	// 1. Health Checks
 	checker := &health.Checker{
 		Redis:   container.Redis.Client,
 		Service: "gateway",
@@ -27,7 +26,6 @@ func SetupRoutes(app *fiber.App, container *di.Container) {
 	}
 	health.RegisterRoutes(app, checker)
 
-	// --- AUTH SERVICE (Publiczne) ---
 	auth := services.Auth
 	app.Post("/auth/login",
 		pkgMiddleware.ValidateBody[schemas.LoginRequest](),
@@ -64,40 +62,32 @@ func SetupRoutes(app *fiber.App, container *di.Container) {
 		ReverseProxy(container, auth),
 	)
 
-	// --- AUTH SERVICE (Zabezpieczone - Użytkownik Zalogowany) ---
-	// ContextBuilder odczytuje token JWT i weryfikuje aktywną sesję w Redisie
-	authGroup := app.Group("", gwMiddleware.ContextBuilder(container))
-
-	authGroup.Get("/auth/me", ReverseProxySecure(container, auth))
-	authGroup.Post("/auth/register-device",
+	app.Get("/auth/me", ReverseProxySecure(container, auth))
+	app.Post("/auth/register-device",
 		pkgMiddleware.ValidateBody[schemas.RegisterDeviceRequest](),
 		ReverseProxySecure(container, auth),
 	)
-	authGroup.Post("/auth/logout",
+	app.Post("/auth/logout",
 		pkgMiddleware.ValidateBody[schemas.RefreshTokenRequest](),
 		ReverseProxySecure(container, auth),
 	)
-	authGroup.Get("/user/sessions", ReverseProxySecure(container, auth))
-	authGroup.Post("/user/sessions/terminate", ReverseProxySecure(container, auth))
+	app.Get("/user/sessions", ReverseProxySecure(container, auth))
+	app.Post("/user/sessions/terminate", ReverseProxySecure(container, auth))
 
-	// --- NOTIFICATIONS (Zabezpieczone) ---
 	notify := services.Notify
-	authGroup.All("/notifications*", ReverseProxySecure(container, notify))
+	app.All("/notifications*", ReverseProxySecure(container, notify))
 
-	// --- DOCUMENTS (Przykład RBAC: wymagana rola/permisja 'documents:read') ---
 	documents := services.Documents
-	authGroup.All("/documents/*",
-		gwMiddleware.RBACRequired("documents:read"),
+	app.All("/documents/*",
+		gwMiddleware.RBACRequired("documents.read"),
 		ReverseProxySecure(container, documents),
 	)
 
-	// --- USERS SERVICE (Przykład RBAC: wymagana rola 'admin' lub permisja 'users:manage') ---
 	users := services.Users
-	authGroup.All("/users/*",
-		gwMiddleware.RBACRequired("users:manage"),
+	app.All("/users/*",
+		gwMiddleware.RBACRequired("users.manage"),
 		ReverseProxySecure(container, users),
 	)
 
-	// Fallback (404 / 405)
 	pkgRouter.SetupFallbackHandlers(app)
 }
