@@ -28,23 +28,21 @@ func NewGatewayApp(container *di.Container) (*fiber.App, error) {
 	cfg := container.Config.Server
 
 	cfgFiber := fiber.Config{
-		AppName:       cfg.AppName,
-		ServerHeader:  cfg.ServerHeader,
-		Prefork:       cfg.Prefork,
-		CaseSensitive: cfg.CaseSensitive,
-		StrictRouting: cfg.StrictRouting,
-		IdleTimeout:   cfg.IdleTimeout,
-		ReadTimeout:   cfg.ReadTimeout,
-		WriteTimeout:  cfg.WriteTimeout,
-
+		AppName:                 cfg.AppName,
+		ServerHeader:            cfg.ServerHeader,
+		Prefork:                 cfg.Prefork,
+		CaseSensitive:           cfg.CaseSensitive,
+		StrictRouting:           cfg.StrictRouting,
+		IdleTimeout:             cfg.IdleTimeout,
+		ReadTimeout:             cfg.ReadTimeout,
+		WriteTimeout:            cfg.WriteTimeout,
 		ProxyHeader:             fiber.HeaderXForwardedFor,
 		EnableTrustedProxyCheck: true,
 		TrustedProxies:          []string{"127.0.0.1", "::1"},
 		BodyLimit:               cfg.BodyLimitMB * 1024 * 1024,
 		DisableStartupMessage:   true,
 		EnableIPValidation:      true,
-
-		ErrorHandler: server.ErrorHandler(),
+		ErrorHandler:            server.ErrorHandler(),
 	}
 
 	app := fiber.New(cfgFiber)
@@ -60,9 +58,11 @@ func NewGatewayApp(container *di.Container) (*fiber.App, error) {
 	app.Use(shared.GetLimiter(shared.LimitGlobal, storage))
 	app.Use(compress.New(CompressConfig()))
 	app.Use(shared.RequestLoggerMiddleware())
+
+	// Zależności middleware
 	app.Use(JWTMiddlewareWithExclusions())
 	app.Use(middleware.AuthRedisMiddleware(container.Redis.Client))
-	app.Use(middleware.ContextBuilder())
+	app.Use(middleware.ContextBuilder(container))
 
 	return app, nil
 }

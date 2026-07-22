@@ -1,12 +1,18 @@
+// cmdr: redis/cache.go
+
 package redis
 
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"time"
 
 	goredis "github.com/redis/go-redis/v9"
 )
+
+var ErrNotFound = errors.New("redis: key not found")
 
 type Cache struct {
 	client *Client
@@ -25,34 +31,61 @@ func (c *Cache) Set(ctx context.Context, key string, value any, ttl ...time.Dura
 	if len(ttl) > 0 {
 		d = ttl[0]
 	}
-	// ZMIANA: Usunięto c.key()
 	return c.client.Set(ctx, key, value, d).Err()
 }
 
 func (c *Cache) Get(ctx context.Context, key string) (string, error) {
-	// ZMIANA: Usunięto c.key()
-	return c.client.Get(ctx, key).Result()
+	val, err := c.client.Get(ctx, key).Result()
+	if errors.Is(err, goredis.Nil) {
+		return "", ErrNotFound
+	}
+	if err != nil {
+		return "", err
+	}
+	return val, nil
 }
 
 func (c *Cache) Del(ctx context.Context, key string) error {
-	// ZMIANA: Usunięto c.key()
 	return c.client.Del(ctx, key).Err()
 }
 
 func (c *Cache) Exists(ctx context.Context, key string) (bool, error) {
-	// ZMIANA: Usunięto c.key()
 	n, err := c.client.Exists(ctx, key).Result()
 	return n > 0, err
 }
 
+// GetJSON pobiera wartość z klucza i deserializuje do wskazanego typu T
+func GetJSON[T any](c *Cache, ctx context.Context, key string) (*T, error) {
+	data, err := c.Get(ctx, key)
+	if err != nil {
+		return nil, err
+	}
+
+	var dest T
+	if err := json.Unmarshal([]byte(data), &dest); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal redis payload for key %s: %w", key, err)
+	}
+
+	return &dest, nil
+}
+
+// SetJSON serializuje podaną strukturę do JSON i zapisuje w Redisie
+func SetJSON(c *Cache, ctx context.Context, key string, value any, ttl ...time.Duration) error {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Errorf("failed to marshal payload for redis key %s: %w", key, err)
+	}
+	return c.Set(ctx, key, data, ttl...)
+}
+
 func (c *Cache) SendNotification(ctx context.Context, data any) error {
-	// Cache używa swojego wewnętrznego klienta, aby wysłać powiadomienie
 	return c.client.SendNotification(ctx, data)
 }
 
 // =========================================
-// ================  AUDIT  ================
+// ================ AUDIT ==================
 // =========================================
+
 func (c *Client) ReadStream(
 	ctx context.Context,
 	stream string,
@@ -67,7 +100,7 @@ func (c *Client) ReadStream(
 		Block:    5 * time.Second,
 	}).Result()
 	if err != nil {
-		if err == goredis.Nil {
+		if errors.Is(err, goredis.Nil) {
 			return nil, nil
 		}
 		return nil, err
@@ -80,14 +113,11 @@ func (c *Client) ReadStream(
 	return res[0].Messages, nil
 }
 
-// AckStream potwierdza przetworzenie wiadomości (XAck)
 func (c *Client) AckStream(ctx context.Context, stream, group, messageID string) error {
 	return c.XAck(ctx, stream, group, messageID).Err()
 }
 
-// SendNotification wysyła dane do notification_stream
 func (c *Client) SendNotification(ctx context.Context, data any) error {
-	// Pomijamy bootstrapowe eventy (jeśli potrzebne)
 	if m, ok := data.(map[string]any); ok {
 		if b, exists := m["_bootstrap"]; exists {
 			if isBootstrap, ok := b.(bool); ok && isBootstrap {
@@ -109,13 +139,10 @@ func (c *Client) SendNotification(ctx context.Context, data any) error {
 	}).Err()
 }
 
-// #region EVENT PUBLISHER
-
 // =========================================
 // ============ EVENT PUBLISHER =============
 // =========================================
 
-// Publish implements events.StreamPublisher
 func (c *Cache) Publish(ctx context.Context, stream string, payload any) error {
 	jsonData, err := json.Marshal(payload)
 	if err != nil {

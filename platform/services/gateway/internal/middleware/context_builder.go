@@ -1,64 +1,57 @@
 package middleware
 
 import (
-	"fmt"
-	"slices"
-
 	"github.com/gofiber/fiber/v2"
 	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
-	"github.com/zerodayz7/platform/pkg/constants"
-	"github.com/zerodayz7/platform/pkg/context"
+
+	appcontext "github.com/zerodayz7/platform/pkg/context"
+	apperr "github.com/zerodayz7/platform/pkg/errors"
+	"github.com/zerodayz7/platform/pkg/shared"
+	"github.com/zerodayz7/platform/services/gateway/internal/di"
 )
 
-func ContextBuilder() fiber.Handler {
+func ContextBuilder(container *di.Container) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		path := c.Path()
+		log := shared.GetLogger()
 
-		// 1. Podstawowe dane dostępne dla KAŻDEGO requestu (nawet publicznego)
-		ctx := &context.RequestContext{
-			// Używamy Locals("requestid"), bo fiber middleware 'requestid' tam go wrzuca
-			RequestID: fmt.Sprintf("%v", c.Locals("requestid")),
-			IP:        c.IP(),
-			DeviceID:  c.Get(constants.HeaderDeviceFingerprint),
+		// 1. Pobieramy sparowany token JWT wrzucony wcześniej przez middleware jwtware
+		token, ok := c.Locals("user").(*jwt.Token)
+		if !ok || token == nil {
+			return apperr.SendAppError(c, apperr.ErrUnauthorized)
 		}
 
-		// 2. Jeśli ścieżka jest publiczna, pomijamy wyciąganie danych usera
-		if slices.Contains(constants.PublicPaths, path) {
-			c.Locals("requestContext", ctx)
-			return c.Next()
+		claims, ok := token.Claims.(jwt.MapClaims)
+		if !ok {
+			return apperr.SendAppError(c, apperr.ErrUnauthorized)
 		}
 
-		// 3. Dane usera (tylko dla chronionych tras)
-		userToken, ok := c.Locals("user").(*jwt.Token)
-		if ok && userToken != nil {
-			claims, ok := userToken.Claims.(jwt.MapClaims)
-			if ok {
-				// Bezpieczne parsowanie UUID
-				if uidStr, ok := claims["uid"].(string); ok {
-					if uid, err := uuid.Parse(uidStr); err == nil {
-						ctx.UserID = &uid
-					}
-				}
-
-				// Pobieranie Session ID
-				if sid, ok := claims["sid"].(string); ok {
-					ctx.SessionID = sid
-				}
-
-				// Pobieranie Ról
-				if roles, ok := claims["roles"].([]any); ok {
-					for _, r := range roles {
-						if roleStr, ok := r.(string); ok {
-							ctx.Roles = append(ctx.Roles, roleStr)
-						}
-					}
-				}
-			}
+		sid, _ := claims["sid"].(string)
+		if sid == "" {
+			return apperr.SendAppError(c, apperr.ErrUnauthorized)
 		}
 
-		// 4. Zapisujemy gotowy obiekt w Locals
-		c.Locals("requestContext", ctx)
+		// 2. Pobieramy i automatycznie unmarshalujemy sesję z Redisa
+		sessionData, err := container.Cache.GetSession(c.Context(), sid)
+		if err != nil {
+			log.Warn("Session missing or expired in Redis", "sid", sid, "err", err)
+			return apperr.SendAppError(c, apperr.ErrUnauthorized)
+		}
+
+		parsedUserID, err := uuid.Parse(sessionData.UserID)
+		if err != nil {
+			return apperr.SendAppError(c, apperr.ErrUnauthorized)
+		}
+
+		// 3. Budowa uniwersalnego kontekstu żądania
+		reqCtx := &appcontext.RequestContext{
+			UserID:      &parsedUserID,
+			SessionID:   sid,
+			Role:        sessionData.Role,
+			Permissions: sessionData.Permissions,
+		}
+
+		c.Locals("requestContext", reqCtx)
 		return c.Next()
 	}
 }

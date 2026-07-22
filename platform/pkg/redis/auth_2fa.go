@@ -1,13 +1,14 @@
+// cmdr: redis/auth_2fa.go
+
 package redis
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 )
 
-// TwoFASession przechowuje tymczasowe dane procesu weryfikacji dwuetapowej
 type TwoFASession struct {
 	UserID      string `json:"user_id"`
 	Email       string `json:"email"`
@@ -17,34 +18,18 @@ type TwoFASession struct {
 	Attempts    int    `json:"attempts"`
 }
 
-// --- Metody dla 2FA ---
-
-// Set2FASession zapisuje sesję 2FA (kod i meta-dane) przed weryfikacją
 func (c *Cache) Set2FASession(ctx context.Context, token string, sess TwoFASession, ttl time.Duration) error {
-	data, _ := json.Marshal(sess)
-	return c.client.Set(ctx, Login2FAPrefix+token, data, ttl).Err()
+	return SetJSON(c, ctx, Login2FAPrefix+token, sess, ttl)
 }
 
-// Get2FASession pobiera sesję 2FA na podstawie tokenu
 func (c *Cache) Get2FASession(ctx context.Context, token string) (*TwoFASession, error) {
-	data, err := c.client.Get(ctx, Login2FAPrefix+token).Result()
-	if err != nil {
-		return nil, err
-	}
-	var sess TwoFASession
-	if err := json.Unmarshal([]byte(data), &sess); err != nil {
-		return nil, err
-	}
-	return &sess, nil
+	return GetJSON[TwoFASession](c, ctx, Login2FAPrefix+token)
 }
 
-// Delete2FASession usuwa sesję 2FA (np. po udanej weryfikacji lub po zablokowaniu)
 func (c *Cache) Delete2FASession(ctx context.Context, token string) error {
-	return c.client.Del(ctx, Login2FAPrefix+token).Err()
+	return c.Del(ctx, Login2FAPrefix+token)
 }
 
-// Verify2FAAttempt zarządza licznikiem prób przy użyciu skryptu Lua.
-// Zwraca status: "attempt_updated", "locked" lub "not_found".
 func (c *Cache) Verify2FAAttempt(
 	ctx context.Context,
 	token string,
@@ -53,24 +38,26 @@ func (c *Cache) Verify2FAAttempt(
 ) (string, error) {
 	fullKey := Login2FAPrefix + token
 
-	// Wykonujemy skrypt Lua, aby operacja inkrementacji i sprawdzenia limitu była atomowa
 	res, err := c.client.Eval(
 		ctx,
-		verify2FAScript, // Skrypt musi być zdefiniowany w scripts.go
+		verify2FAScript,
 		[]string{fullKey},
 		maxAttempts,
 		int(ttl.Seconds()),
 	).Result()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("lua execution failed: %w", err)
 	}
 
 	arr, ok := res.([]interface{})
 	if !ok || len(arr) == 0 {
-		return "", errors.New("invalid lua response from verify2fa script")
+		return "", errors.New("invalid lua response format from verify2fa script")
 	}
 
-	status := arr[0].(string)
+	status, ok := arr[0].(string)
+	if !ok {
+		return "", errors.New("invalid status type in lua response")
+	}
 
 	switch status {
 	case "NOT_FOUND":
@@ -80,6 +67,6 @@ func (c *Cache) Verify2FAAttempt(
 	case "ATTEMPT_UPDATED":
 		return "attempt_updated", nil
 	default:
-		return "", errors.New("unknown 2FA status from redis")
+		return "", fmt.Errorf("unknown 2FA status from redis lua script: %s", status)
 	}
 }

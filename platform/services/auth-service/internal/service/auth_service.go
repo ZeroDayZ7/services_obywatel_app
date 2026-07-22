@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
-	"fmt"
 	"strings"
 	"time"
 
@@ -80,7 +79,7 @@ func (s *authService) GetProfile(ctx context.Context, userID uuid.UUID) (*http.U
 		DisplayName: user.Username,
 		Status:      string(user.Status),
 		Role:        string(user.Role),
-		Permissions: []string(user.Permissions), // Rzutowanie pq.StringArray na []string
+		Permissions: []string(user.Permissions),
 		LastLogin:   user.LastLogin.Format(time.RFC3339),
 	}, nil
 }
@@ -132,8 +131,16 @@ func (s *authService) VerifyDeviceSignature(ctx context.Context, userIDStr, sess
 	_ = s.cache.DeleteChallenge(ctx, sessionID)
 
 	user, err := s.userRepo.GetByID(ctx, userID)
-	if err != nil {
+	if err != nil || user == nil {
 		return nil, errors.ErrUserNotFound
+	}
+
+	if err := s.CanUserLogin(user); err != nil {
+		log.WarnMap("User account locked/banned during device verification", map[string]any{
+			"user_id": user.ID,
+			"status":  user.Status,
+		})
+		return nil, err
 	}
 
 	accessToken, newSessionID, err := s.CreateAccessToken(user.ID, fingerprint)
@@ -146,13 +153,16 @@ func (s *authService) VerifyDeviceSignature(ctx context.Context, userIDStr, sess
 		return nil, errors.ErrInternal
 	}
 
-	roles := []string{string(user.Role)}
-	err = s.cache.SetSession(ctx, newSessionID, redis.UserSession{
+	// Zapis rozdzielonej roli i uprawnień do pełnej sesji w Redis
+	sessionData := redis.UserSession{
 		UserID:      user.ID.String(),
 		Fingerprint: fingerprint,
-		Roles:       roles,
-	}, s.cfg.Session.TTL)
-	if err != nil {
+		Role:        string(user.Role),
+		Permissions: []string(user.Permissions),
+	}
+
+	if err := s.cache.SetSession(ctx, newSessionID, sessionData, s.cfg.Session.TTL); err != nil {
+		log.ErrorObj("Failed to save session in Redis", err)
 		return nil, errors.ErrInternal
 	}
 
@@ -161,6 +171,7 @@ func (s *authService) VerifyDeviceSignature(ctx context.Context, userIDStr, sess
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken.Token,
 		UserID:       user.ID.String(),
+		ExpiresAt:    time.Now().Add(s.cfg.JWT.AccessTTL).Unix(),
 	}, nil
 }
 
@@ -231,16 +242,12 @@ func (s *authService) RefreshToken(ctx context.Context, tokenStr string, fingerp
 		return nil, errors.ErrInternal
 	}
 
-	// 8. Zbudowanie pełnej listy ról/uprawnień do sesji Redis
-	roles := []string{string(user.Role)}
-	if len(user.Permissions) > 0 {
-		roles = append(roles, user.Permissions...)
-	}
-
+	// 8. Zapis rozdzielonej roli i uprawnień w sesji Redis
 	sessionData := redis.UserSession{
 		UserID:      user.ID.String(),
 		Fingerprint: fingerprint,
-		Roles:       roles,
+		Role:        string(user.Role),
+		Permissions: []string(user.Permissions),
 	}
 
 	if err := s.cache.SetSession(ctx, newSessionID, sessionData, s.cfg.Session.TTL); err != nil {
@@ -248,7 +255,7 @@ func (s *authService) RefreshToken(ctx context.Context, tokenStr string, fingerp
 		return nil, errors.ErrInternal
 	}
 
-	// Zwracamy nowy AccessToken oraz NOWY surowy RefreshToken (newRefreshToken.Token)
+	// Zwracamy nowy AccessToken oraz NOWY surowy RefreshToken
 	return &http.RefreshResponse{
 		AccessToken:  accessToken,
 		RefreshToken: newRefreshToken.Token,
@@ -288,6 +295,7 @@ func (s *authService) RegisterDevice(ctx context.Context, userID uuid.UUID, sess
 		return nil, errors.ErrVerificationFailed
 	}
 
+	// 2. ZAPIS URZĄDZENIA W BAZIE DANYCH
 	err = s.userRepo.SaveDevice(ctx, &model.UserDevice{
 		UserID:              userID,
 		DeviceFingerprint:   req.DeviceFingerprint,
@@ -326,7 +334,22 @@ func (s *authService) RegisterDevice(ctx context.Context, userID uuid.UUID, sess
 		_ = s.cache.DeleteSetupSession(ctx, sessionID)
 		log.DebugInfo("Setup session cleared, upgrading to full session", sessionID)
 	}
-	// 4. GENEROWANIE NOWYCH POŚWIADCZEŃ
+
+	// 4. POBRANIE PEŁNYCH DANYCH UŻYTKOWNIKA I WERYFIKACJA STATUSU
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil || user == nil {
+		return nil, errors.ErrUserNotFound
+	}
+
+	if err := s.CanUserLogin(user); err != nil {
+		log.WarnMap("User account locked/banned during device registration", map[string]any{
+			"user_id": user.ID,
+			"status":  user.Status,
+		})
+		return nil, err
+	}
+
+	// 5. GENEROWANIE NOWYCH POŚWIADCZEŃ
 	accessToken, newSID, err := s.CreateAccessToken(userID, req.DeviceFingerprint)
 	if err != nil {
 		return nil, errors.ErrInternal
@@ -337,28 +360,20 @@ func (s *authService) RegisterDevice(ctx context.Context, userID uuid.UUID, sess
 		return nil, errors.ErrInternal
 	}
 
-	// 1. Pobierz pełne dane użytkownika (w tym role/rbac)
-	user, err := s.userRepo.GetByID(ctx, userID)
-	if err != nil {
-		return nil, errors.ErrInternal
-	}
-
-	// 2. Przygotuj dane do sesji (np. role jako string slice)
-	roles := []string{"USER"} // Tu pobierz role z obiektu user, np. user.Roles
-
-	// 3. Zapisz BOGATĄ sesję w cache (używając struktury UserSession)
+	// 6. ZAPIS SESJI W REDISIE Z ROZDZIELONĄ ROLĄ I PERMISJAMI
 	sessionData := redis.UserSession{
 		UserID:      user.ID.String(),
 		Fingerprint: req.DeviceFingerprint,
-		Roles:       roles,
+		Role:        string(user.Role),
+		Permissions: []string(user.Permissions),
 	}
 
 	if err = s.cache.SetSession(ctx, newSID, sessionData, s.cfg.Session.TTL); err != nil {
 		log.ErrorObj("Failed to save session", err)
 		return nil, errors.ErrInternal
 	}
-	// 5. FINALIZACJA
 
+	// 7. FINALIZACJA I ZWRÓCENIE ODPOWIEDZI
 	return &http.RegisterDeviceResponse{
 		Success:      true,
 		AccessToken:  accessToken,
@@ -369,7 +384,7 @@ func (s *authService) RegisterDevice(ctx context.Context, userID uuid.UUID, sess
 			Email:       user.Email,
 			DisplayName: user.Username,
 			LastLogin:   time.Now().Format(time.RFC3339),
-			Roles:       []string{"USER"},
+			Roles:       []string{string(user.Role)},
 		},
 	}, nil
 }
@@ -639,12 +654,14 @@ func (s *authService) finalizeLogin(ctx context.Context, user *model.User, finge
 		return nil, errors.ErrInternal
 	}
 
-	err = s.cache.SetSession(ctx, sessionID, redis.UserSession{
+	sessionData := redis.UserSession{
 		UserID:      user.ID.String(),
 		Fingerprint: fingerprint,
-		Roles:       nil,
-	}, s.cfg.Session.TTL)
-	if err != nil {
+		Role:        string(user.Role),
+		Permissions: []string(user.Permissions),
+	}
+
+	if err := s.cache.SetSession(ctx, sessionID, sessionData, s.cfg.Session.TTL); err != nil {
 		return nil, errors.ErrInternal
 	}
 
@@ -657,7 +674,7 @@ func (s *authService) finalizeLogin(ctx context.Context, user *model.User, finge
 		TwoFARequired: false,
 		AccessToken:   accessToken,
 		RefreshToken:  refreshToken.Token,
-		UserID:        fmt.Sprint(user.ID),
+		UserID:        user.ID.String(),
 		ExpiresAt:     refreshToken.ExpiresAt.Unix(),
 	}, nil
 }

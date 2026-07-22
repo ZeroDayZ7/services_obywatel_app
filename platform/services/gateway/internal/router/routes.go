@@ -7,6 +7,7 @@ import (
 	"github.com/zerodayz7/platform/pkg/router/health"
 	"github.com/zerodayz7/platform/pkg/schemas"
 	"github.com/zerodayz7/platform/services/gateway/internal/di"
+	gwMiddleware "github.com/zerodayz7/platform/services/gateway/internal/middleware"
 )
 
 func SetupRoutes(app *fiber.App, container *di.Container) {
@@ -30,12 +31,12 @@ func SetupRoutes(app *fiber.App, container *di.Container) {
 	auth := services.Auth
 	app.Post("/auth/login",
 		pkgMiddleware.ValidateBody[schemas.LoginRequest](),
-		ReverseProxySecure(container, auth),
+		ReverseProxy(container, auth),
 	)
 
 	app.Post("/auth/verify-device",
 		pkgMiddleware.ValidateBody[schemas.VerifyDeviceRequest](),
-		ReverseProxySecure(container, auth),
+		ReverseProxy(container, auth),
 	)
 
 	app.Post("/auth/2fa-verify",
@@ -63,33 +64,39 @@ func SetupRoutes(app *fiber.App, container *di.Container) {
 		ReverseProxy(container, auth),
 	)
 
-	// --- AUTH SERVICE (Zabezpieczone) ---
-	app.Get("/auth/me", ReverseProxySecure(container, auth))
+	// --- AUTH SERVICE (Zabezpieczone - Użytkownik Zalogowany) ---
+	// ContextBuilder odczytuje token JWT i weryfikuje aktywną sesję w Redisie
+	authGroup := app.Group("", gwMiddleware.ContextBuilder(container))
 
-	// --- AUTH SERVICE (Zabezpieczone) ---
-	app.Post("/auth/register-device",
+	authGroup.Get("/auth/me", ReverseProxySecure(container, auth))
+	authGroup.Post("/auth/register-device",
 		pkgMiddleware.ValidateBody[schemas.RegisterDeviceRequest](),
 		ReverseProxySecure(container, auth),
 	)
-	app.Post("/auth/logout",
+	authGroup.Post("/auth/logout",
 		pkgMiddleware.ValidateBody[schemas.RefreshTokenRequest](),
 		ReverseProxySecure(container, auth),
 	)
-
-	app.Get("/user/sessions", ReverseProxySecure(container, auth))
-	app.Post("/user/sessions/terminate", ReverseProxySecure(container, auth))
+	authGroup.Get("/user/sessions", ReverseProxySecure(container, auth))
+	authGroup.Post("/user/sessions/terminate", ReverseProxySecure(container, auth))
 
 	// --- NOTIFICATIONS (Zabezpieczone) ---
 	notify := services.Notify
-	app.All("/notifications*", ReverseProxySecure(container, notify))
+	authGroup.All("/notifications*", ReverseProxySecure(container, notify))
 
-	// --- DOCUMENTS (Zabezpieczone) ---
+	// --- DOCUMENTS (Przykład RBAC: wymagana rola/permisja 'documents:read') ---
 	documents := services.Documents
-	app.All("/documents/*", ReverseProxySecure(container, documents))
+	authGroup.All("/documents/*",
+		gwMiddleware.RBACRequired("documents:read"),
+		ReverseProxySecure(container, documents),
+	)
 
-	// --- USERS SERVICE ---
+	// --- USERS SERVICE (Przykład RBAC: wymagana rola 'admin' lub permisja 'users:manage') ---
 	users := services.Users
-	app.All("/users/*", ReverseProxySecure(container, users))
+	authGroup.All("/users/*",
+		gwMiddleware.RBACRequired("users:manage"),
+		ReverseProxySecure(container, users),
+	)
 
 	// Fallback (404 / 405)
 	pkgRouter.SetupFallbackHandlers(app)
