@@ -12,6 +12,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/pkg/errors"
+	"github.com/zerodayz7/platform/pkg/rabbitmq"
 	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/schemas"
 	"github.com/zerodayz7/platform/pkg/shared"
@@ -47,15 +48,26 @@ type AuthService interface {
 // region struct
 type authService struct {
 	// Zmiana: używaj interfejsu z repozytorium
-	userRepo    repo.UserRepository
-	refreshRepo repo.RefreshTokenRepository
-	cache       *redis.Cache
-	cfg         *viper.Config
+	userRepo       repo.UserRepository
+	refreshRepo    repo.RefreshTokenRepository
+	cache          *redis.Cache
+	eventPublisher rabbitmq.EventPublisher
+	cfg            *viper.Config
 }
 
-func NewAuthService(userRepo repo.UserRepository, refreshRepo repo.RefreshTokenRepository, cache *redis.Cache, cfg *viper.Config) AuthService {
+func NewAuthService(
+	userRepo repo.UserRepository,
+	refreshRepo repo.RefreshTokenRepository,
+	cache *redis.Cache,
+	eventPublisher rabbitmq.EventPublisher,
+	cfg *viper.Config,
+) AuthService {
 	return &authService{
-		userRepo: userRepo, refreshRepo: refreshRepo, cache: cache, cfg: cfg,
+		userRepo:       userRepo,
+		refreshRepo:    refreshRepo,
+		cache:          cache,
+		eventPublisher: eventPublisher,
+		cfg:            cfg,
 	}
 }
 

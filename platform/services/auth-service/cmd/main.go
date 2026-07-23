@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 
+	"github.com/zerodayz7/platform/pkg/rabbitmq"
 	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/server"
 	"github.com/zerodayz7/platform/pkg/shared"
@@ -13,16 +14,20 @@ import (
 )
 
 func main() {
+	// 0. Bootstrap Logger
 	bootLog := shared.InitBootstrapLogger(os.Getenv("ENV"), false)
 	defer func() { _ = bootLog.Sync() }()
 
+	// 1. Config
 	if err := config.LoadConfigGlobal(); err != nil {
-		bootLog.Fatal("Config load failed", "error", err)
+		bootLog.Error("Config load failed", "error", err)
 		os.Exit(1)
 	}
 
+	// 2. Logger
 	log := shared.InitLogger(config.AppConfig.Server.Env, false)
 
+	// 3. Telemetry (Tracer)
 	if config.AppConfig.OTEL.Enabled {
 		cleanup := telemetry.InitTracer(
 			config.AppConfig.Server.AppName,
@@ -31,6 +36,7 @@ func main() {
 		defer cleanup()
 	}
 
+	// 4. Redis
 	redisClient, err := redis.New(redis.Config(config.AppConfig.Redis))
 	if err != nil {
 		log.Error("Redis initialization failed", "error", err)
@@ -48,14 +54,33 @@ func main() {
 		}
 	}()
 
+	// 5. Database
 	db, closeDB := config.MustInitDB(config.AppConfig.Database)
 	defer closeDB()
 
-	container := di.NewContainer(db, redisClient, &config.AppConfig)
+	// 6. RabbitMQ
+	var eventPublisher rabbitmq.EventPublisher
+
+	if config.AppConfig.RabbitMQ.Enabled {
+		log.Info("RabbitMQ is ENABLED. Connecting to broker...")
+		var err error
+		eventPublisher, err = rabbitmq.NewLivePublisher(config.AppConfig.RabbitMQ.GetURL())
+		if err != nil {
+			log.Error("RabbitMQ initialization failed", "error", err)
+			os.Exit(1)
+		}
+	} else {
+		log.Warn("RabbitMQ is DISABLED. Fallback to No-Op Driver.")
+		eventPublisher = rabbitmq.NewNoOpPublisher()
+	}
+
+	// 7. DI & App Setup
+	container := di.NewContainer(db, redisClient, eventPublisher, &config.AppConfig)
 	app := config.NewAuthApp(container)
 
 	router.SetupRoutes(app, container)
 
+	// 8. Run server
 	server.Run(
 		app,
 		server.Config{
@@ -67,8 +92,17 @@ func main() {
 		},
 		*log,
 		func() {
+			log.Info("Shutting down resources")
+
 			closeDB()
-			_ = redisClient.Close()
+
+			if err := redisClient.Close(); err != nil {
+				log.Error("Failed to close Redis client", "error", err)
+			}
+
+			if err := eventPublisher.Close(); err != nil {
+				log.Error("Failed to close RabbitMQ connection cleanly", "error", err)
+			}
 		},
 	)
 }
