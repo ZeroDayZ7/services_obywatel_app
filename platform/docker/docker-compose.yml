@@ -106,30 +106,7 @@ services:
     volumes:
       - redis_data:/data
 
-  # region pgadmin
-  # --- ADMINISTRATION TOOLS ---
-  pgadmin:
-    <<: *common-settings
-    image: dpage/pgadmin4:9.14
-    container_name: pgadmin-management
-    ports:
-      - "5050:80"
-    environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
-      PGADMIN_DEFAULT_PASSWORD_FILE: /run/secrets/pgadmin_root_pass
-      PGADMIN_CONFIG_ENHANCED_COOKIE_PROTECTION: "True"
-    secrets:
-      - pgadmin_root_pass
-    command: >
-      sh -c "export PGADMIN_DEFAULT_PASSWORD=$$(cat /run/secrets/pgadmin_root_pass) && 
-             /entrypoint.sh"
-    volumes:
-      - ./pgadmin_data:/var/lib/pgadmin
-    depends_on:
-      db-auth:
-        condition: service_healthy
-
-  # region rabbitmq
+    # region rabbitmq
   rabbitmq:
     <<: *common-settings
     image: rabbitmq:4.3.1-management
@@ -142,6 +119,32 @@ services:
       RABBITMQ_DEFAULT_PASS: "password"
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
+
+  # region ADMINISTRATION TOOLS
+  #
+  #
+  #
+  # region pgadmin
+  # pgadmin:
+  #   <<: *common-settings
+  #   image: dpage/pgadmin4:9.14
+  #   container_name: pgadmin-management
+  #   ports:
+  #     - "5050:80"
+  #   environment:
+  #     PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+  #     PGADMIN_DEFAULT_PASSWORD_FILE: /run/secrets/pgadmin_root_pass
+  #     PGADMIN_CONFIG_ENHANCED_COOKIE_PROTECTION: "True"
+  #   secrets:
+  #     - pgadmin_root_pass
+  #   command: >
+  #     sh -c "export PGADMIN_DEFAULT_PASSWORD=$$(cat /run/secrets/pgadmin_root_pass) &&
+  #            /entrypoint.sh"
+  #   volumes:
+  #     - ./pgadmin_data:/var/lib/pgadmin
+  #   depends_on:
+  #     db-auth:
+  #       condition: service_healthy
 
   # region otel-collector
   # # --- OBSERVABILITY ---

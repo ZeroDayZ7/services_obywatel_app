@@ -67,6 +67,8 @@ func SetupAuthRoutes(
 		h.VerifyDevice,
 	)
 
+	auth.Post("/unpair-device", h.UnpairDevice)
+
 	// ==========================
 	// RESET PASSWORD
 	// =========================

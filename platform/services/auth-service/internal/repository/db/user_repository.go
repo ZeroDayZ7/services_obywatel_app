@@ -22,6 +22,13 @@ func NewUserRepository(db *gorm.DB) *UserRepo {
 	return &UserRepo{db: db}
 }
 
+// Dodaj tę funkcję na końcu pliku UserRepo:
+func (r *UserRepo) DeleteDevice(ctx context.Context, userID uuid.UUID, fingerprint string) error {
+	return r.db.WithContext(ctx).
+		Where("user_id = ? AND device_fingerprint = ?", userID, fingerprint).
+		Delete(&model.UserDevice{}).Error
+}
+
 func (r *UserRepo) CreateUser(user *model.User) error {
 	return r.db.Create(user).Error
 }

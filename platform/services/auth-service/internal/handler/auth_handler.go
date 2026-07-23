@@ -248,3 +248,46 @@ func (h *AuthHandler) GetMe(c *fiber.Ctx) error {
 
 	return c.Status(fiber.StatusOK).JSON(userProfile)
 }
+
+// #region UNPAIR DEVICE
+func (h *AuthHandler) UnpairDevice(c *fiber.Ctx) error {
+	log := shared.GetLogger()
+
+	ctx, cancel := context.WithTimeout(c.UserContext(), 3*time.Second)
+	defer cancel()
+
+	rc := reqctx.MustFromFiber(c)
+	if rc.UserID == nil {
+		return apperr.SendAppError(c, apperr.ErrUnauthorized)
+	}
+
+	if rc.DeviceID == "" {
+		return apperr.SendAppError(c, apperr.ErrInvalidDeviceFingerprint)
+	}
+
+	// Opcjonalne parsowanie dodatkowych danych bezpieczeństwa z body (np. signature/timestamp)
+	var body schemas.UnpairDeviceRequest
+	if len(c.Body()) > 0 {
+		_ = c.BodyParser(&body) // Ignorujemy błąd, jeśli body jest puste (nie blokujemy operacji)
+	}
+
+	// Wywołanie logiki biznesowej w usłudze
+	err := h.authService.UnpairDevice(ctx, *rc.UserID, rc.DeviceID, rc.SessionID, body)
+	if err != nil {
+		log.WarnObj("Unpair device failed", map[string]any{
+			"user_id":   rc.UserID,
+			"device_id": rc.DeviceID,
+			"err":       err.Error(),
+		})
+		return apperr.SendAppError(c, err)
+	}
+
+	log.InfoMap("Device unpaired successfully", map[string]any{
+		"user_id":   rc.UserID,
+		"device_id": rc.DeviceID,
+	})
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message": "Device unpaired successfully",
+	})
+}

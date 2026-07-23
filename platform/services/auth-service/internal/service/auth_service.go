@@ -36,6 +36,7 @@ type AuthService interface {
 	RefreshToken(ctx context.Context, tokenStr string, fingerprint string) (*http.RefreshResponse, error)
 	VerifyDeviceSignature(ctx context.Context, userID, challenge, signature, fingerprint string) (*http.LoginResponse, error)
 	GetProfile(ctx context.Context, userID uuid.UUID) (*http.UserProfileResponse, error)
+	UnpairDevice(ctx context.Context, userID uuid.UUID, deviceFingerprint, sessionID string, req schemas.UnpairDeviceRequest) error
 	// Narzędzia JWT
 	CreateAccessToken(userID uuid.UUID, fingerprint string) (string, string, error)
 	CreateRefreshToken(userID uuid.UUID, fingerprint string) (*model.RefreshToken, error)
@@ -94,6 +95,37 @@ func (s *authService) GetProfile(ctx context.Context, userID uuid.UUID) (*http.U
 		Permissions: []string(user.Permissions),
 		LastLogin:   user.LastLogin.Format(time.RFC3339),
 	}, nil
+}
+
+// region UnpairDevice
+func (s *authService) UnpairDevice(ctx context.Context, userID uuid.UUID, deviceFingerprint, sessionID string, req schemas.UnpairDeviceRequest) error {
+	log := shared.GetLogger()
+
+	device, err := s.userRepo.GetDeviceByFingerprint(ctx, userID, deviceFingerprint)
+	if err != nil || device == nil {
+		log.WarnMap("UnpairDevice: device not found", map[string]any{
+			"user_id":     userID,
+			"fingerprint": deviceFingerprint,
+		})
+		return errors.ErrUntrustedDevice
+	}
+
+	if err := s.userRepo.DeleteDevice(ctx, userID, deviceFingerprint); err != nil {
+		log.ErrorObj("UnpairDevice: failed to delete device from DB", err)
+		return errors.ErrInternal
+	}
+
+	if err := s.refreshRepo.RevokeByFingerprint(ctx, userID, deviceFingerprint); err != nil {
+		log.WarnObj("UnpairDevice: failed to revoke refresh tokens", err)
+	}
+
+	if sessionID != "" {
+		if err := s.cache.DeleteSession(ctx, sessionID); err != nil {
+			log.WarnObj("UnpairDevice: failed to clear session cache", err)
+		}
+	}
+
+	return nil
 }
 
 // region VerifyDeviceSignature
