@@ -16,10 +16,10 @@ type UserDevice struct {
 	Platform            string         `gorm:"size:30"`
 	IsActive            bool           `gorm:"not null;default:true"`
 	IsVerified          bool           `gorm:"not null;default:false"`
+	LastIP              string         `gorm:"size:45"`
 	LastUsedAt          time.Time      `gorm:"autoUpdateTime"`
 	CreatedAt           time.Time      `gorm:"autoCreateTime"`
 	DeletedAt           gorm.DeletedAt `gorm:"index"`
-	LastIP              string         `gorm:"size:45"`
 
 	// Relacja
 	RefreshTokens []RefreshToken `gorm:"foreignKey:DeviceID"`
