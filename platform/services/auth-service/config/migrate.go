@@ -13,6 +13,8 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.RefreshToken{},
 		&model.UserDevice{},
 		&model.AvailablePermission{},
+		&model.UserAgreement{},
+		&model.UserPukCode{},
 	); err != nil {
 		return fmt.Errorf("failed to run migrations: %w", err)
 	}

@@ -63,6 +63,7 @@ type User struct {
 	// Relacje
 	Devices       []UserDevice   `gorm:"foreignKey:UserID"`
 	RefreshTokens []RefreshToken `gorm:"foreignKey:UserID"`
+	Agreement     *UserAgreement `gorm:"foreignKey:UserID"`
 }
 
 type AvailablePermission struct {
