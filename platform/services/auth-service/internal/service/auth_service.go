@@ -31,6 +31,7 @@ type AuthService interface {
 	Register(username, email, rawPassword string) (*model.User, error)
 	UpdatePassword(ctx context.Context, userID uuid.UUID, newPassword string) error
 	Verify2FA(ctx context.Context, token string, code []byte, fingerprint string, ip string) (*http.Verify2FAResponse, error)
+	Resend2FACode(ctx context.Context, email string, token string) error
 	Logout(ctx context.Context, userID uuid.UUID, sessionID string, fingerprint string) error
 	RegisterDevice(ctx context.Context, userID uuid.UUID, sessionID string, clientIP string, req schemas.RegisterDeviceRequest) (*http.RegisterDeviceResponse, error)
 	RefreshToken(ctx context.Context, tokenStr string, fingerprint string) (*http.RefreshResponse, error)
@@ -554,6 +555,58 @@ func (s *authService) Verify2FA(ctx context.Context, token string, code []byte, 
 	// log.Printf("[DEBUG] Full JSON: %s", string(responseJson))
 
 	return response, nil
+}
+
+// #region RESEND 2FA
+func (s *authService) Resend2FACode(ctx context.Context, email string, token string) error {
+	log := shared.GetLogger()
+
+	// 1. Pobieramy istniejącą sesję 2FA
+	session, err := s.cache.Get2FASession(ctx, token)
+	if err != nil || session == nil {
+		log.WarnMap("Resend2FA: session not found or expired", map[string]any{"token": token, "email": email})
+		return errors.ErrSessionExpired
+	}
+
+	// 2. Weryfikacja zgodności adresu e-mail
+	if !strings.EqualFold(session.Email, email) {
+		log.WarnMap("SECURITY ALERT: Resend2FA email mismatch", map[string]any{
+			"expected_email": session.Email,
+			"provided_email": email,
+		})
+		return errors.ErrInvalidCredentials
+	}
+
+	// 3. Generujemy nowy bezpieczny kod OTP
+	code, err := shared.GenerateSecureOTP()
+	if err != nil {
+		log.ErrorObj("Resend2FA: failed to generate OTP", err)
+		return errors.ErrInternal
+	}
+
+	// 4. Hashujemy kod przed zapisem w pamięci podręcznej (przekazujemy string)
+	hashedCode, err := security.HashPassword(code)
+	if err != nil {
+		log.ErrorObj("Resend2FA: failed to hash OTP", err)
+		return errors.ErrInternal
+	}
+
+	// 5. Aktualizujemy podmieniony hash w sesji
+	session.CodeHash = hashedCode
+
+	// 6. Odświeżamy sesję 2FA w Redis (z resetem TTL na kolejne 5 minut)
+	if err := s.cache.Set2FASession(ctx, token, *session, 5*time.Minute); err != nil {
+		log.ErrorObj("Resend2FA: failed to update 2FA session in Redis", err)
+		return errors.ErrInternal
+	}
+
+	log.DebugInfo("Resent 2FA code successfully", map[string]any{
+		"email": email,
+		"token": token,
+		"code":  code,
+	})
+
+	return nil
 }
 
 // region AttemptLogin

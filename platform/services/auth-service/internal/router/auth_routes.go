@@ -33,6 +33,11 @@ func SetupAuthRoutes(
 		h.Verify2FA,
 	)
 
+	auth.Post("/2fa-resend",
+		middleware.ValidateBody[schemas.ResendTwoFARequest](),
+		h.Resend2FA,
+	)
+
 	auth.Post("/register",
 		middleware.ValidateBody[schemas.RegisterRequest](),
 		h.Register,

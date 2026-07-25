@@ -291,3 +291,27 @@ func (h *AuthHandler) UnpairDevice(c *fiber.Ctx) error {
 		"message": "Device unpaired successfully",
 	})
 }
+
+// #region RESEND 2 FA
+func (h *AuthHandler) Resend2FA(c *fiber.Ctx) error {
+	log := shared.GetLogger()
+	ctx, cancel := context.WithTimeout(c.Context(), 3*time.Second)
+	defer cancel()
+
+	body := c.Locals("validatedBody").(schemas.ResendTwoFARequest)
+
+	err := h.authService.Resend2FACode(
+		ctx,
+		body.Email,
+		body.Token,
+	)
+	if err != nil {
+		log.WarnObj("Resend 2FA failed", map[string]any{"email": body.Email, "err": err.Error()})
+		return apperr.SendAppError(c, err)
+	}
+
+	log.InfoMap("2FA code resent successfully", map[string]any{"email": body.Email})
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message": "2FA code sent successfully",
+	})
+}

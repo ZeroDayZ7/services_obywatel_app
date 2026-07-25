@@ -25,6 +25,11 @@ type TwoFARequest struct {
 	Token string `json:"token" validate:"required"`
 }
 
+type ResendTwoFARequest struct {
+	Email string `json:"email" validate:"required,email"`
+	Token string `json:"token" validate:"required"`
+}
+
 type RefreshTokenRequest struct {
 	RefreshToken string `json:"refresh_token" validate:"required"`
 }

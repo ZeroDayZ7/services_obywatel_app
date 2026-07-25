@@ -42,6 +42,11 @@ func SetupRoutes(app *fiber.App, container *di.Container) {
 		ReverseProxy(container, auth),
 	)
 
+	app.Post("/auth/2fa-resend",
+		pkgMiddleware.ValidateBody[schemas.ResendTwoFARequest](),
+		ReverseProxy(container, auth),
+	)
+
 	app.Post("/auth/refresh",
 		pkgMiddleware.ValidateBody[schemas.RefreshTokenRequest](),
 		ReverseProxy(container, auth),
