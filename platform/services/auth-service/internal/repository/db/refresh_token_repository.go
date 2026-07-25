@@ -80,7 +80,7 @@ func (r *RefreshTokenRepository) GetSessions(ctx context.Context, userID uuid.UU
 	return results, err
 }
 
-func (r *RefreshTokenRepository) RevokeSession(ctx context.Context, userID uuid.UUID, sessionID uint) error {
+func (r *RefreshTokenRepository) RevokeSession(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID) error { // <-- zmiana uint na uuid.UUID
 	return r.DB.WithContext(ctx).
 		Model(&model.RefreshToken{}).
 		Where("id = ? AND user_id = ?", sessionID, userID).

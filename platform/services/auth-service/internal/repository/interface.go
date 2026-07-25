@@ -17,7 +17,7 @@ type RefreshTokenRepository interface {
 	RevokeByFingerprint(ctx context.Context, userID uuid.UUID, fingerprint string) error
 	RevokeAllUserTokens(ctx context.Context, userID uuid.UUID) error
 	GetSessions(ctx context.Context, userID uuid.UUID) ([]model.UserSessionDTO, error)
-	RevokeSession(ctx context.Context, userID uuid.UUID, sessionID uint) error
+	RevokeSession(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID) error
 }
 
 type UserRepository interface {

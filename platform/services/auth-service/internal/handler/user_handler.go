@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/pkg/constants"
 	"github.com/zerodayz7/platform/pkg/errors"
 	"github.com/zerodayz7/platform/pkg/utils"
@@ -13,13 +14,14 @@ import (
 )
 
 type UserHandler struct {
-	userService service.UserService // Korzystamy z INTERFEJSU (bez *)
+	userService service.UserService
 }
 
 func NewUserHandler(userService service.UserService) *UserHandler {
 	return &UserHandler{userService: userService}
 }
 
+// region GetSessions
 func (h *UserHandler) GetSessions(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(c.UserContext(), 3*time.Second)
 	defer cancel()
@@ -31,16 +33,17 @@ func (h *UserHandler) GetSessions(c *fiber.Ctx) error {
 	}
 	fingerprint := c.Get(constants.HeaderDeviceFingerprint)
 
-	// 2. Wywołanie serwisu (Przekazujemy fingerprint jako parametr biznesowy)
+	// 2. Wywołanie serwisu
 	sessions, err := h.userService.GetSessions(ctx, userID, fingerprint)
 	if err != nil {
 		return errors.SendAppError(c, errors.ErrInternal)
 	}
 
-	// 3. Prosta odpowiedź (Serwis zwrócił już gotowe dane)
+	// 3. Odpowiedź
 	return c.JSON(sessions)
 }
 
+// region TerminateSession
 // POST /user/sessions/terminate
 func (h *UserHandler) TerminateSession(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(c.UserContext(), 3*time.Second)
@@ -52,14 +55,13 @@ func (h *UserHandler) TerminateSession(c *fiber.Ctx) error {
 	}
 
 	type request struct {
-		SessionID uint `json:"session_id"`
+		SessionID uuid.UUID `json:"session_id"` // <-- zmiana z uint na uuid.UUID
 	}
 	var req request
 	if err := c.BodyParser(&req); err != nil {
 		return errors.SendAppError(c, errors.ErrInvalidRequest)
 	}
 
-	// Wywołanie serwisu (przekazujemy już oczyszczone typy uint i UUID)
 	if err := h.userService.RevokeSession(ctx, userID, req.SessionID); err != nil {
 		return errors.SendAppError(c, errors.ErrInternal)
 	}

@@ -9,9 +9,8 @@ import (
 )
 
 type UserService interface {
-	// Dodano fingerprint jako trzeci parametr
 	GetSessions(ctx context.Context, userID uuid.UUID, fingerprint string) ([]model.UserSessionDTO, error)
-	RevokeSession(ctx context.Context, userID uuid.UUID, sessionID uint) error
+	RevokeSession(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID) error // <-- zmiana z uint na uuid.UUID
 }
 
 type userService struct {
@@ -26,9 +25,8 @@ func NewUserService(uRepo repository.UserRepository, rRepo repository.RefreshTok
 	}
 }
 
-// Implementacja uwzględniająca fingerprint
 func (s *userService) GetSessions(ctx context.Context, userID uuid.UUID, fingerprint string) ([]model.UserSessionDTO, error) {
-	sessions, err := s.refreshRepo.GetSessions(ctx, userID) // Wywołanie repo (2 argumenty)
+	sessions, err := s.refreshRepo.GetSessions(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -41,6 +39,6 @@ func (s *userService) GetSessions(ctx context.Context, userID uuid.UUID, fingerp
 	return sessions, nil
 }
 
-func (s *userService) RevokeSession(ctx context.Context, userID uuid.UUID, sessionID uint) error {
+func (s *userService) RevokeSession(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID) error { // <-- zmiana z uint na uuid.UUID
 	return s.refreshRepo.RevokeSession(ctx, userID, sessionID)
 }
