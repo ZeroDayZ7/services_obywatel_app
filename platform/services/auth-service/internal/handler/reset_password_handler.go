@@ -72,41 +72,23 @@ func (h *ResetHandler) VerifyResetCode(c *fiber.Ctx) error {
 
 // #region FINAL RESET PASSWORD
 func (h *ResetHandler) FinalizeReset(c *fiber.Ctx) error {
-	// 1. Pobranie zwalidowanych danych z Locals (zakładając użycie Twojego middleware)
-	// Jeśli nie używasz middleware, użyj: req := new(schemas.FinalizeResetRequest); c.BodyParser(req)
-	req, ok := c.Locals("validatedBody").(*schemas.FinalizeResetRequest)
+	req, ok := c.Locals("validatedBody").(*schemas.ResetPasswordFinalRequest)
 	if !ok {
-		// Fallback jeśli middleware nie dostarczył danych
-		req = new(schemas.FinalizeResetRequest)
+		req = new(schemas.ResetPasswordFinalRequest)
 		if err := c.BodyParser(req); err != nil {
 			return errors.SendAppError(c, errors.ErrInvalidRequest)
 		}
 	}
 
-	// 2. Mapowanie danych urządzenia na DTO serwisu
-	device := service.DeviceInfo{
-		Fingerprint: req.Fingerprint,
-		PublicKey:   req.PublicKey,
-		DeviceName:  req.DeviceName,
-		Platform:    req.Platform,
-		IP:          c.IP(), // Pobieramy IP bezpośrednio z kontekstu Fiber
-	}
-
-	// 3. Wywołanie logiki biznesowej w serwisie
-	// Przekazujemy context, token, nowe hasło, podpis oraz dane urządzenia
 	err := h.resetService.FinalizeReset(
-		c.Context(),
+		c.UserContext(),
 		req.Token,
-		req.Password,
-		req.Signature,
-		device,
+		req.NewPassword,
 	)
-	// 4. Obsługa błędów z serwisu
 	if err != nil {
 		return errors.SendAppError(c, err)
 	}
 
-	// 5. Sukces
 	return c.JSON(fiber.Map{
 		"success": true,
 		"message": "Password has been reset successfully",

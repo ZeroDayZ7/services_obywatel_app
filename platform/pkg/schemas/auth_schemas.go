@@ -50,8 +50,8 @@ type ResetPasswordFinalRequest struct {
 	Token       string `json:"reset_token" validate:"required"`
 	Code        string `json:"code" validate:"required,len=6"`
 	NewPassword string `json:"new_password" validate:"required,min=8"`
-	Signature   string `json:"signature" validate:"required"`
-	Fingerprint string `json:"fingerprint" validate:"required"`
+	Signature   string `json:"signature"`
+	Fingerprint string `json:"fingerprint"`
 	DeviceName  string `json:"device_name"`
 	Platform    string `json:"platform"`
 	PublicKey   string `json:"public_key"`
