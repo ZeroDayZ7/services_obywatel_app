@@ -40,7 +40,7 @@ type AuthService interface {
 	UnpairDevice(ctx context.Context, userID uuid.UUID, deviceFingerprint, sessionID string, req schemas.UnpairDeviceRequest) error
 	// Narzędzia JWT
 	CreateAccessToken(userID uuid.UUID, fingerprint string) (string, string, error)
-	CreateRefreshToken(userID uuid.UUID, fingerprint string) (*model.RefreshToken, error)
+	CreateRefreshToken(userID uuid.UUID, fingerprint string, deviceID *uuid.UUID) (*model.RefreshToken, error)
 	GetRefreshToken(token string) (*model.RefreshToken, error)
 	RevokeRefreshToken(token string) error
 	// Metody specyficzne dla logiki logowania
@@ -193,7 +193,7 @@ func (s *authService) VerifyDeviceSignature(ctx context.Context, userIDStr, sess
 		return nil, errors.ErrInternal
 	}
 
-	refreshToken, err := s.CreateRefreshToken(user.ID, fingerprint)
+	refreshToken, err := s.CreateRefreshToken(user.ID, fingerprint, nil)
 	if err != nil {
 		return nil, errors.ErrInternal
 	}
@@ -224,7 +224,7 @@ func (s *authService) VerifyDeviceSignature(ctx context.Context, userIDStr, sess
 func (s *authService) RefreshToken(ctx context.Context, tokenStr string, fingerprint string) (*http.RefreshResponse, error) {
 	log := shared.GetLogger()
 
-	// 1. Hashowanie tokena wejściowego do wyszukania w DB
+	// 1. Hashowanie tokena
 	hash := sha256.Sum256([]byte(tokenStr))
 	hashedTokenHex := hex.EncodeToString(hash[:])
 
@@ -255,7 +255,7 @@ func (s *authService) RefreshToken(ctx context.Context, tokenStr string, fingerp
 		return nil, errors.ErrUntrustedDevice
 	}
 
-	// 5. Pobranie użytkownika i weryfikacja statusu konta (Banned/Locked)
+	// 5. Pobranie użytkownika i weryfikacja statusu konta
 	user, err := s.userRepo.GetByID(ctx, rt.UserID)
 	if err != nil || user == nil {
 		return nil, errors.ErrUserNotFound
@@ -269,25 +269,25 @@ func (s *authService) RefreshToken(ctx context.Context, tokenStr string, fingerp
 		return nil, err
 	}
 
-	// 6. ROTACJA TOKENÓW: Unieważniamy użyty token w bazie
+	// 6. ROTACJA TOKENÓW: Unieważniamy stary token
 	rt.Revoked = true
 	if err := s.refreshRepo.Update(rt); err != nil {
 		log.ErrorObj("Failed to revoke old refresh token", err)
 		return nil, errors.ErrInternal
 	}
 
-	// 7. Generowanie NOWEGO Access Tokena i NOWEGO Refresh Tokena
+	// 7. Generowanie NOWYCH tokenów (przypisujemy zweryfikowany device.ID)
 	accessToken, newSessionID, err := s.CreateAccessToken(user.ID, fingerprint)
 	if err != nil {
 		return nil, errors.ErrInternal
 	}
 
-	newRefreshToken, err := s.CreateRefreshToken(user.ID, fingerprint)
+	newRefreshToken, err := s.CreateRefreshToken(user.ID, fingerprint, &device.ID)
 	if err != nil {
 		return nil, errors.ErrInternal
 	}
 
-	// 8. Zapis rozdzielonej roli i uprawnień w sesji Redis
+	// 8. Zapis sesji w Redis
 	sessionData := redis.UserSession{
 		UserID:      user.ID.String(),
 		Fingerprint: fingerprint,
@@ -300,7 +300,6 @@ func (s *authService) RefreshToken(ctx context.Context, tokenStr string, fingerp
 		return nil, errors.ErrInternal
 	}
 
-	// Zwracamy nowy AccessToken oraz NOWY surowy RefreshToken
 	return &http.RefreshResponse{
 		AccessToken:  accessToken,
 		RefreshToken: newRefreshToken.Token,
@@ -312,7 +311,24 @@ func (s *authService) RefreshToken(ctx context.Context, tokenStr string, fingerp
 func (s *authService) RegisterDevice(ctx context.Context, userID uuid.UUID, sessionID string, clientIP string, req schemas.RegisterDeviceRequest) (*http.RegisterDeviceResponse, error) {
 	log := shared.GetLogger()
 
-	// 1. WERYFIKACJA KRYPTOGRAFICZNA
+	// 1. WERYFIKACJA LOGIKI BIZNESOWEJ I SESJI SETUP (NAJPIERW, PRZED ZAPISEM W DB)
+	if sessionID != "" {
+		setupSess, sessErr := s.cache.GetSetupSession(ctx, sessionID)
+		if sessErr != nil || setupSess == nil {
+			log.WarnMap("Setup session not found or expired", map[string]any{"sid": sessionID})
+			return nil, errors.ErrSessionExpired
+		}
+
+		if setupSess.Fingerprint != req.DeviceFingerprint {
+			log.WarnMap("Fingerprint mismatch during registration", map[string]any{
+				"expected": setupSess.Fingerprint,
+				"received": req.DeviceFingerprint,
+			})
+			return nil, errors.ErrInvalidDeviceFingerprint
+		}
+	}
+
+	// 2. WERYFIKACJA KRYPTOGRAFICZNA (Challenge / ED25519)
 	storedChallenge, err := s.cache.GetChallenge(ctx, sessionID)
 	if err != nil {
 		log.WarnMap("Challenge expired or not found", map[string]any{
@@ -322,65 +338,22 @@ func (s *authService) RegisterDevice(ctx context.Context, userID uuid.UUID, sess
 		return nil, errors.ErrSessionExpired
 	}
 
-	// Dekodujemy klucz publiczny
 	pubKeyBytes, err := base64.StdEncoding.DecodeString(req.PublicKey)
 	if err != nil || len(pubKeyBytes) != ed25519.PublicKeySize {
 		return nil, errors.ErrInvalidPairingData
 	}
 
-	// Dekodujemy sygnaturę
 	sigBytes, err := base64.StdEncoding.DecodeString(req.Signature)
 	if err != nil {
 		return nil, errors.ErrInvalidPairingData
 	}
 
-	// Weryfikacja podpisu
 	if !ed25519.Verify(pubKeyBytes, []byte(storedChallenge), sigBytes) {
 		log.ErrorMap("Kryptograficzna weryfikacja urządzenia nieudana", map[string]any{"user_id": userID})
 		return nil, errors.ErrVerificationFailed
 	}
 
-	// 2. ZAPIS URZĄDZENIA W BAZIE DANYCH
-	err = s.userRepo.SaveDevice(ctx, &model.UserDevice{
-		UserID:              userID,
-		DeviceFingerprint:   req.DeviceFingerprint,
-		PublicKey:           req.PublicKey,
-		DeviceNameEncrypted: req.DeviceNameEncrypted,
-		Platform:            req.Platform,
-		IsVerified:          true,
-		IsActive:            true,
-		LastIP:              clientIP,
-	})
-	if err != nil {
-		log.ErrorObj("Failed to save device", err)
-		return nil, errors.ErrInternal
-	}
-
-	// 3. SYNCHRONIZACJA (Logika biznesowa - Zamiana Setup na Full Session)
-	if sessionID != "" {
-		// Pobieramy sesję z prefixu SETUP (bo tam trafiła po 2FA)
-		setupSess, sessErr := s.cache.GetSetupSession(ctx, sessionID)
-		if sessErr != nil || setupSess == nil {
-			log.WarnMap("Setup session not found or expired", map[string]any{"sid": sessionID})
-			return nil, errors.ErrSessionExpired
-		}
-
-		// Weryfikacja czy Fingerprint urządzenia zgadza się z tym z etapu logowania
-		if setupSess.Fingerprint != req.DeviceFingerprint {
-			log.WarnMap("Fingerprint mismatch during registration", map[string]any{
-				"expected": setupSess.Fingerprint,
-				"received": req.DeviceFingerprint,
-			})
-			return nil, errors.ErrInvalidDeviceFingerprint
-		}
-
-		// Usuwamy sesję tymczasową, bo za chwilę stworzymy pełną sesję (newSID)
-		_ = s.cache.DeleteChallenge(ctx, sessionID)
-		_ = s.cache.DeleteSetupSession(ctx, sessionID)
-		log.DebugInfo("Setup session cleared, upgrading to full session", sessionID)
-	}
-
-	// 4. POBRANIE PEŁNYCH DANYCH UŻYTKOWNIKA I WERYFIKACJA STATUSU
+	// 3. POBRANIE PEŁNYCH DANYCH UŻYTKOWNIKA I WERYFIKACJA STATUSU KONTA
 	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil || user == nil {
 		return nil, errors.ErrUserNotFound
@@ -394,18 +367,43 @@ func (s *authService) RegisterDevice(ctx context.Context, userID uuid.UUID, sess
 		return nil, err
 	}
 
-	// 5. GENEROWANIE NOWYCH POŚWIADCZEŃ
+	// 4. ZAPIS LUB AKTUALIZACJA URZĄDZENIA W BAZIE DANYCH
+	device := &model.UserDevice{
+		UserID:              userID,
+		DeviceFingerprint:   req.DeviceFingerprint,
+		PublicKey:           req.PublicKey,
+		DeviceNameEncrypted: req.DeviceNameEncrypted,
+		Platform:            req.Platform,
+		IsVerified:          true,
+		IsActive:            true,
+		LastIP:              clientIP,
+	}
+
+	if err := s.userRepo.SaveDevice(ctx, device); err != nil {
+		log.ErrorObj("Failed to save device", err)
+		return nil, errors.ErrInternal
+	}
+
+	// Posprzątaj sesję tymczasową po pomyślnym zapisie w DB
+	if sessionID != "" {
+		_ = s.cache.DeleteChallenge(ctx, sessionID)
+		_ = s.cache.DeleteSetupSession(ctx, sessionID)
+		log.DebugInfo("Setup session cleared, upgrading to full session", sessionID)
+	}
+
+	// 5. GENEROWANIE POŚWIADCZEŃ (Z przypisanym DeviceID do RefreshTokena)
 	accessToken, newSID, err := s.CreateAccessToken(userID, req.DeviceFingerprint)
 	if err != nil {
 		return nil, errors.ErrInternal
 	}
 
-	refreshToken, err := s.CreateRefreshToken(userID, req.DeviceFingerprint)
+	// Przekazujemy &device.ID do nowego tokena
+	refreshToken, err := s.CreateRefreshToken(userID, req.DeviceFingerprint, &device.ID)
 	if err != nil {
 		return nil, errors.ErrInternal
 	}
 
-	// 6. ZAPIS SESJI W REDISIE Z ROZDZIELONĄ ROLĄ I PERMISJAMI
+	// 6. ZAPIS SESJI W REDIS
 	sessionData := redis.UserSession{
 		UserID:      user.ID.String(),
 		Fingerprint: req.DeviceFingerprint,
@@ -418,7 +416,7 @@ func (s *authService) RegisterDevice(ctx context.Context, userID uuid.UUID, sess
 		return nil, errors.ErrInternal
 	}
 
-	// 7. FINALIZACJA I ZWRÓCENIE ODPOWIEDZI
+	// 7. FINALIZACJA
 	return &http.RegisterDeviceResponse{
 		Success:      true,
 		AccessToken:  accessToken,
@@ -762,7 +760,7 @@ func (s *authService) finalizeLogin(ctx context.Context, user *model.User, finge
 		return nil, errors.ErrInternal
 	}
 
-	refreshToken, err := s.CreateRefreshToken(user.ID, fingerprint)
+	refreshToken, err := s.CreateRefreshToken(user.ID, fingerprint, nil)
 	if err != nil {
 		return nil, errors.ErrInternal
 	}
@@ -825,21 +823,29 @@ func (s *authService) CreateSetupToken(userID uuid.UUID, fingerprint string) (st
 }
 
 // region CreateRefreshToken
-func (s *authService) CreateRefreshToken(userID uuid.UUID, fingerprint string) (*model.RefreshToken, error) {
-	rawToken, _ := security.GenerateRefreshToken()
+func (s *authService) CreateRefreshToken(userID uuid.UUID, fingerprint string, deviceID *uuid.UUID) (*model.RefreshToken, error) {
+	rawToken, err := security.GenerateRefreshToken()
+	if err != nil {
+		return nil, err
+	}
+
 	hash := sha256.Sum256([]byte(rawToken))
 	hashedTokenHex := hex.EncodeToString(hash[:])
 
 	rt := &model.RefreshToken{
 		UserID:            userID,
-		Token:             hashedTokenHex,
+		DeviceID:          deviceID,
 		DeviceFingerprint: fingerprint,
+		Token:             hashedTokenHex,
 		ExpiresAt:         time.Now().Add(s.cfg.JWT.RefreshTTL),
+		Revoked:           false,
 	}
 
 	if err := s.refreshRepo.Save(rt); err != nil {
 		return nil, err
 	}
+
+	// Zwracamy obiekt z niezhaszowanym tokenem dla klienta
 	rt.Token = rawToken
 	return rt, nil
 }
