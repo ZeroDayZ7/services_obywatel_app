@@ -229,3 +229,89 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 
 	return c.Status(fiber.StatusCreated).JSON(response)
 }
+
+// #region GET ME
+func (h *AuthHandler) GetMe(c *fiber.Ctx) error {
+	ctx, cancel := context.WithTimeout(c.UserContext(), 2*time.Second)
+	defer cancel()
+
+	rc := reqctx.MustFromFiber(c)
+	if rc.UserID == nil {
+		return apperr.SendAppError(c, apperr.ErrUnauthorized)
+	}
+
+	// Wywołujemy serwis pobierający dane profilu / aktywnej sesji
+	userProfile, err := h.authService.GetProfile(ctx, *rc.UserID)
+	if err != nil {
+		return apperr.SendAppError(c, err)
+	}
+
+	return c.Status(fiber.StatusOK).JSON(userProfile)
+}
+
+// #region UNPAIR DEVICE
+func (h *AuthHandler) UnpairDevice(c *fiber.Ctx) error {
+	log := shared.GetLogger()
+
+	ctx, cancel := context.WithTimeout(c.UserContext(), 3*time.Second)
+	defer cancel()
+
+	rc := reqctx.MustFromFiber(c)
+	if rc.UserID == nil {
+		return apperr.SendAppError(c, apperr.ErrUnauthorized)
+	}
+
+	if rc.DeviceID == "" {
+		return apperr.SendAppError(c, apperr.ErrInvalidDeviceFingerprint)
+	}
+
+	// Opcjonalne parsowanie dodatkowych danych bezpieczeństwa z body (np. signature/timestamp)
+	var body schemas.UnpairDeviceRequest
+	if len(c.Body()) > 0 {
+		_ = c.BodyParser(&body) // Ignorujemy błąd, jeśli body jest puste (nie blokujemy operacji)
+	}
+
+	// Wywołanie logiki biznesowej w usłudze
+	err := h.authService.UnpairDevice(ctx, *rc.UserID, rc.DeviceID, rc.SessionID, body)
+	if err != nil {
+		log.WarnObj("Unpair device failed", map[string]any{
+			"user_id":   rc.UserID,
+			"device_id": rc.DeviceID,
+			"err":       err.Error(),
+		})
+		return apperr.SendAppError(c, err)
+	}
+
+	log.InfoMap("Device unpaired successfully", map[string]any{
+		"user_id":   rc.UserID,
+		"device_id": rc.DeviceID,
+	})
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message": "Device unpaired successfully",
+	})
+}
+
+// #region RESEND 2 FA
+func (h *AuthHandler) Resend2FA(c *fiber.Ctx) error {
+	log := shared.GetLogger()
+	ctx, cancel := context.WithTimeout(c.Context(), 3*time.Second)
+	defer cancel()
+
+	body := c.Locals("validatedBody").(schemas.ResendTwoFARequest)
+
+	err := h.authService.Resend2FACode(
+		ctx,
+		body.Email,
+		body.Token,
+	)
+	if err != nil {
+		log.WarnObj("Resend 2FA failed", map[string]any{"email": body.Email, "err": err.Error()})
+		return apperr.SendAppError(c, err)
+	}
+
+	log.InfoMap("2FA code resent successfully", map[string]any{"email": body.Email})
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message": "2FA code sent successfully",
+	})
+}

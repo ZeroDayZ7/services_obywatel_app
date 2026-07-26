@@ -1,9 +1,13 @@
 package http
 
-import "time"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 type SessionResponse struct {
-	ID        uint       `json:"id"`
+	ID        uuid.UUID  `json:"id"`
 	Device    string     `json:"device_name"`
 	Platform  string     `json:"platform"`
 	IsCurrent bool       `json:"is_current"`

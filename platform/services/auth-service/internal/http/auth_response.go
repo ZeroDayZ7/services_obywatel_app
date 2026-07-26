@@ -14,6 +14,17 @@ type LoginResponse struct {
 	ExpiresAt     int64  `json:"expires_at,omitempty"`
 }
 
+// UserProfileResponse defines the current authenticated user session data returned by /auth/me.
+type UserProfileResponse struct {
+	UserID      string   `json:"user_id"`
+	Email       string   `json:"email"`
+	DisplayName string   `json:"display_name"`
+	Status      string   `json:"status"`
+	Role        string   `json:"role"`
+	Permissions []string `json:"permissions"`
+	LastLogin   string   `json:"last_login"`
+}
+
 // Verify2FAResponse defines the challenge and access data returned after successful 2FA verification.
 type Verify2FAResponse struct {
 	Success    bool   `json:"success"`

@@ -11,6 +11,11 @@ type LoginRequest struct {
 	Password []byte `json:"password" validate:"required"`
 }
 
+type UnpairDeviceRequest struct {
+	Signature string `json:"signature,omitempty"`
+	Timestamp int64  `json:"timestamp,omitempty"`
+}
+
 type VerifyDeviceRequest struct {
 	Signature string `json:"signature" validate:"required"`
 }
@@ -20,14 +25,20 @@ type TwoFARequest struct {
 	Token string `json:"token" validate:"required"`
 }
 
+type ResendTwoFARequest struct {
+	Email string `json:"email" validate:"required,email"`
+	Token string `json:"token" validate:"required"`
+}
+
 type RefreshTokenRequest struct {
 	RefreshToken string `json:"refresh_token" validate:"required"`
 }
 
 // ===== Reset Password =====
 type ResetPasswordRequest struct {
-	Value  string `json:"value" validate:"required,email"`
-	Method string `json:"method"`
+	AccountIdentifier string `json:"account_identifier" validate:"required"`
+	Value             string `json:"value" validate:"required,email"`
+	Method            string `json:"method" validate:"required,oneof=email sms"`
 }
 
 type ResetCodeVerifyRequest struct {
@@ -39,8 +50,8 @@ type ResetPasswordFinalRequest struct {
 	Token       string `json:"reset_token" validate:"required"`
 	Code        string `json:"code" validate:"required,len=6"`
 	NewPassword string `json:"new_password" validate:"required,min=8"`
-	Signature   string `json:"signature" validate:"required"`
-	Fingerprint string `json:"fingerprint" validate:"required"`
+	Signature   string `json:"signature"`
+	Fingerprint string `json:"fingerprint"`
 	DeviceName  string `json:"device_name"`
 	Platform    string `json:"platform"`
 	PublicKey   string `json:"public_key"`

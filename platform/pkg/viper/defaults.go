@@ -73,4 +73,11 @@ func SetSharedDefaults(serviceName string) {
 	viper.SetDefault("INTERNAL_HMAC_SECRET", "")
 	viper.SetDefault("INTERNAL_ENCRYPTION_KEY", "")
 	viper.SetDefault("INTERNAL_HASH_SALT", "")
+
+	viper.SetDefault("RABBITMQ_ENABLED", false)
+	viper.SetDefault("RABBITMQ_HOST", "127.0.0.1")
+	viper.SetDefault("RABBITMQ_PORT", 5672)
+	viper.SetDefault("RABBITMQ_USER", "admin")
+	viper.SetDefault("RABBITMQ_PASSWORD", "csof_password")
+	viper.SetDefault("RABBITMQ_VHOST", "/")
 }

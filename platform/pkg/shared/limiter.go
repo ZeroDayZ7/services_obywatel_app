@@ -52,10 +52,10 @@ func createLimiter(group LimitGroup, storage fiber.Storage) fiber.Handler {
 		Window time.Duration
 	}{
 		LimitGlobal:        {Max: 100, Window: 60 * time.Second},
-		LimitAuth:          {Max: 5, Window: 60 * time.Second},
+		LimitAuth:          {Max: 20, Window: 60 * time.Second},
 		LimitHealth:        {Max: 50, Window: 30 * time.Second},
 		LimitAudit:         {Max: 50, Window: 1 * time.Minute},
-		LimitReset:         {Max: 3, Window: 1 * time.Hour},
+		LimitReset:         {Max: 10, Window: 10 * time.Minute},
 		LimitNotifications: {Max: 30, Window: 1 * time.Minute},
 	}
 

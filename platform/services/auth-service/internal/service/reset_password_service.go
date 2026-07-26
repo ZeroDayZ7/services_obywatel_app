@@ -10,19 +10,20 @@ import (
 	"github.com/zerodayz7/platform/pkg/errors"
 	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/shared"
-	"github.com/zerodayz7/platform/services/auth-service/internal/model"
 	"github.com/zerodayz7/platform/services/auth-service/internal/repository"
+	"github.com/zerodayz7/platform/services/auth-service/internal/shared/security"
 	"golang.org/x/crypto/bcrypt"
 )
 
 type ResetSession struct {
-	UserID    string `json:"user_id"`
-	Email     string `json:"email"`
-	CodeHash  string `json:"code"`
-	Token     string `json:"token"`
-	Challenge string `json:"challenge"`
-	Attempts  int    `json:"attempts"`
-	Verified  bool   `json:"verified"`
+	UserID          string `json:"user_id"`
+	Email           string `json:"email"`
+	AgreementNumber string `json:"agreement_number"`
+	CodeHash        string `json:"code"`
+	Token           string `json:"token"`
+	Challenge       string `json:"challenge"`
+	Attempts        int    `json:"attempts"`
+	Verified        bool   `json:"verified"`
 }
 
 type DeviceInfo struct {
@@ -33,22 +34,15 @@ type DeviceInfo struct {
 	IP          string
 }
 
+// region interface
 type PasswordResetService interface {
-	StartResetProcess(ctx context.Context, email string) (string, error)
+	StartResetProcess(ctx context.Context, agreementNumber string, value string, method string) (string, error)
 	VerifyCode(ctx context.Context, token, code string) (*ResetSession, error)
-	FinalizeReset(ctx context.Context, token, newPassword, signature string, device DeviceInfo) error
-}
-
-type resetRepository interface {
-	GetUserByEmail(ctx context.Context, email string) (*model.User, error)
-	GetByID(ctx context.Context, id uuid.UUID) (*model.User, error)
-	Update(ctx context.Context, user *model.User) error
-	GetDeviceByFingerprint(ctx context.Context, userID uuid.UUID, fingerprint string) (*model.UserDevice, error)
-	SaveDevice(ctx context.Context, device *model.UserDevice) error
+	FinalizeReset(ctx context.Context, token, newPassword string) error
 }
 
 type passwordResetService struct {
-	userRepo         resetRepository
+	userRepo         repository.UserRepository
 	refreshTokenRepo repository.RefreshTokenRepository
 	cache            *redis.Cache
 }
@@ -56,7 +50,7 @@ type passwordResetService struct {
 func NewPasswordResetService(
 	userRepo repository.UserRepository,
 	refreshTokenRepo repository.RefreshTokenRepository,
-	cache *redis.Cache, // 3. Cache
+	cache *redis.Cache,
 ) PasswordResetService {
 	return &passwordResetService{
 		userRepo:         userRepo,
@@ -65,8 +59,9 @@ func NewPasswordResetService(
 	}
 }
 
-func (s *passwordResetService) StartResetProcess(ctx context.Context, email string) (string, error) {
-	user, err := s.userRepo.GetUserByEmail(ctx, email)
+// region StartResetProcess
+func (s *passwordResetService) StartResetProcess(ctx context.Context, agreementNumber string, value string, method string) (string, error) {
+	user, err := s.userRepo.GetUserByEmailAndAgreement(ctx, value, agreementNumber)
 	if err != nil {
 		return "", errors.ErrEmailIsSendIfExists
 	}
@@ -76,18 +71,19 @@ func (s *passwordResetService) StartResetProcess(ctx context.Context, email stri
 	hashed, _ := bcrypt.GenerateFromPassword([]byte(code), bcrypt.DefaultCost)
 
 	session := ResetSession{
-		UserID:   user.ID.String(),
-		Email:    user.Email,
-		CodeHash: string(hashed),
-		Token:    token,
-		Attempts: 0,
+		UserID:          user.ID.String(),
+		Email:           user.Email,
+		AgreementNumber: agreementNumber,
+		CodeHash:        string(hashed),
+		Token:           token,
+		Attempts:        0,
 	}
 
 	if err := s.saveSession(ctx, token, &session); err != nil {
 		return "", errors.ErrInternal
 	}
 
-	fmt.Printf("[RESET DEBUG] Kod dla %s: %s\n", email, code)
+	fmt.Printf("[RESET DEBUG] Kod dla umowy %s (%s): %s\n", agreementNumber, value, code)
 	return token, nil
 }
 
@@ -116,7 +112,8 @@ func (s *passwordResetService) VerifyCode(ctx context.Context, token, code strin
 	return session, nil
 }
 
-func (s *passwordResetService) FinalizeReset(ctx context.Context, token, newPassword, signature string, device DeviceInfo) error {
+// region FinalizeReset
+func (s *passwordResetService) FinalizeReset(ctx context.Context, token, newPassword string) error {
 	session, err := s.getSession(ctx, token)
 	if err != nil {
 		return errors.ErrResetSessionNotFound
@@ -126,37 +123,9 @@ func (s *passwordResetService) FinalizeReset(ctx context.Context, token, newPass
 		return errors.ErrUnauthorized
 	}
 
-	userUUID, _ := uuid.Parse(session.UserID)
-
-	var pubKeyToVerify string
-	existingDevice, err := s.userRepo.GetDeviceByFingerprint(ctx, userUUID, device.Fingerprint)
-
+	userUUID, err := uuid.Parse(session.UserID)
 	if err != nil {
-		if device.PublicKey == "" {
-			return errors.ErrUntrustedDevice
-		}
-		newDevice := &model.UserDevice{
-			ID:     uuid.New(),
-			UserID: userUUID,
-			// Fingerprint: device.Fingerprint,
-			PublicKey: device.PublicKey,
-			// DeviceName:  device.DeviceName,
-			Platform: device.Platform,
-			// LastIP:      device.IP,
-			IsVerified: false,
-			IsActive:   true,
-		}
-		if err := s.userRepo.SaveDevice(ctx, newDevice); err != nil {
-			return errors.ErrInternal
-		}
-		pubKeyToVerify = device.PublicKey
-	} else {
-		pubKeyToVerify = existingDevice.PublicKey
-	}
-
-	challenge := fmt.Sprintf("%s|%s", session.Challenge, token)
-	if !shared.VerifyEd25519Signature(pubKeyToVerify, challenge, signature) {
-		return errors.ErrVerificationFailed
+		return errors.ErrInvalidRequest
 	}
 
 	user, err := s.userRepo.GetByID(ctx, userUUID)
@@ -164,19 +133,36 @@ func (s *passwordResetService) FinalizeReset(ctx context.Context, token, newPass
 		return errors.ErrUserNotFound
 	}
 
-	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
-	user.Password = string(hashedPassword)
+	// 1. Hashowanie hasła za pomocą Argon2id
+	passBytes := []byte(newPassword)
+	defer clear(passBytes)
+
+	hashedPassword, err := security.HashPassword(passBytes, nil)
+	if err != nil {
+		return errors.ErrInternal
+	}
+
+	// 2. Aktualizacja danych użytkownika
+	now := time.Now()
+	user.Password = hashedPassword
+	user.PasswordChangedAt = &now
+	user.FailedLoginAttempts = 0
+	user.LockedUntil = nil
 
 	if err := s.userRepo.Update(ctx, user); err != nil {
 		return err
 	}
 
+	// 3. Unieważnienie wszystkich aktywnych sesji/tokenów użytkownika
 	_ = s.refreshTokenRepo.RevokeAllUserTokens(ctx, userUUID)
 
+	// 4. Czyszczenie sesji resetu w Redis
 	_ = s.cache.Del(ctx, fmt.Sprintf("reset:password:%s", token))
+
 	return nil
 }
 
+// region getSession
 func (s *passwordResetService) getSession(ctx context.Context, token string) (*ResetSession, error) {
 	key := fmt.Sprintf("reset:password:%s", token)
 	data, err := s.cache.Get(ctx, key)

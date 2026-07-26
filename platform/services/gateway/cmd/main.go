@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 
+	"github.com/zerodayz7/platform/pkg/rabbitmq"
 	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/server"
 	"github.com/zerodayz7/platform/pkg/shared"
@@ -53,8 +54,24 @@ func main() {
 		}
 	}()
 
-	// 5. DI & App Setup
-	container := di.NewContainer(redisClient, &config.AppConfig)
+	// 5. RabbitMQ
+	var eventPublisher rabbitmq.EventPublisher
+
+	if config.AppConfig.RabbitMQ.Enabled {
+		log.Info("RabbitMQ is ENABLED. Connecting to broker...")
+		var err error
+		eventPublisher, err = rabbitmq.NewLivePublisher(config.AppConfig.RabbitMQ.GetURL())
+		if err != nil {
+			log.Error("RabbitMQ initialization failed", "error", err)
+			os.Exit(1)
+		}
+	} else {
+		log.Warn("RabbitMQ is DISABLED. Fallback to No-Op Driver.")
+		eventPublisher = rabbitmq.NewNoOpPublisher()
+	}
+
+	// 6. DI & App Setup
+	container := di.NewContainer(redisClient, eventPublisher, &config.AppConfig)
 
 	app, err := config.NewGatewayApp(container)
 	if err != nil {
@@ -64,7 +81,7 @@ func main() {
 
 	router.SetupRoutes(app, container)
 
-	// 6. Run server
+	// 7. Run server
 	server.Run(
 		app,
 		server.Config{
@@ -76,7 +93,15 @@ func main() {
 		},
 		*log,
 		func() {
-			_ = redisClient.Close()
+			log.Info("Shutting down resources")
+
+			if err := redisClient.Close(); err != nil {
+				log.Error("Failed to close Redis client", "error", err)
+			}
+
+			if err := eventPublisher.Close(); err != nil {
+				log.Error("Failed to close RabbitMQ connection cleanly", "error", err)
+			}
 		},
 	)
 }

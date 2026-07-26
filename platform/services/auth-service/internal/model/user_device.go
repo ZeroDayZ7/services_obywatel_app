@@ -5,29 +5,23 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
-
-	"github.com/zerodayz7/platform/pkg/shared"
 )
 
+// region UserDevice
 type UserDevice struct {
-	ID                uuid.UUID `gorm:"type:uuid;primaryKey"`
-	UserID            uuid.UUID `gorm:"type:uuid;not null;uniqueIndex:idx_user_device"`
-	DeviceFingerprint string    `gorm:"size:128;not null;uniqueIndex:idx_user_device"`
+	ID                  uuid.UUID      `gorm:"type:uuid;primaryKey;default:uuidv7()"`
+	UserID              uuid.UUID      `gorm:"type:uuid;not null;uniqueIndex:idx_user_device"`
+	DeviceFingerprint   string         `gorm:"size:128;not null;uniqueIndex:idx_user_device"`
+	PublicKey           string         `gorm:"type:text;not null"`
+	DeviceNameEncrypted string         `gorm:"size:256"`
+	Platform            string         `gorm:"size:30"`
+	IsActive            bool           `gorm:"not null;default:true"`
+	IsVerified          bool           `gorm:"not null;default:false"`
+	LastIP              string         `gorm:"size:45"`
+	LastUsedAt          time.Time      `gorm:"autoUpdateTime"`
+	CreatedAt           time.Time      `gorm:"autoCreateTime"`
+	DeletedAt           gorm.DeletedAt `gorm:"index"`
 
-	PublicKey           string `gorm:"type:text;not null"`
-	DeviceNameEncrypted string `gorm:"size:256"`
-	Platform            string `gorm:"size:30"`
-	IsActive            bool   `gorm:"default:true"`
-	IsVerified          bool   `gorm:"default:false"`
-
-	LastUsedAt time.Time      `gorm:"autoUpdateTime"`
-	CreatedAt  time.Time      `gorm:"autoCreateTime"`
-	DeletedAt  gorm.DeletedAt `gorm:"index"`
-	LastIp     string         `gorm:"size:45"`
-}
-
-func (ud *UserDevice) BeforeCreate(tx *gorm.DB) (err error) {
-	idStr := shared.GenerateUuidV7()
-	ud.ID, err = uuid.Parse(idStr)
-	return err
+	// Relacja
+	RefreshTokens []RefreshToken `gorm:"foreignKey:DeviceID"`
 }

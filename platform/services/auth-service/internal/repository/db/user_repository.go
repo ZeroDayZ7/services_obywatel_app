@@ -22,10 +22,19 @@ func NewUserRepository(db *gorm.DB) *UserRepo {
 	return &UserRepo{db: db}
 }
 
+// region DeleteDevice
+func (r *UserRepo) DeleteDevice(ctx context.Context, userID uuid.UUID, fingerprint string) error {
+	return r.db.WithContext(ctx).
+		Where("user_id = ? AND device_fingerprint = ?", userID, fingerprint).
+		Delete(&model.UserDevice{}).Error
+}
+
+// region CreateUser
 func (r *UserRepo) CreateUser(user *model.User) error {
 	return r.db.Create(user).Error
 }
 
+// region GetByID
 func (r *UserRepo) GetByID(ctx context.Context, id uuid.UUID) (*model.User, error) {
 	var u model.User
 
@@ -43,6 +52,7 @@ func (r *UserRepo) GetByID(ctx context.Context, id uuid.UUID) (*model.User, erro
 	return &u, nil
 }
 
+// region GetByEmail
 func (r *UserRepo) GetByEmail(ctx context.Context, email string) (*model.User, error) {
 	var u model.User
 	if err := r.db.WithContext(ctx).Where("email = ?", email).First(&u).Error; err != nil {
@@ -51,6 +61,7 @@ func (r *UserRepo) GetByEmail(ctx context.Context, email string) (*model.User, e
 	return &u, nil
 }
 
+// region GetUserByEmail
 func (r *UserRepo) GetUserByEmail(ctx context.Context, email string) (*model.User, error) {
 	var u model.User
 	if err := r.db.WithContext(ctx).Where("email = ?", email).First(&u).Error; err != nil {
@@ -59,6 +70,20 @@ func (r *UserRepo) GetUserByEmail(ctx context.Context, email string) (*model.Use
 	return &u, nil
 }
 
+func (r *UserRepo) GetUserByEmailAndAgreement(ctx context.Context, email string, agreementNumber string) (*model.User, error) {
+	var u model.User
+	err := r.db.WithContext(ctx).
+		Joins("Agreement").
+		Where("users.email = ? AND \"Agreement\".\"agreement_number\" = ? AND \"Agreement\".\"status\" = ?",
+			email, agreementNumber, model.AgreementStatusActive).
+		First(&u).Error
+	if err != nil {
+		return nil, err
+	}
+	return &u, nil
+}
+
+// region EmailExists
 func (r *UserRepo) EmailExists(email string) (bool, error) {
 	var count int64
 	if err := r.db.Model(&model.User{}).Where("email = ?", email).Count(&count).Error; err != nil {
@@ -67,6 +92,7 @@ func (r *UserRepo) EmailExists(email string) (bool, error) {
 	return count > 0, nil
 }
 
+// region UsernameExists
 func (r *UserRepo) UsernameExists(username string) (bool, error) {
 	var count int64
 	if err := r.db.Model(&model.User{}).Where("username = ?", username).Count(&count).Error; err != nil {
@@ -75,6 +101,7 @@ func (r *UserRepo) UsernameExists(username string) (bool, error) {
 	return count > 0, nil
 }
 
+// region EmailOrUsernameExists
 func (r *UserRepo) EmailOrUsernameExists(email, username string) (emailExists, usernameExists bool, err error) {
 	var users []model.User
 	if err := r.db.Where("email = ? OR username = ?", email, username).Find(&users).Error; err != nil {
@@ -92,10 +119,12 @@ func (r *UserRepo) EmailOrUsernameExists(email, username string) (emailExists, u
 	return
 }
 
+// region Update
 func (r *UserRepo) Update(ctx context.Context, user *model.User) error {
 	return r.db.WithContext(ctx).Save(user).Error
 }
 
+// region SaveDevice
 func (r *UserRepo) SaveDevice(ctx context.Context, device *model.UserDevice) error {
 	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
 		// Klucz unikalny to kombinacja UserID i Fingerprint
@@ -111,12 +140,14 @@ func (r *UserRepo) SaveDevice(ctx context.Context, device *model.UserDevice) err
 	}).Create(device).Error
 }
 
+// region ResetFailedLogin
 func (r *UserRepo) ResetFailedLogin(userID uuid.UUID) error {
 	return r.db.Model(&model.User{}).
 		Where("id = ?", userID).
 		Update("failed_login_attempts", 0).Error
 }
 
+// region GetDeviceByFingerprint
 func (r *UserRepo) GetDeviceByFingerprint(ctx context.Context, userID uuid.UUID, fingerprint string) (*model.UserDevice, error) {
 	var device model.UserDevice
 	err := r.db.WithContext(ctx).
@@ -128,6 +159,7 @@ func (r *UserRepo) GetDeviceByFingerprint(ctx context.Context, userID uuid.UUID,
 	return &device, nil
 }
 
+// region IncrementUserFailedLogin
 func (r *UserRepo) IncrementUserFailedLogin(userID uuid.UUID) (int8, error) {
 	var user model.User
 	// Wykonujemy update i pobieramy aktualną wartość w jednej operacji (RETURNING)
@@ -140,6 +172,7 @@ func (r *UserRepo) IncrementUserFailedLogin(userID uuid.UUID) (int8, error) {
 	return user.FailedLoginAttempts, err
 }
 
+// region LockUserTemporarily
 func (r *UserRepo) LockUserTemporarily(userID uuid.UUID, duration time.Duration) error {
 	until := time.Now().Add(duration)
 	return r.db.Model(&model.User{}).
@@ -150,6 +183,7 @@ func (r *UserRepo) LockUserTemporarily(userID uuid.UUID, duration time.Duration)
 		}).Error
 }
 
+// region PermanentLock
 func (r *UserRepo) PermanentLock(userID uuid.UUID) error {
 	return r.db.Model(&model.User{}).
 		Where("id = ?", userID).
@@ -159,7 +193,7 @@ func (r *UserRepo) PermanentLock(userID uuid.UUID) error {
 		}).Error
 }
 
-// Zmień z ResetFailedLogin na:
+// region ResetFailedLoginAttempts
 func (r *UserRepo) ResetFailedLoginAttempts(userID uuid.UUID) error {
 	return r.db.Model(&model.User{}).
 		Where("id = ?", userID).

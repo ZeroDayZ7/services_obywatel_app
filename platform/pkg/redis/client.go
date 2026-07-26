@@ -1,38 +1,36 @@
+// cmdr: redis/client.go
+
 package redis
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
 	fiberRedis "github.com/gofiber/storage/redis/v3"
-	"github.com/redis/go-redis/v9"
+	goredis "github.com/redis/go-redis/v9"
 )
 
-// ----------------------------
-// CONFIG I CLIENT
-// ----------------------------
 type Config struct {
-	Host     string
-	Port     string
-	Password string
-	DB       int
-
+	Host         string
+	Port         string
+	Password     string
+	DB           int
 	PoolSize     int
 	MinIdleConns int
 	PoolTimeout  time.Duration
-
-	Timeout time.Duration
+	Timeout      time.Duration
 }
 
 type Client struct {
-	*redis.Client
+	*goredis.Client
 }
 
 func New(cfg Config) (*Client, error) {
-	rdb := redis.NewClient(&redis.Options{
+	rdb := goredis.NewClient(&goredis.Options{
 		Addr:         fmt.Sprintf("%s:%s", cfg.Host, cfg.Port),
 		Password:     cfg.Password,
 		DB:           cfg.DB,
@@ -63,14 +61,13 @@ func (c *Client) AsFiberStorage() fiber.Storage {
 // STREAM BATCH METHODS
 // ----------------------------
 
-// ReadStreamBatch odczytuje maxCount elementów z grupy konsumentów w streamie
 func (c *Client) ReadStreamBatch(
 	ctx context.Context,
 	stream, group, consumer string,
 	maxCount int,
 	block time.Duration,
-) ([]redis.XMessage, error) {
-	args := &redis.XReadGroupArgs{
+) ([]goredis.XMessage, error) {
+	args := &goredis.XReadGroupArgs{
 		Group:    group,
 		Consumer: consumer,
 		Streams:  []string{stream, ">"},
@@ -80,6 +77,9 @@ func (c *Client) ReadStreamBatch(
 
 	result, err := c.XReadGroup(ctx, args).Result()
 	if err != nil {
+		if errors.Is(err, goredis.Nil) {
+			return nil, nil
+		}
 		return nil, err
 	}
 
@@ -90,7 +90,6 @@ func (c *Client) ReadStreamBatch(
 	return result[0].Messages, nil
 }
 
-// AckStreamBatch potwierdza batch wiadomości w streamie
 func (c *Client) AckStreamBatch(
 	ctx context.Context,
 	stream, group string,
@@ -103,16 +102,14 @@ func (c *Client) AckStreamBatch(
 }
 
 func (c *Client) SendAuditLog(ctx context.Context, stream string, values map[string]any) error {
-	_, err := c.XAdd(ctx, &redis.XAddArgs{
+	_, err := c.XAdd(ctx, &goredis.XAddArgs{
 		Stream: stream,
 		Values: values,
 	}).Result()
 	return err
 }
 
-// Opcjonalnie: helper do tworzenia consumer group
 func (c *Client) EnsureGroup(ctx context.Context, stream, group string) error {
-	// ignorujemy błąd jeśli grupa już istnieje
 	err := c.XGroupCreateMkStream(ctx, stream, group, "0").Err()
 	if err != nil && !strings.Contains(err.Error(), "BUSYGROUP") {
 		return err

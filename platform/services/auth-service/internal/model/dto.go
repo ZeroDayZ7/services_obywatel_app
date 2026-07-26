@@ -3,14 +3,17 @@ package model
 
 import (
 	"time"
+
+	"github.com/google/uuid"
 )
 
+// region UserSessionDTO
 type UserSessionDTO struct {
-	SessionID           uint      `gorm:"column:session_id" json:"id"`
+	SessionID           uuid.UUID `gorm:"column:session_id" json:"id"`
 	DeviceNameEncrypted string    `gorm:"column:device_name_encrypted" json:"device_name"`
-	Platform            string    `json:"platform"`
-	CreatedAt           time.Time `json:"created_at"`
-	LastUsedAt          time.Time `json:"last_used_at"`
-	Fingerprint         string    `gorm:"column:fingerprint" json:"-"` // Ukrywamy w JSON, ale potrzebujemy w Go
-	IsCurrent           bool      `json:"is_current"`                  // To ustawimy w serwisie
+	Platform            string    `gorm:"column:platform" json:"platform"`
+	CreatedAt           time.Time `gorm:"column:created_at" json:"created_at"`
+	LastUsedAt          time.Time `gorm:"column:last_used_at" json:"last_used_at"`
+	Fingerprint         string    `gorm:"column:fingerprint" json:"fingerprint"`
+	IsCurrent           bool      `json:"is_current"`
 }

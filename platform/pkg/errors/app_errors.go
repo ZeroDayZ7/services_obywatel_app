@@ -7,6 +7,7 @@ type ErrorType string
 
 const (
 	Unauthorized ErrorType = "UNAUTHORIZED"
+	Forbidden    ErrorType = "FORBIDDEN"
 	Validation   ErrorType = "VALIDATION"
 	NotFound     ErrorType = "NOT_FOUND"
 	Internal     ErrorType = "INTERNAL"
@@ -18,6 +19,7 @@ const (
 // Domyślne komunikaty dla typów błędów
 var ErrorMessages = map[ErrorType]string{
 	Unauthorized: "Brak autoryzacji.",
+	Forbidden:    "Brak wystarczających uprawnień.",
 	Validation:   "Nieprawidłowe dane.",
 	NotFound:     "Zasób nie został znaleziony.",
 	Internal:     "Wewnętrzny błąd serwera.",
@@ -75,6 +77,7 @@ var (
 	ErrValidationFailed          = newErr("VALIDATION_FAILED", Validation, "Request validation failed")
 	ErrTooManyRequests           = newErr("TOO_MANY_REQUESTS", BadRequest, "Too many requests")
 	ErrUnauthorized              = newErr("UNAUTHORIZED", Unauthorized, "Unauthorized access")
+	ErrForbidden                 = newErr("FORBIDDEN", Forbidden, "Access forbidden")
 	ErrInvalidToken              = newErr("INVALID_TOKEN", Unauthorized, "Invalid token")
 	ErrGatewayTimeout            = newErr("GATEWAY_TIMEOUT", Timeout, "Usługa nie odpowiedziała w wymaganym czasie.")
 	ErrUpstreamUnavailable       = newErr("UPSTREAM_UNAVAILABLE", Internal, "Usługa zewnętrzna jest niedostępna.")

@@ -1,3 +1,5 @@
+// cmdr: cmdr: redis\scripts.go
+
 package redis
 
 import (

@@ -17,13 +17,15 @@ type RefreshTokenRepository interface {
 	RevokeByFingerprint(ctx context.Context, userID uuid.UUID, fingerprint string) error
 	RevokeAllUserTokens(ctx context.Context, userID uuid.UUID) error
 	GetSessions(ctx context.Context, userID uuid.UUID) ([]model.UserSessionDTO, error)
-	RevokeSession(ctx context.Context, userID uuid.UUID, sessionID uint) error
+	RevokeSession(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID) error
 }
 
 type UserRepository interface {
 	CreateUser(*model.User) error
 	GetByID(ctx context.Context, id uuid.UUID) (*model.User, error)
 	GetUserByEmail(ctx context.Context, email string) (*model.User, error)
+	GetUserByEmailAndAgreement(ctx context.Context, email string, agreementNumber string) (*model.User, error)
+	DeleteDevice(ctx context.Context, userID uuid.UUID, fingerprint string) error
 
 	EmailExists(string) (bool, error)
 	UsernameExists(string) (bool, error)

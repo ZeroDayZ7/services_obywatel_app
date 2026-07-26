@@ -15,20 +15,27 @@ func SetupAuthRoutes(
 	h *handler.AuthHandler,
 	resetHandler *handler.ResetHandler,
 ) {
+	// #region Group("/auth")
 	auth := app.Group("/auth")
 	auth.Use(shared.GetLimiter(shared.LimitAuth, nil))
 
 	// ==========================
 	// LOGIN / REGISTER / JWT
 	// ==========================
+	// #region 	auth.Post("/login",
 	auth.Post("/login",
 		middleware.ValidateBody[schemas.LoginRequest](),
 		h.Login,
 	)
-
+	// #region auth.Post("/2fa-verify",
 	auth.Post("/2fa-verify",
 		middleware.ValidateBody[schemas.TwoFARequest](),
 		h.Verify2FA,
+	)
+
+	auth.Post("/2fa-resend",
+		middleware.ValidateBody[schemas.ResendTwoFARequest](),
+		h.Resend2FA,
 	)
 
 	auth.Post("/register",
@@ -47,6 +54,11 @@ func SetupAuthRoutes(
 	)
 
 	// ==========================
+	// SESSION / USER CONTEXT
+	// ==========================
+	auth.Get("/me", h.GetMe)
+
+	// ==========================
 	// DEVICE MANAGEMENT (NEW)
 	// ==========================
 	// Tutaj dodajemy endpoint, którego szuka Flutter
@@ -60,9 +72,12 @@ func SetupAuthRoutes(
 		h.VerifyDevice,
 	)
 
+	auth.Post("/unpair-device", h.UnpairDevice)
+
 	// ==========================
 	// RESET PASSWORD
-	// ==========================
+	// =========================
+	// #region Group("/reset")
 	reset := auth.Group("/reset")
 	reset.Use(shared.GetLimiter(shared.LimitReset, nil))
 

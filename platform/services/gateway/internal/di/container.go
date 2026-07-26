@@ -3,6 +3,7 @@ package di
 import (
 	"net/http"
 
+	"github.com/zerodayz7/platform/pkg/rabbitmq"
 	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/viper"
 )
@@ -10,17 +11,23 @@ import (
 type Container struct {
 	Redis          *redis.Client
 	Cache          *redis.Cache
+	EventPublisher rabbitmq.EventPublisher
 	HTTPClient     *http.Client
 	InternalSecret []byte
 	Config         *viper.Config
 }
 
-func NewContainer(redisClient *redis.Client, cfg *viper.Config) *Container {
+func NewContainer(
+	redisClient *redis.Client,
+	eventPublisher rabbitmq.EventPublisher,
+	cfg *viper.Config,
+) *Container {
 	cache := redis.NewCache(redisClient, cfg.Session.TTL)
 
 	return &Container{
-		Redis: redisClient,
-		Cache: cache,
+		Redis:          redisClient,
+		Cache:          cache,
+		EventPublisher: eventPublisher,
 		HTTPClient: &http.Client{
 			Timeout: cfg.Proxy.RequestTimeout,
 			Transport: &http.Transport{
