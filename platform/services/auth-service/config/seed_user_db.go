@@ -8,6 +8,7 @@ import (
 	"github.com/lib/pq"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/auth-service/internal/model"
+	"github.com/zerodayz7/platform/services/auth-service/internal/shared/security"
 	"gorm.io/gorm"
 )
 
@@ -25,11 +26,23 @@ func SeedUsers(db *gorm.DB) error {
 
 	log.Info("[SEED] Rozpoczynam zasiewanie użytkowników, umów i kodów PUK...")
 
-	// Hasło testowe: Zaq1@wsx
-	testPassword := "WmixUVuBuUWGZzbV2lmXrA$0okaGZfyu+EJgNRSI6aSIyB+WvMDFiBKyN0P+DW7294"
+	// 1. Dynamiczne generowanie hasha dla hasła "Zaq1@wsx"
+	rawPassword := []byte("Zaq1@wsx")
+	defer clear(rawPassword)
 
-	// Hash kodu PUK "12345678" dla środowiska lokalnego (bcrypt/argon)
-	testPukHash := "$2a$10$wN10O2A1RzE1.p.2N9wP5O8Z5.M4G.q/m8YyYgX4Xv/Nq5UuS3x.S"
+	hashedPassword, err := security.HashPassword(rawPassword, nil)
+	if err != nil {
+		return fmt.Errorf("failed to hash seed password: %w", err)
+	}
+
+	// 2. Dynamiczne generowanie hasha dla kodu PUK "12345678"
+	rawPuk := []byte("12345678")
+	defer clear(rawPuk)
+
+	hashedPuk, err := security.HashPassword(rawPuk, nil)
+	if err != nil {
+		return fmt.Errorf("failed to hash seed puk code: %w", err)
+	}
 
 	usersData := []struct {
 		User      model.User
@@ -41,7 +54,7 @@ func SeedUsers(db *gorm.DB) error {
 				ID:               uuid.New(),
 				Username:         "root@plus.pl",
 				Email:            "root@plus.pl",
-				Password:         testPassword,
+				Password:         hashedPassword,
 				Role:             model.RoleRoot,
 				Permissions:      pq.StringArray{model.PermSystemAdmin, model.PermSystemManage, model.PermUsersRead, model.PermUsersWrite, model.PermUsersDelete},
 				TwoFactorEnabled: true,
@@ -55,7 +68,7 @@ func SeedUsers(db *gorm.DB) error {
 				VerifiedVia:     "BRANCH",
 			},
 			PukCode: model.UserPukCode{
-				PukHash:     testPukHash,
+				PukHash:     hashedPuk,
 				Status:      model.PukStatusActive,
 				MaxAttempts: 3,
 			},
@@ -65,7 +78,7 @@ func SeedUsers(db *gorm.DB) error {
 				ID:               uuid.New(),
 				Username:         "admin@plus.pl",
 				Email:            "admin@plus.pl",
-				Password:         testPassword,
+				Password:         hashedPassword,
 				Role:             model.RoleAdmin,
 				Permissions:      pq.StringArray{model.PermUsersRead, model.PermUsersWrite, model.PermReportsView, model.PermReportsExport},
 				TwoFactorEnabled: true,
@@ -79,7 +92,7 @@ func SeedUsers(db *gorm.DB) error {
 				VerifiedVia:     "BRANCH",
 			},
 			PukCode: model.UserPukCode{
-				PukHash:     testPukHash,
+				PukHash:     hashedPuk,
 				Status:      model.PukStatusActive,
 				MaxAttempts: 3,
 			},
@@ -89,7 +102,7 @@ func SeedUsers(db *gorm.DB) error {
 				ID:               uuid.New(),
 				Username:         "user@example.com",
 				Email:            "user@example.com",
-				Password:         testPassword,
+				Password:         hashedPassword,
 				Role:             model.RoleUser,
 				Permissions:      pq.StringArray{model.PermReportsView},
 				TwoFactorEnabled: true,
@@ -103,7 +116,7 @@ func SeedUsers(db *gorm.DB) error {
 				VerifiedVia:     "MOJE_ID",
 			},
 			PukCode: model.UserPukCode{
-				PukHash:     testPukHash,
+				PukHash:     hashedPuk,
 				Status:      model.PukStatusActive,
 				MaxAttempts: 3,
 			},

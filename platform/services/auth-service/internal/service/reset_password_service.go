@@ -133,21 +133,30 @@ func (s *passwordResetService) FinalizeReset(ctx context.Context, token, newPass
 		return errors.ErrUserNotFound
 	}
 
-	// 1. Hashowanie hasła za pomocą własnego Argon2id
-	hashedPassword, err := security.HashPassword(newPassword)
+	// 1. Hashowanie hasła za pomocą Argon2id
+	passBytes := []byte(newPassword)
+	defer clear(passBytes)
+
+	hashedPassword, err := security.HashPassword(passBytes, nil)
 	if err != nil {
 		return errors.ErrInternal
 	}
+
+	// 2. Aktualizacja danych użytkownika
+	now := time.Now()
 	user.Password = hashedPassword
+	user.PasswordChangedAt = &now
+	user.FailedLoginAttempts = 0
+	user.LockedUntil = nil
 
 	if err := s.userRepo.Update(ctx, user); err != nil {
 		return err
 	}
 
-	// 2. Unieważnienie wszystkich aktywnych sesji/tokenów użytkownika
+	// 3. Unieważnienie wszystkich aktywnych sesji/tokenów użytkownika
 	_ = s.refreshTokenRepo.RevokeAllUserTokens(ctx, userUUID)
 
-	// 3. Czyszczenie sesji resetu w Redis
+	// 4. Czyszczenie sesji resetu w Redis
 	_ = s.cache.Del(ctx, fmt.Sprintf("reset:password:%s", token))
 
 	return nil

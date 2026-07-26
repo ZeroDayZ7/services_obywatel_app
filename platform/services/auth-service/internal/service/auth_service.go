@@ -467,18 +467,22 @@ func (s *authService) Logout(ctx context.Context, userID uuid.UUID, sessionID st
 // region Verify2FA
 func (s *authService) Verify2FA(ctx context.Context, token string, code []byte, fingerprint string, ip string) (*http.Verify2FAResponse, error) {
 	log := shared.GetLogger()
+
+	// Czyszczenie wrażliwego bufora kodu po zakończeniu funkcji
+	defer clear(code)
+
 	// 1. Pobieranie sesji 2FA z Cache
 	session, err := s.cache.Get2FASession(ctx, token)
 	if err != nil {
 		return nil, errors.ErrInvalidCredentials
 	}
-	codeStr := strings.TrimSpace(string(code))
+
 	log.DebugInfo("2FA compare", map[string]any{
-		"plain": codeStr,
-		"hash":  session.CodeHash,
+		"hash": session.CodeHash,
 	})
-	// 2. Weryfikacja kodu bcryptem
-	valid, err := security.VerifyPassword(code, session.CodeHash)
+
+	// 2. Weryfikacja kodu Argon2id z uwzględnieniem peppera
+	valid, err := security.VerifyPassword(code, session.CodeHash, nil) // podmień s.pepper na nil jeśli nie masz pola w strukturze
 
 	if err != nil || !valid {
 		// Logika blokowania po błędnych próbach
@@ -495,6 +499,7 @@ func (s *authService) Verify2FA(ctx context.Context, token string, code []byte, 
 			return nil, errors.ErrInvalid2FACode
 		}
 	}
+
 	// 3. Czyszczenie sesji 2FA
 	_ = s.cache.Delete2FASession(ctx, token)
 
@@ -543,13 +548,7 @@ func (s *authService) Verify2FA(ctx context.Context, token string, code []byte, 
 	}
 
 	// DEBUG INFO: Wypisujemy dokładnie to, co idzie do klienta
-	log.DebugJSON("[DEBUG] Sending 2FA Response:",
-		response,
-	)
-
-	// Opcjonalnie: zrzut do JSONa w logach, żeby sprawdzić klucze
-	// responseJson, _ := json.Marshal(response)
-	// log.Printf("[DEBUG] Full JSON: %s", string(responseJson))
+	log.DebugJSON("[DEBUG] Sending 2FA Response:", response)
 
 	return response, nil
 }
@@ -582,7 +581,10 @@ func (s *authService) Resend2FACode(ctx context.Context, email string, token str
 	}
 
 	// 4. Hashujemy kod przed zapisem w pamięci podręcznej (przekazujemy string)
-	hashedCode, err := security.HashPassword(code)
+	codeBytes := []byte(code)
+	defer clear(codeBytes)
+
+	hashedCode, err := security.HashPassword(codeBytes, nil)
 	if err != nil {
 		log.ErrorObj("Resend2FA: failed to hash OTP", err)
 		return errors.ErrInternal
@@ -625,7 +627,7 @@ func (s *authService) AttemptLogin(ctx context.Context, email string, password [
 		return nil, err
 	}
 
-	valid, err := security.VerifyPassword(password, user.Password)
+	valid, err := security.VerifyPassword(password, user.Password, nil)
 	if err != nil || !valid {
 		// 1. Zwiększ licznik prób
 		attempts, incErr := s.userRepo.IncrementUserFailedLogin(user.ID)
@@ -635,9 +637,8 @@ func (s *authService) AttemptLogin(ctx context.Context, email string, password [
 
 		// 2. Sprawdź czy przekroczono próg (np. 5 prób)
 		if attempts >= 5 {
-			// MODEL BANKOWY:
 			_ = s.userRepo.PermanentLock(user.ID)
-			return nil, errors.ErrAccountLocked // "Konto zablokowane, skontaktuj się z obsługą"
+			return nil, errors.ErrAccountLocked
 		}
 		return nil, errors.ErrInvalidCredentials
 	}
@@ -701,8 +702,11 @@ func (s *authService) prepare2FASession(ctx context.Context, user *model.User, f
 	if err != nil {
 		return nil, errors.ErrInternal
 	}
+	codeBytes := []byte(code)
+	defer clear(codeBytes)
+
 	// 2. Hashujemy kod przed zapisem (Security: At-Rest protection)
-	hashedCode, err := security.HashPassword(code)
+	hashedCode, err := security.HashPassword(codeBytes, nil)
 	if err != nil {
 		return nil, errors.ErrInternal
 	}
@@ -780,13 +784,23 @@ func (s *authService) UpdatePassword(ctx context.Context, userID uuid.UUID, newP
 		return errors.ErrUserNotFound
 	}
 
-	hashed, err := security.HashPassword(newPassword)
+	passBytes := []byte(newPassword)
+	defer clear(passBytes)
+
+	hashed, err := security.HashPassword(passBytes, nil)
 	if err != nil {
+		return errors.ErrInternal
+	}
+
+	now := time.Now()
+	user.Password = hashed
+	user.PasswordChangedAt = &now
+
+	if err := s.userRepo.Update(ctx, user); err != nil {
 		return err
 	}
 
-	user.Password = hashed
-	return s.userRepo.Update(ctx, user)
+	return nil
 }
 
 // region CreateAccessToken
@@ -861,10 +875,27 @@ func (s *authService) RevokeRefreshToken(token string) error {
 
 // region Register
 func (s *authService) Register(username, email, rawPassword string) (*model.User, error) {
-	hash, _ := security.HashPassword(rawPassword)
-	u := &model.User{Username: username, Email: email, Password: hash}
-	err := s.userRepo.CreateUser(u)
-	return u, err
+	passBytes := []byte(rawPassword)
+	defer clear(passBytes)
+
+	hash, err := security.HashPassword(passBytes, nil)
+	if err != nil {
+		return nil, errors.ErrInternal
+	}
+
+	now := time.Now()
+	u := &model.User{
+		Username:          username,
+		Email:             email,
+		Password:          hash,
+		PasswordChangedAt: &now,
+	}
+
+	if err := s.userRepo.CreateUser(u); err != nil {
+		return nil, err
+	}
+
+	return u, nil
 }
 
 // region RegisterUserDevice

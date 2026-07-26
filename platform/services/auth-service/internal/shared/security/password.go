@@ -1,62 +1,205 @@
 package security
 
 import (
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
 	"errors"
+	"fmt"
+	"strconv"
 	"strings"
 
 	"golang.org/x/crypto/argon2"
 )
 
-const (
-	memory      = 64 * 1024
-	iterations  = 3
-	parallelism = 2
-	saltLength  = 16
-	keyLength   = 32
-)
-
-// HashPassword generates a salted Argon2id hash of the password
-func HashPassword(password string) (string, error) {
-	salt := make([]byte, saltLength)
-	if _, err := rand.Read(salt); err != nil {
-		return "", err
-	}
-
-	hash := argon2.IDKey([]byte(password), salt, iterations, memory, parallelism, keyLength)
-	encodedSalt := base64.RawStdEncoding.EncodeToString(salt)
-	encodedHash := base64.RawStdEncoding.EncodeToString(hash)
-	return encodedSalt + "$" + encodedHash, nil
+type Params struct {
+	Memory      uint32
+	Iterations  uint32
+	Parallelism uint8
+	SaltLength  uint32
+	KeyLength   uint32
 }
 
-// VerifyPassword compares password with encoded Argon2id hash
-// VerifyPassword compares password bytes with encoded Argon2id hash
-// ZMIANA: password to teraz []byte
-func VerifyPassword(password []byte, encoded string) (bool, error) {
+var DefaultParams = Params{
+	Memory:      64 * 1024, // 64 MB
+	Iterations:  3,
+	Parallelism: 2,
+	SaltLength:  16,
+	KeyLength:   32,
+}
+
+// Granice bezpieczeństwa parametrów (zapobieganie DoS przy naruszonej bazie)
+const (
+	MinMemory      = 8 * 1024    // 8 MB
+	MaxMemory      = 1024 * 1024 // 1 GB
+	MinIterations  = 1
+	MaxIterations  = 10
+	MinParallelism = 1
+	MaxParallelism = 16
+)
+
+var (
+	ErrInvalidHash        = errors.New("invalid password hash format")
+	ErrInsecureHashParams = errors.New("hash parameters are outside safe boundaries")
+)
+
+// HashPassword generuje hash Argon2id w formacie PHC ($argon2id$v=19$m=...,t=...,p=...$salt$hash).
+// Opcjonalny pepper dodaje kolejną warstwę ochrony (trzymany np. w Vault / Envs, nie w DB).
+func HashPassword(password []byte, pepper []byte) (string, error) {
+	params := DefaultParams
+
+	salt := make([]byte, params.SaltLength)
+	if _, err := rand.Read(salt); err != nil {
+		return "", fmt.Errorf("failed to generate salt: %w", err)
+	}
+
+	pepperedPassword := pepperPassword(password, pepper)
+
+	hash := argon2.IDKey(
+		pepperedPassword,
+		salt,
+		params.Iterations,
+		params.Memory,
+		params.Parallelism,
+		params.KeyLength,
+	)
+
+	// Czyszczenie tymczasowych buforów wewnętrznych
+	clear(pepperedPassword)
+
+	encodedSalt := base64.RawStdEncoding.EncodeToString(salt)
+	encodedHash := base64.RawStdEncoding.EncodeToString(hash)
+
+	result := fmt.Sprintf(
+		"$argon2id$v=19$m=%d,t=%d,p=%d$%s$%s",
+		params.Memory,
+		params.Iterations,
+		params.Parallelism,
+		encodedSalt,
+		encodedHash,
+	)
+
+	clear(hash)
+	clear(salt)
+
+	return result, nil
+}
+
+// VerifyPassword weryfikuje hasło z hashem przy zachowaniu Constant-Time Compare.
+func VerifyPassword(password []byte, encoded string, pepper []byte) (bool, error) {
+	params, salt, hash, err := decodeHash(encoded)
+	if err != nil {
+		return false, err
+	}
+
+	pepperedPassword := pepperPassword(password, pepper)
+
+	computedHash := argon2.IDKey(
+		pepperedPassword,
+		salt,
+		params.Iterations,
+		params.Memory,
+		params.Parallelism,
+		params.KeyLength,
+	)
+
+	clear(pepperedPassword)
+
+	valid := subtle.ConstantTimeCompare(hash, computedHash) == 1
+
+	clear(computedHash)
+	clear(salt)
+
+	return valid, nil
+}
+
+// NeedsRehash sprawdza, czy hash wymaga aktualizacji ze względu na nieaktualne parametry.
+func NeedsRehash(encoded string) bool {
+	params, _, _, err := decodeHash(encoded)
+	if err != nil {
+		return true
+	}
+
+	current := DefaultParams
+
+	return params.Memory != current.Memory ||
+		params.Iterations != current.Iterations ||
+		params.Parallelism != current.Parallelism ||
+		params.KeyLength != current.KeyLength
+}
+
+// decodeHash parsuje i waliduje ciąg PHC pod kątem bezpiecznych limitów zasobów.
+func decodeHash(encoded string) (Params, []byte, []byte, error) {
+	var params Params
+
 	parts := strings.Split(encoded, "$")
-	if len(parts) != 2 {
-		return false, errors.New("incorrect password format in the database")
+	if len(parts) != 6 {
+		return params, nil, nil, ErrInvalidHash
 	}
 
-	salt, err := base64.RawStdEncoding.DecodeString(parts[0])
+	if parts[1] != "argon2id" || parts[2] != "v=19" {
+		return params, nil, nil, ErrInvalidHash
+	}
+
+	values := strings.Split(parts[3], ",")
+	for _, value := range values {
+		item := strings.Split(value, "=")
+		if len(item) != 2 {
+			return params, nil, nil, ErrInvalidHash
+		}
+
+		number, err := strconv.Atoi(item[1])
+		if err != nil || number < 0 {
+			return params, nil, nil, ErrInvalidHash
+		}
+
+		switch item[0] {
+		case "m":
+			params.Memory = uint32(number)
+		case "t":
+			params.Iterations = uint32(number)
+		case "p":
+			if number > 255 {
+				return params, nil, nil, ErrInvalidHash
+			}
+			params.Parallelism = uint8(number)
+		}
+	}
+
+	// Walidacja granic bezpieczeństwa (przed przydzieleniem zasobów w IDKey)
+	if params.Memory < MinMemory || params.Memory > MaxMemory ||
+		params.Iterations < MinIterations || params.Iterations > MaxIterations ||
+		params.Parallelism < MinParallelism || params.Parallelism > MaxParallelism {
+		return params, nil, nil, ErrInsecureHashParams
+	}
+
+	salt, err := base64.RawStdEncoding.DecodeString(parts[4])
 	if err != nil {
-		return false, err
+		return params, nil, nil, ErrInvalidHash
 	}
-	hash, err := base64.RawStdEncoding.DecodeString(parts[1])
+
+	hash, err := base64.RawStdEncoding.DecodeString(parts[5])
 	if err != nil {
-		return false, err
+		return params, nil, nil, ErrInvalidHash
 	}
 
-	computedHash := argon2.IDKey(password, salt, iterations, memory, parallelism, keyLength)
+	params.SaltLength = uint32(len(salt))
+	params.KeyLength = uint32(len(hash))
 
-	// Constant-time comparison chroni przed timing attacks
-	isValid := subtle.ConstantTimeCompare(hash, computedHash) == 1
+	return params, salt, hash, nil
+}
 
-	for i := range computedHash {
-		computedHash[i] = 0
+// pepperPassword łączy hasło z pepperczykiem przy użyciu HMAC-SHA256
+func pepperPassword(password []byte, pepper []byte) []byte {
+	if len(pepper) == 0 {
+		buf := make([]byte, len(password))
+		copy(buf, password)
+		return buf
 	}
 
-	return isValid, nil
+	mac := hmac.New(sha256.New, pepper)
+	mac.Write(password)
+	return mac.Sum(nil)
 }
