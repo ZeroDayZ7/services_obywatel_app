@@ -32,8 +32,8 @@ services:
     image: postgres:18.3-alpine
     container_name: auth-database
     environment:
-      POSTGRES_USER: ${AUTH_DB_USER}
-      POSTGRES_DB: ${AUTH_DB_NAME}
+      POSTGRES_USER: ${AUTH_DB_USER:-citizen_admin}
+      POSTGRES_DB: ${AUTH_DB_NAME:-auth_db}
       POSTGRES_PASSWORD_FILE: /run/secrets/auth_db_pass
     secrets:
       - auth_db_pass
@@ -47,49 +47,49 @@ services:
       timeout: 5s
       retries: 5
 
+  # region db-notification
+  # --- NOTIFICATION DATABASE ---
+  db-notification:
+    <<: *common-settings
+    image: postgres:18.3-alpine
+    container_name: notification-database
+    environment:
+      POSTGRES_USER: ${NOTIFY_DB_USER:-notification_user}
+      POSTGRES_DB: ${NOTIFY_DB_NAME:-notification_database}
+      POSTGRES_PASSWORD_FILE: /run/secrets/notify_db_pass
+    secrets:
+      - notify_db_pass
+    ports:
+      - "5434:5432"
+    volumes:
+      - pg_notification_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # region db-citizen-docs
   # # --- CITIZEN DOCUMENTS DATABASE ---
-  # db-citizen-docs:
-  #   <<: *common-settings
-  #   image: postgres:18.3-alpine
-  #   container_name: citizen-docs-database
-  #   environment:
-  #     POSTGRES_USER: ${CITIZEN_DB_USER}
-  #     POSTGRES_DB: ${CITIZEN_DB_NAME}
-  #     POSTGRES_PASSWORD_FILE: /run/secrets/citizen_db_pass
-  #   secrets:
-  #     - citizen_db_pass
-  #   ports:
-  #     - "5433:5432"
-  #   volumes:
-  #     - pg_citizen_docs_data:/var/lib/postgresql/data
-  #   healthcheck:
-  #     test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 5
-
-  # region db-notification
-  # # --- NOTIFICATION DATABASE ---
-  # db-notification:
-  #   <<: *common-settings
-  #   image: postgres:18.3-alpine
-  #   container_name: notification-database
-  #   environment:
-  #     POSTGRES_USER: ${NOTIFY_DB_USER}
-  #     POSTGRES_DB: ${NOTIFY_DB_NAME}
-  #     POSTGRES_PASSWORD_FILE: /run/secrets/notify_db_pass
-  #   secrets:
-  #     - notify_db_pass
-  #   ports:
-  #     - "5434:5432"
-  #   volumes:
-  #     - pg_notification_data:/var/lib/postgresql/data
-  #   healthcheck:
-  #     test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 5
+  db-citizen-docs:
+    <<: *common-settings
+    image: postgres:18.3-alpine
+    container_name: citizen-docs-database
+    environment:
+      POSTGRES_USER: ${CITIZEN_DB_USER:-citizen_user}
+      POSTGRES_DB: ${CITIZEN_DB_NAME:-citizen_docs_database}
+      POSTGRES_PASSWORD_FILE: /run/secrets/citizen_db_pass
+    secrets:
+      - citizen_db_pass
+    ports:
+      - "5433:5432"
+    volumes:
+      - pg_citizen_docs_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # region cache-redis
   # --- SESSION & CACHING ---
