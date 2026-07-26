@@ -34,11 +34,15 @@ type ResetSession struct {
 }
 
 // #region SEND RESET CODE
-// 1️⃣ Wyślij kod resetu
 func (h *ResetHandler) SendResetCode(c *fiber.Ctx) error {
 	body := c.Locals("validatedBody").(schemas.ResetPasswordRequest)
 
-	token, err := h.resetService.StartResetProcess(c.Context(), body.Value)
+	token, err := h.resetService.StartResetProcess(
+		c.Context(),
+		body.AccountIdentifier,
+		body.Value,
+		body.Method,
+	)
 	if err != nil {
 		return errors.SendAppError(c, err)
 	}

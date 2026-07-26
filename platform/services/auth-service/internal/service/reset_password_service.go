@@ -16,13 +16,14 @@ import (
 )
 
 type ResetSession struct {
-	UserID    string `json:"user_id"`
-	Email     string `json:"email"`
-	CodeHash  string `json:"code"`
-	Token     string `json:"token"`
-	Challenge string `json:"challenge"`
-	Attempts  int    `json:"attempts"`
-	Verified  bool   `json:"verified"`
+	UserID          string `json:"user_id"`
+	Email           string `json:"email"`
+	AgreementNumber string `json:"agreement_number"`
+	CodeHash        string `json:"code"`
+	Token           string `json:"token"`
+	Challenge       string `json:"challenge"`
+	Attempts        int    `json:"attempts"`
+	Verified        bool   `json:"verified"`
 }
 
 type DeviceInfo struct {
@@ -34,21 +35,13 @@ type DeviceInfo struct {
 }
 
 type PasswordResetService interface {
-	StartResetProcess(ctx context.Context, email string) (string, error)
+	StartResetProcess(ctx context.Context, agreementNumber string, value string, method string) (string, error)
 	VerifyCode(ctx context.Context, token, code string) (*ResetSession, error)
 	FinalizeReset(ctx context.Context, token, newPassword, signature string, device DeviceInfo) error
 }
 
-type resetRepository interface {
-	GetUserByEmail(ctx context.Context, email string) (*model.User, error)
-	GetByID(ctx context.Context, id uuid.UUID) (*model.User, error)
-	Update(ctx context.Context, user *model.User) error
-	GetDeviceByFingerprint(ctx context.Context, userID uuid.UUID, fingerprint string) (*model.UserDevice, error)
-	SaveDevice(ctx context.Context, device *model.UserDevice) error
-}
-
 type passwordResetService struct {
-	userRepo         resetRepository
+	userRepo         repository.UserRepository
 	refreshTokenRepo repository.RefreshTokenRepository
 	cache            *redis.Cache
 }
@@ -56,7 +49,7 @@ type passwordResetService struct {
 func NewPasswordResetService(
 	userRepo repository.UserRepository,
 	refreshTokenRepo repository.RefreshTokenRepository,
-	cache *redis.Cache, // 3. Cache
+	cache *redis.Cache,
 ) PasswordResetService {
 	return &passwordResetService{
 		userRepo:         userRepo,
@@ -65,8 +58,8 @@ func NewPasswordResetService(
 	}
 }
 
-func (s *passwordResetService) StartResetProcess(ctx context.Context, email string) (string, error) {
-	user, err := s.userRepo.GetUserByEmail(ctx, email)
+func (s *passwordResetService) StartResetProcess(ctx context.Context, agreementNumber string, value string, method string) (string, error) {
+	user, err := s.userRepo.GetUserByEmailAndAgreement(ctx, value, agreementNumber)
 	if err != nil {
 		return "", errors.ErrEmailIsSendIfExists
 	}
@@ -76,18 +69,19 @@ func (s *passwordResetService) StartResetProcess(ctx context.Context, email stri
 	hashed, _ := bcrypt.GenerateFromPassword([]byte(code), bcrypt.DefaultCost)
 
 	session := ResetSession{
-		UserID:   user.ID.String(),
-		Email:    user.Email,
-		CodeHash: string(hashed),
-		Token:    token,
-		Attempts: 0,
+		UserID:          user.ID.String(),
+		Email:           user.Email,
+		AgreementNumber: agreementNumber,
+		CodeHash:        string(hashed),
+		Token:           token,
+		Attempts:        0,
 	}
 
 	if err := s.saveSession(ctx, token, &session); err != nil {
 		return "", errors.ErrInternal
 	}
 
-	fmt.Printf("[RESET DEBUG] Kod dla %s: %s\n", email, code)
+	fmt.Printf("[RESET DEBUG] Kod dla umowy %s (%s): %s\n", agreementNumber, value, code)
 	return token, nil
 }
 
@@ -136,13 +130,10 @@ func (s *passwordResetService) FinalizeReset(ctx context.Context, token, newPass
 			return errors.ErrUntrustedDevice
 		}
 		newDevice := &model.UserDevice{
-			ID:     uuid.New(),
-			UserID: userUUID,
-			// Fingerprint: device.Fingerprint,
-			PublicKey: device.PublicKey,
-			// DeviceName:  device.DeviceName,
-			Platform: device.Platform,
-			// LastIP:      device.IP,
+			ID:         uuid.New(),
+			UserID:     userUUID,
+			PublicKey:  device.PublicKey,
+			Platform:   device.Platform,
 			IsVerified: false,
 			IsActive:   true,
 		}

@@ -36,8 +36,9 @@ type RefreshTokenRequest struct {
 
 // ===== Reset Password =====
 type ResetPasswordRequest struct {
-	Value  string `json:"value" validate:"required,email"`
-	Method string `json:"method"`
+	AccountIdentifier string `json:"account_identifier" validate:"required"`
+	Value             string `json:"value" validate:"required,email"`
+	Method            string `json:"method" validate:"required,oneof=email sms"`
 }
 
 type ResetCodeVerifyRequest struct {

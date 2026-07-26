@@ -24,6 +24,7 @@ type UserRepository interface {
 	CreateUser(*model.User) error
 	GetByID(ctx context.Context, id uuid.UUID) (*model.User, error)
 	GetUserByEmail(ctx context.Context, email string) (*model.User, error)
+	GetUserByEmailAndAgreement(ctx context.Context, email string, agreementNumber string) (*model.User, error)
 	DeleteDevice(ctx context.Context, userID uuid.UUID, fingerprint string) error
 
 	EmailExists(string) (bool, error)
