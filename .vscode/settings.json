@@ -21,8 +21,8 @@
 
   // (Search)
   "search.exclude": {
-    "**/go.work.sum": true,
-    "**/go.sum": true,
+    // "**/go.work.sum": true,
+    // "**/go.sum": true,
     // "**/go.mod": true,
     "**/logs/": true,
     "**/bin/": true,
