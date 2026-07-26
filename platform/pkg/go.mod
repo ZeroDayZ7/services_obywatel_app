@@ -6,7 +6,7 @@ require (
 	github.com/go-playground/validator/v10 v10.30.3
 	github.com/go-viper/mapstructure/v2 v2.5.0
 	github.com/gofiber/fiber/v2 v2.52.14
-	github.com/gofiber/storage/redis/v3 v3.5.1
+	github.com/gofiber/storage/redis/v3 v3.4.5
 	github.com/google/uuid v1.6.0
 	github.com/rabbitmq/amqp091-go v1.13.0
 	github.com/redis/go-redis/v9 v9.21.0
