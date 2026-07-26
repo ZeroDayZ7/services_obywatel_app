@@ -41,7 +41,6 @@ type AuthService interface {
 	// Narzędzia JWT
 	CreateAccessToken(userID uuid.UUID, fingerprint string) (string, string, error)
 	CreateRefreshToken(userID uuid.UUID, fingerprint string, deviceID *uuid.UUID) (*model.RefreshToken, error)
-	GetRefreshToken(token string) (*model.RefreshToken, error)
 	RevokeRefreshToken(token string) error
 	// Metody specyficzne dla logiki logowania
 	CanUserLogin(user *model.User) error
@@ -848,11 +847,6 @@ func (s *authService) CreateRefreshToken(userID uuid.UUID, fingerprint string, d
 	// Zwracamy obiekt z niezhaszowanym tokenem dla klienta
 	rt.Token = rawToken
 	return rt, nil
-}
-
-// region GetRefreshToken
-func (s *authService) GetRefreshToken(token string) (*model.RefreshToken, error) {
-	return s.refreshRepo.GetByToken(token)
 }
 
 // region RevokeRefreshToken

@@ -40,6 +40,7 @@ const (
 	StatusLocked    UserStatus = "LOCKED"
 )
 
+// region User
 type User struct {
 	ID                  uuid.UUID      `gorm:"type:uuid;primaryKey;default:uuidv7()"`
 	Username            string         `gorm:"size:30;not null;unique"`
@@ -66,6 +67,7 @@ type User struct {
 	Agreement     *UserAgreement `gorm:"foreignKey:UserID"`
 }
 
+// region AvailablePermission
 type AvailablePermission struct {
 	ID          uuid.UUID `gorm:"type:uuid;primaryKey;default:uuidv7()" json:"id"`
 	Key         string    `gorm:"size:100;not null;uniqueIndex" json:"key"`

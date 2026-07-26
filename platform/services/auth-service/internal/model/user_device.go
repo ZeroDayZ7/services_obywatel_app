@@ -7,6 +7,7 @@ import (
 	"gorm.io/gorm"
 )
 
+// region UserDevice
 type UserDevice struct {
 	ID                  uuid.UUID      `gorm:"type:uuid;primaryKey;default:uuidv7()"`
 	UserID              uuid.UUID      `gorm:"type:uuid;not null;uniqueIndex:idx_user_device"`

@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 )
 
+// region UserSessionDTO
 type UserSessionDTO struct {
 	SessionID           uuid.UUID `gorm:"column:session_id" json:"id"`
 	DeviceNameEncrypted string    `gorm:"column:device_name_encrypted" json:"device_name"`

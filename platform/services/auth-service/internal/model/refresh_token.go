@@ -7,6 +7,7 @@ import (
 	"gorm.io/gorm"
 )
 
+// region RefreshToken
 type RefreshToken struct {
 	ID                uuid.UUID      `gorm:"type:uuid;primaryKey;default:uuidv7()"`
 	UserID            uuid.UUID      `gorm:"type:uuid;not null;index"`

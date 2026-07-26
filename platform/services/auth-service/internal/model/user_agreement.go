@@ -25,7 +25,7 @@ const (
 	PukStatusBlocked PukStatus = "BLOCKED" // Zablokowany po zbyt wielu błędnych próbach
 )
 
-// UserAgreement reprezentuje warstwę formalno-prawną relacji z użytkownikiem
+// region UserAgreement
 type UserAgreement struct {
 	ID              uuid.UUID       `gorm:"type:uuid;primaryKey;default:uuidv7()"`
 	UserID          uuid.UUID       `gorm:"type:uuid;not null;uniqueIndex"`
@@ -44,7 +44,7 @@ type UserAgreement struct {
 	PukCode *UserPukCode `gorm:"foreignKey:UserAgreementID"`
 }
 
-// UserPukCode odpowiada ściśle za bezpieczną weryfikację PUK
+// region UserPukCode
 type UserPukCode struct {
 	ID              uuid.UUID  `gorm:"type:uuid;primaryKey;default:uuidv7()"`
 	UserAgreementID uuid.UUID  `gorm:"type:uuid;not null;uniqueIndex"`
