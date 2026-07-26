@@ -143,23 +143,26 @@ func decodeHash(encoded string) (Params, []byte, []byte, error) {
 		return params, nil, nil, ErrInvalidHash
 	}
 
-	values := strings.Split(parts[3], ",")
-	for _, value := range values {
+	values := strings.SplitSeq(parts[3], ",")
+	for value := range values {
 		item := strings.Split(value, "=")
 		if len(item) != 2 {
 			return params, nil, nil, ErrInvalidHash
 		}
 
-		number, err := strconv.Atoi(item[1])
-		if err != nil || number < 0 {
+		// Parsujemy bezpośrednio jako uint32 (bitSize: 32)
+		val, err := strconv.ParseUint(item[1], 10, 32)
+		if err != nil {
 			return params, nil, nil, ErrInvalidHash
 		}
 
+		number := uint32(val)
+
 		switch item[0] {
 		case "m":
-			params.Memory = uint32(number)
+			params.Memory = number
 		case "t":
-			params.Iterations = uint32(number)
+			params.Iterations = number
 		case "p":
 			if number > 255 {
 				return params, nil, nil, ErrInvalidHash
