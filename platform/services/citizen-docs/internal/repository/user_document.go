@@ -1,8 +1,11 @@
+// platform/services/citizen-docs/internal/repository/user_document_gorm.go
+
 package repository
 
 import (
 	"context"
 
+	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/services/citizen-docs/internal/model"
 	"gorm.io/gorm"
 )
@@ -19,7 +22,7 @@ func (r *userDocumentRepository) Create(ctx context.Context, doc *model.UserDocu
 	return r.db.WithContext(ctx).Create(doc).Error
 }
 
-func (r *userDocumentRepository) GetByProfileID(ctx context.Context, profileID uint) ([]model.UserDocument, error) {
+func (r *userDocumentRepository) GetByProfileID(ctx context.Context, profileID uuid.UUID) ([]model.UserDocument, error) {
 	var docs []model.UserDocument
 	err := r.db.WithContext(ctx).Where("profile_id = ?", profileID).Find(&docs).Error
 	return docs, err

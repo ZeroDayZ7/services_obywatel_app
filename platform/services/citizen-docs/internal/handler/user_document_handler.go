@@ -1,11 +1,13 @@
+// platform/services/citizen-docs/internal/handler/user_document_handler.go
+
 package handler
 
 import (
 	"encoding/json"
 	"io"
-	"strconv"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/services/citizen-docs/internal/model"
 	"github.com/zerodayz7/platform/services/citizen-docs/internal/service"
 )
@@ -27,14 +29,14 @@ func (h *UserDocumentHandler) CreateDocument(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid meta format"})
 	}
 
-	// 2. Pobieramy parametry
-	profileID, err := strconv.Atoi(c.FormValue("profile_id"))
+	// 2. Parsujemy profile_id jako UUID
+	profileID, err := uuid.Parse(c.FormValue("profile_id"))
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid profile_id"})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid profile_id UUID format"})
 	}
 	docType := model.DocumentType(c.FormValue("type"))
 
-	// 3. Pobieramy i czytamy pliki z obsługą błędów (naprawa errcheck)
+	// 3. Pobieramy i czytamy pliki
 	frontBytes, err := readFileFromForm(c, "front")
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "failed to read front file: " + err.Error()})
@@ -51,7 +53,7 @@ func (h *UserDocumentHandler) CreateDocument(c *fiber.Ctx) error {
 		&meta,
 		frontBytes,
 		backBytes,
-		uint(profileID),
+		profileID,
 		docType,
 	)
 	if err != nil {
@@ -59,6 +61,26 @@ func (h *UserDocumentHandler) CreateDocument(c *fiber.Ctx) error {
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{"status": "created"})
+}
+
+// GET /documents/me
+func (h *UserDocumentHandler) GetDocumentsMe(c *fiber.Ctx) error {
+	profileIDStr := c.Get("X-Profile-ID")
+	if profileIDStr == "" {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "missing X-Profile-ID"})
+	}
+
+	profileID, err := uuid.Parse(profileIDStr)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid profile ID UUID format"})
+	}
+
+	docs, err := h.service.GetDocumentsByProfileID(c.Context(), profileID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to fetch documents"})
+	}
+
+	return c.JSON(docs)
 }
 
 // Pomocnicza funkcja do bezpiecznego czytania plików z formularza
@@ -80,24 +102,4 @@ func readFileFromForm(c *fiber.Ctx, fieldName string) ([]byte, error) {
 	}
 
 	return data, nil
-}
-
-// GET /documents/me
-func (h *UserDocumentHandler) GetDocumentsMe(c *fiber.Ctx) error {
-	profileIDStr := c.Get("X-Profile-ID")
-	if profileIDStr == "" {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "missing X-Profile-ID"})
-	}
-
-	profileID, err := strconv.ParseUint(profileIDStr, 10, 32)
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid profile ID"})
-	}
-
-	docs, err := h.service.GetDocumentsByProfileID(c.Context(), uint(profileID))
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to fetch documents"})
-	}
-
-	return c.JSON(docs)
 }

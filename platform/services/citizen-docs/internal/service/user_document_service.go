@@ -5,7 +5,9 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/pkg/viper"
 	"github.com/zerodayz7/platform/services/citizen-docs/internal/model"
@@ -26,27 +28,43 @@ func NewUserDocumentService(repo repository.UserDocumentRepo, cfg *viper.Config,
 	}
 }
 
-// CreateDocument dopasowany do wywołania z handlera
+// CreateDocument zaktualizowany o uuid.UUID dla profileID
 func (s *UserDocumentService) CreateDocument(
 	ctx context.Context,
 	meta *model.DocumentMeta,
 	front []byte,
 	back []byte,
-	profileID uint,
+	profileID uuid.UUID,
 	docType model.DocumentType,
 ) error {
 	encryptionKey := []byte(s.cfg.Internal.EncryptionKey)
 
 	// Szyfrowanie metadanych (JSON)
-	metaBytes, _ := json.Marshal(meta)
+	metaBytes, err := json.Marshal(meta)
+	if err != nil {
+		return fmt.Errorf("failed to marshal document meta: %w", err)
+	}
+
 	encMeta, err := shared.Encrypt(metaBytes, encryptionKey)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to encrypt document meta: %w", err)
 	}
 
 	// Szyfrowanie plików binarnych
-	encFront, _ := shared.Encrypt(front, encryptionKey)
-	encBack, _ := shared.Encrypt(back, encryptionKey)
+	var encFront, encBack []byte
+	if len(front) > 0 {
+		encFront, err = shared.Encrypt(front, encryptionKey)
+		if err != nil {
+			return fmt.Errorf("failed to encrypt front document: %w", err)
+		}
+	}
+
+	if len(back) > 0 {
+		encBack, err = shared.Encrypt(back, encryptionKey)
+		if err != nil {
+			return fmt.Errorf("failed to encrypt back document: %w", err)
+		}
+	}
 
 	doc := &model.UserDocument{
 		ProfileID:      profileID,
@@ -60,8 +78,6 @@ func (s *UserDocumentService) CreateDocument(
 	return s.repo.Create(ctx, doc)
 }
 
-// Ta metoda rozwiązuje błąd 'GetDocumentsByUserID undefined'
-// (Zmieniłem nazwę na GetDocumentsByProfileID, upewnij się że w handlerze wywołasz ją poprawnie)
-func (s *UserDocumentService) GetDocumentsByProfileID(ctx context.Context, profileID uint) ([]model.UserDocument, error) {
+func (s *UserDocumentService) GetDocumentsByProfileID(ctx context.Context, profileID uuid.UUID) ([]model.UserDocument, error) {
 	return s.repo.GetByProfileID(ctx, profileID)
 }

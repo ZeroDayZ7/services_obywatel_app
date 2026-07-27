@@ -1,3 +1,5 @@
+// platform/services/citizen-docs/internal/repository/citizen_gorm.go
+
 package repository
 
 import (
@@ -17,7 +19,6 @@ func NewCitizenRepository(db *gorm.DB) CitizenRepo {
 }
 
 func (r *citizenRepository) Create(ctx context.Context, profile *model.CitizenProfile) error {
-	// Używamy WithContext, aby GORM wiedział o cancelation/timeoutach
 	return r.db.WithContext(ctx).Create(profile).Error
 }
 
