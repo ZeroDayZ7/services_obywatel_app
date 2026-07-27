@@ -15,7 +15,7 @@
     "**/.gitattributes": true,
     // "**/.gitignore": true,
 
-    "**/Dockerfile": true,
+    // "**/Dockerfile": true,
 
   },
 
