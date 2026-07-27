@@ -11,6 +11,7 @@ import (
 	reqctx "github.com/zerodayz7/platform/pkg/context"
 	apperr "github.com/zerodayz7/platform/pkg/errors"
 	"github.com/zerodayz7/platform/pkg/shared"
+	"github.com/zerodayz7/platform/services/citizen-docs/internal/mapper"
 	"github.com/zerodayz7/platform/services/citizen-docs/internal/model"
 	"github.com/zerodayz7/platform/services/citizen-docs/internal/service"
 )
@@ -80,7 +81,6 @@ func (h *UserDocumentHandler) GetDocumentsMe(c *fiber.Ctx) error {
 	defer cancel()
 
 	log := shared.GetLogger()
-
 	rc := reqctx.MustFromFiber(c)
 
 	if rc.UserID == nil {
@@ -97,27 +97,28 @@ func (h *UserDocumentHandler) GetDocumentsMe(c *fiber.Ctx) error {
 		return apperr.SendAppError(c, err)
 	}
 
-	// Tworzymy dokładną odpowiedź API
-	response := map[string]any{
-		"user_id": rc.UserID.String(),
-		"count":   len(docs),
-		"docs":    docs,
-	}
+	response := mapper.ToUserDocumentResponses(docs)
 
-	// DEBUG - pokazuje dokładny JSON
-	debugJSON, err := json.MarshalIndent(response, "", "  ")
+	// dokładnie to co pójdzie do JSON()
+	jsonResponse, err := json.Marshal(response)
 	if err != nil {
 		log.ErrorObj("Failed to marshal documents response", map[string]any{
 			"error": err.Error(),
 		})
-	} else {
-		log.DebugInfo("GET /documents/me JSON RESPONSE", map[string]any{
-			"json": string(debugJSON),
-		})
+
+		return apperr.SendAppError(c, err)
 	}
+
+	log.DebugInfo("GET /documents/me response payload", map[string]any{
+		"user_id": rc.UserID.String(),
+		"count":   len(response),
+		"json":    string(jsonResponse),
+	})
 
 	return c.Status(fiber.StatusOK).JSON(response)
 }
+
+// #endregion
 
 // #region HELPERS
 func readFileFromForm(c *fiber.Ctx, fieldName string) ([]byte, error) {
