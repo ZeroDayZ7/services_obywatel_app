@@ -78,22 +78,45 @@ func (h *UserDocumentHandler) CreateDocument(c *fiber.Ctx) error {
 func (h *UserDocumentHandler) GetDocumentsMe(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(c.UserContext(), 2*time.Second)
 	defer cancel()
+
 	log := shared.GetLogger()
 
-	// Pobieramy bezpiecznie Request Context ustawiony przez middleware Gatewaya
 	rc := reqctx.MustFromFiber(c)
+
 	if rc.UserID == nil {
 		return apperr.SendAppError(c, apperr.ErrUnauthorized)
 	}
 
-	// W kontekście pobierania dokumentów profilu używamy UserID lub ProfileID wyciągniętego z rc
-	docs, err := h.service.GetDocumentsByProfileID(ctx, *rc.UserID)
+	docs, err := h.service.GetDocumentsByUserID(ctx, *rc.UserID)
 	if err != nil {
-		log.ErrorObj("Failed to fetch user documents", map[string]any{"user_id": rc.UserID, "err": err.Error()})
+		log.ErrorObj("Failed to fetch user documents", map[string]any{
+			"user_id": rc.UserID,
+			"error":   err.Error(),
+		})
+
 		return apperr.SendAppError(c, err)
 	}
 
-	return c.Status(fiber.StatusOK).JSON(docs)
+	// Tworzymy dokładną odpowiedź API
+	response := map[string]any{
+		"user_id": rc.UserID.String(),
+		"count":   len(docs),
+		"docs":    docs,
+	}
+
+	// DEBUG - pokazuje dokładny JSON
+	debugJSON, err := json.MarshalIndent(response, "", "  ")
+	if err != nil {
+		log.ErrorObj("Failed to marshal documents response", map[string]any{
+			"error": err.Error(),
+		})
+	} else {
+		log.DebugInfo("GET /documents/me JSON RESPONSE", map[string]any{
+			"json": string(debugJSON),
+		})
+	}
+
+	return c.Status(fiber.StatusOK).JSON(response)
 }
 
 // #region HELPERS

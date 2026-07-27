@@ -27,7 +27,7 @@ func main() {
 
 	app := config.NewDocsApp(container)
 
-	router.SetupDocsRoutes(app, container.UserDocumentSvc)
+	router.SetupDocsRoutes(app, container)
 
 	server.Run(
 		app,

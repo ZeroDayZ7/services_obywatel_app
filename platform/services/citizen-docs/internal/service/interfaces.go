@@ -20,5 +20,5 @@ type UserDocumentService interface {
 		profileID uuid.UUID,
 		docType model.DocumentType,
 	) error
-	GetDocumentsByProfileID(ctx context.Context, profileID uuid.UUID) ([]model.UserDocument, error)
+	GetDocumentsByUserID(ctx context.Context, userID uuid.UUID) ([]model.UserDocument, error)
 }

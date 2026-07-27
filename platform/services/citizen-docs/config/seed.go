@@ -51,12 +51,9 @@ func SeedData(db *gorm.DB) error {
 		return fmt.Errorf("failed to marshal seed citizen data: %w", err)
 	}
 
-	profileID := uuid.New()
-	profile := model.CitizenProfile{
-		ID:            profileID,
-		UserID:        testUserID,
-		EncryptedData: bytesCitizenData,
-		PeselHash:     hashPesel("90010112345"),
+	profileID, err := uuid.NewV7()
+	if err != nil {
+		return fmt.Errorf("failed to generate profile uuidv7: %w", err)
 	}
 
 	now := time.Now()
@@ -79,37 +76,38 @@ func SeedData(db *gorm.DB) error {
 	}
 	bytesMetaDL, _ := json.Marshal(metaDriverLicense)
 
-	documents := []model.UserDocument{
-		{
-			ID:            uuid.New(),
-			ProfileID:     profileID,
-			Type:          model.DocumentTypeIDCard,
-			Status:        model.DocumentStatusActive,
-			EncryptedMeta: bytesMetaID,
-			IssuedAt:      &issuedAtID,
-			ExpiresAt:     &expiresAtID,
-		},
-		{
-			ID:            uuid.New(),
-			ProfileID:     profileID,
-			Type:          model.DocumentTypeDriverLicense,
-			Status:        model.DocumentStatusActive,
-			EncryptedMeta: bytesMetaDL,
-			IssuedAt:      &issuedAtDL,
-			ExpiresAt:     &expiresAtDL,
+	docID1, _ := uuid.NewV7()
+	docID2, _ := uuid.NewV7()
+
+	profile := model.CitizenProfile{
+		ID:            profileID,
+		UserID:        testUserID,
+		EncryptedData: bytesCitizenData,
+		PeselHash:     hashPesel("90010112345"),
+		Documents: []model.UserDocument{
+			{
+				ID:            docID1,
+				Type:          model.DocumentTypeIDCard,
+				Status:        model.DocumentStatusActive,
+				EncryptedMeta: bytesMetaID,
+				IssuedAt:      &issuedAtID,
+				ExpiresAt:     &expiresAtID,
+			},
+			{
+				ID:            docID2,
+				Type:          model.DocumentTypeDriverLicense,
+				Status:        model.DocumentStatusActive,
+				EncryptedMeta: bytesMetaDL,
+				IssuedAt:      &issuedAtDL,
+				ExpiresAt:     &expiresAtDL,
+			},
 		},
 	}
 
-	return db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Create(&profile).Error; err != nil {
-			return fmt.Errorf("failed to seed citizen profile: %w", err)
-		}
+	if err := db.Create(&profile).Error; err != nil {
+		return fmt.Errorf("failed to seed citizen profile with documents: %w", err)
+	}
 
-		if err := tx.Create(&documents).Error; err != nil {
-			return fmt.Errorf("failed to seed user documents: %w", err)
-		}
-
-		log.Info(fmt.Sprintf("[SEED] Utworzono profil obywatela: %s | Dokumenty: %d", profile.UserID, len(documents)))
-		return nil
-	})
+	log.Info(fmt.Sprintf("[SEED] Utworzono profil obywatela: %s | ID Profilu: %s | Dokumenty: %d", profile.UserID, profile.ID, len(profile.Documents)))
+	return nil
 }

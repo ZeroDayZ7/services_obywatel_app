@@ -75,6 +75,6 @@ func (s *userDocumentService) CreateDocument(
 }
 
 // #region GET DOCUMENTS
-func (s *userDocumentService) GetDocumentsByProfileID(ctx context.Context, profileID uuid.UUID) ([]model.UserDocument, error) {
-	return s.repo.GetByProfileID(ctx, profileID)
+func (s *userDocumentService) GetDocumentsByUserID(ctx context.Context, userID uuid.UUID) ([]model.UserDocument, error) {
+	return s.repo.GetByUserID(ctx, userID)
 }
