@@ -12,8 +12,8 @@ type Container struct {
 	DB              *gorm.DB
 	Config          *viper.Config
 	Logger          *shared.Logger
-	UserDocumentSvc *service.UserDocumentService
-	CitizenSvc      *service.CitizenService
+	UserDocumentSvc service.UserDocumentService
+	CitizenSvc      service.CitizenService
 }
 
 func NewContainer(db *gorm.DB, logger *shared.Logger, cfg *viper.Config) *Container {

@@ -1,5 +1,3 @@
-// platform/services/citizen-docs/internal/repository/citizen_gorm.go
-
 package repository
 
 import (
@@ -18,10 +16,12 @@ func NewCitizenRepository(db *gorm.DB) CitizenRepo {
 	return &citizenRepository{db: db}
 }
 
+// #region CREATE
 func (r *citizenRepository) Create(ctx context.Context, profile *model.CitizenProfile) error {
 	return r.db.WithContext(ctx).Create(profile).Error
 }
 
+// #region READ
 func (r *citizenRepository) GetByUserID(ctx context.Context, userID uuid.UUID) (*model.CitizenProfile, error) {
 	var profile model.CitizenProfile
 	err := r.db.WithContext(ctx).

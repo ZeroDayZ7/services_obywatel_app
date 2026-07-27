@@ -1,55 +1,64 @@
-// platform/services/citizen-docs/internal/handler/user_document_handler.go
-
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"io"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
+	reqctx "github.com/zerodayz7/platform/pkg/context"
+	apperr "github.com/zerodayz7/platform/pkg/errors"
+	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/citizen-docs/internal/model"
 	"github.com/zerodayz7/platform/services/citizen-docs/internal/service"
 )
 
 type UserDocumentHandler struct {
-	service *service.UserDocumentService
+	service service.UserDocumentService
 }
 
-func NewUserDocumentHandler(s *service.UserDocumentService) *UserDocumentHandler {
+func NewUserDocumentHandler(s service.UserDocumentService) *UserDocumentHandler {
 	return &UserDocumentHandler{service: s}
 }
 
-// POST /documents
+// #region CREATE DOCUMENT
 func (h *UserDocumentHandler) CreateDocument(c *fiber.Ctx) error {
-	// 1. Pobieramy metadane
+	ctx, cancel := context.WithTimeout(c.UserContext(), 5*time.Second)
+	defer cancel()
+	log := shared.GetLogger()
+
+	// 1. Pobieramy metadane z formularza
 	metaStr := c.FormValue("meta")
 	var meta model.DocumentMeta
 	if err := json.Unmarshal([]byte(metaStr), &meta); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid meta format"})
+		return apperr.SendAppError(c, apperr.ErrInvalidRequestBody)
 	}
 
 	// 2. Parsujemy profile_id jako UUID
 	profileID, err := uuid.Parse(c.FormValue("profile_id"))
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid profile_id UUID format"})
+		return apperr.SendAppError(c, apperr.ErrInvalidRequestBody)
 	}
 	docType := model.DocumentType(c.FormValue("type"))
 
-	// 3. Pobieramy i czytamy pliki
+	// 3. Pobieramy i czytamy pliki front/back
 	frontBytes, err := readFileFromForm(c, "front")
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "failed to read front file: " + err.Error()})
+		log.WarnObj("Failed to read front document file", map[string]any{"err": err.Error()})
+		return apperr.SendAppError(c, apperr.ErrInvalidRequestBody)
 	}
 
 	backBytes, err := readFileFromForm(c, "back")
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "failed to read back file: " + err.Error()})
+		log.WarnObj("Failed to read back document file", map[string]any{"err": err.Error()})
+		return apperr.SendAppError(c, apperr.ErrInvalidRequestBody)
 	}
 
-	// 4. Wywołanie serwisu
+	// 4. Wywołanie logiki biznesowej
 	err = h.service.CreateDocument(
-		c.Context(),
+		ctx,
 		&meta,
 		frontBytes,
 		backBytes,
@@ -57,37 +66,41 @@ func (h *UserDocumentHandler) CreateDocument(c *fiber.Ctx) error {
 		docType,
 	)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		log.ErrorObj("Failed to create user document", map[string]any{"profile_id": profileID, "err": err.Error()})
+		return apperr.SendAppError(c, err)
 	}
 
+	log.InfoMap("Document created successfully", map[string]any{"profile_id": profileID, "type": docType})
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{"status": "created"})
 }
 
-// GET /documents/me
+// #region GET DOCUMENTS ME
 func (h *UserDocumentHandler) GetDocumentsMe(c *fiber.Ctx) error {
-	profileIDStr := c.Get("X-Profile-ID")
-	if profileIDStr == "" {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "missing X-Profile-ID"})
+	ctx, cancel := context.WithTimeout(c.UserContext(), 2*time.Second)
+	defer cancel()
+	log := shared.GetLogger()
+
+	// Pobieramy bezpiecznie Request Context ustawiony przez middleware Gatewaya
+	rc := reqctx.MustFromFiber(c)
+	if rc.UserID == nil {
+		return apperr.SendAppError(c, apperr.ErrUnauthorized)
 	}
 
-	profileID, err := uuid.Parse(profileIDStr)
+	// W kontekście pobierania dokumentów profilu używamy UserID lub ProfileID wyciągniętego z rc
+	docs, err := h.service.GetDocumentsByProfileID(ctx, *rc.UserID)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid profile ID UUID format"})
+		log.ErrorObj("Failed to fetch user documents", map[string]any{"user_id": rc.UserID, "err": err.Error()})
+		return apperr.SendAppError(c, err)
 	}
 
-	docs, err := h.service.GetDocumentsByProfileID(c.Context(), profileID)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to fetch documents"})
-	}
-
-	return c.JSON(docs)
+	return c.Status(fiber.StatusOK).JSON(docs)
 }
 
-// Pomocnicza funkcja do bezpiecznego czytania plików z formularza
+// #region HELPERS
 func readFileFromForm(c *fiber.Ctx, fieldName string) ([]byte, error) {
 	fileHeader, err := c.FormFile(fieldName)
 	if err != nil {
-		return nil, nil // Plik opcjonalny, brak błędu jeśli go nie ma
+		return nil, nil // Plik jest opcjonalny
 	}
 
 	file, err := fileHeader.Open()

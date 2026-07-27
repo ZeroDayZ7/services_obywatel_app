@@ -1,4 +1,3 @@
 sqlc generate
 
-
-go run ./cmd/api
+go run ./cmd

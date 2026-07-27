@@ -1,0 +1,115 @@
+package config
+
+import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/zerodayz7/platform/pkg/shared"
+	"github.com/zerodayz7/platform/services/citizen-docs/internal/model"
+	"gorm.io/datatypes"
+	"gorm.io/gorm"
+)
+
+var testUserID = uuid.MustParse("707a8869-6867-4601-9337-e23fcb51b0ad")
+
+func hashPesel(pesel string) string {
+	h := hmac.New(sha256.New, []byte("seed-secret-key"))
+	h.Write([]byte(pesel))
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+func SeedData(db *gorm.DB) error {
+	log := shared.GetLogger()
+
+	var count int64
+	if err := db.Model(&model.CitizenProfile{}).Count(&count).Error; err != nil {
+		return fmt.Errorf("failed to check citizen profiles count: %w", err)
+	}
+
+	if count > 0 {
+		return nil
+	}
+
+	log.Info("[SEED] Rozpoczynam zasiewanie bazy citizen-docs...")
+
+	rawCitizenData := model.CitizenData{
+		FirstName:   "Jan",
+		LastName:    "Kowalski",
+		PESEL:       "90010112345",
+		DateOfBirth: "1990-01-01",
+		Citizenship: "PL",
+		Attributes:  datatypes.JSON([]byte(`{"gender":"M","blood_type":"A+"}`)),
+	}
+
+	bytesCitizenData, err := json.Marshal(rawCitizenData)
+	if err != nil {
+		return fmt.Errorf("failed to marshal seed citizen data: %w", err)
+	}
+
+	profileID := uuid.New()
+	profile := model.CitizenProfile{
+		ID:            profileID,
+		UserID:        testUserID,
+		EncryptedData: bytesCitizenData,
+		PeselHash:     hashPesel("90010112345"),
+	}
+
+	now := time.Now()
+	issuedAtID := now.AddDate(-2, 0, 0)
+	expiresAtID := now.AddDate(8, 0, 0)
+
+	metaIDCard := model.DocumentMeta{
+		DocumentNumber: "ABA123456",
+		Issuer:         "PREZYDENT MIASTA KATOWICE",
+	}
+	bytesMetaID, _ := json.Marshal(metaIDCard)
+
+	issuedAtDL := now.AddDate(-1, 0, 0)
+	expiresAtDL := now.AddDate(14, 0, 0)
+
+	metaDriverLicense := model.DocumentMeta{
+		DocumentNumber: "12345/22/2401",
+		Issuer:         "STAROSTA BĘDZIŃSKI",
+		AdditionalInfo: datatypes.JSON([]byte(`{"categories":["AM","B"]}`)),
+	}
+	bytesMetaDL, _ := json.Marshal(metaDriverLicense)
+
+	documents := []model.UserDocument{
+		{
+			ID:            uuid.New(),
+			ProfileID:     profileID,
+			Type:          model.DocumentTypeIDCard,
+			Status:        model.DocumentStatusActive,
+			EncryptedMeta: bytesMetaID,
+			IssuedAt:      &issuedAtID,
+			ExpiresAt:     &expiresAtID,
+		},
+		{
+			ID:            uuid.New(),
+			ProfileID:     profileID,
+			Type:          model.DocumentTypeDriverLicense,
+			Status:        model.DocumentStatusActive,
+			EncryptedMeta: bytesMetaDL,
+			IssuedAt:      &issuedAtDL,
+			ExpiresAt:     &expiresAtDL,
+		},
+	}
+
+	return db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&profile).Error; err != nil {
+			return fmt.Errorf("failed to seed citizen profile: %w", err)
+		}
+
+		if err := tx.Create(&documents).Error; err != nil {
+			return fmt.Errorf("failed to seed user documents: %w", err)
+		}
+
+		log.Info(fmt.Sprintf("[SEED] Utworzono profil obywatela: %s | Dokumenty: %d", profile.UserID, len(documents)))
+		return nil
+	})
+}

@@ -1,5 +1,3 @@
-// platform/services/citizen-docs/internal/service/citizen_service.go
-
 package service
 
 import (
@@ -15,21 +13,22 @@ import (
 	"github.com/zerodayz7/platform/services/citizen-docs/internal/repository"
 )
 
-type CitizenService struct {
+type citizenService struct {
 	repo   repository.CitizenRepo
 	cfg    *viper.Config
 	logger *shared.Logger
 }
 
-func NewCitizenService(repo repository.CitizenRepo, cfg *viper.Config, logger *shared.Logger) *CitizenService {
-	return &CitizenService{
+func NewCitizenService(repo repository.CitizenRepo, cfg *viper.Config, logger *shared.Logger) CitizenService {
+	return &citizenService{
 		repo:   repo,
 		cfg:    cfg,
 		logger: logger,
 	}
 }
 
-func (s *CitizenService) CreateProfile(ctx context.Context, userID uuid.UUID, data *model.CitizenData) error {
+// #region CREATE PROFILE
+func (s *citizenService) CreateProfile(ctx context.Context, userID uuid.UUID, data *model.CitizenData) error {
 	encryptionKey := []byte(s.cfg.Internal.EncryptionKey)
 
 	plainBytes, err := json.Marshal(data)

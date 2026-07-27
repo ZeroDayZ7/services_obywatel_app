@@ -7,7 +7,7 @@ import (
 )
 
 // SetupDocsRoutes ustawia wszystkie trasy dla mikroserwisu dokumentów
-func SetupDocsRoutes(app *fiber.App, userDocService *service.UserDocumentService) {
+func SetupDocsRoutes(app *fiber.App, userDocService service.UserDocumentService) {
 	h := handler.NewUserDocumentHandler(userDocService)
 
 	SetupHealthRoutes(app) // np. /health
