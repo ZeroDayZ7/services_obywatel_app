@@ -90,6 +90,28 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+  
+  # region db-audit
+  # --- AUDIT DATABASE ---
+  db-audit:
+    <<: *common-settings
+    image: postgres:18.3-alpine
+    container_name: audit-database
+    environment:
+      POSTGRES_USER: ${AUDIT_DB_USER:-admin}
+      POSTGRES_DB: ${AUDIT_DB_NAME:-audit-database}
+      POSTGRES_PASSWORD_FILE: /run/secrets/audit_db_pass
+    secrets:
+      - audit_db_pass
+    ports:
+      - "5435:5432"
+    volumes:
+      - pg_audit_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # region cache-redis
   # --- SESSION & CACHING ---
@@ -175,6 +197,8 @@ secrets:
     file: ./secrets/.citizen_db_password
   notify_db_pass:
     file: ./secrets/.notify_db_password
+  audit_db_pass:
+    file: ./secrets/.audit_db_password
   redis_auth_pass:
     file: ./secrets/.redis_password
   pgadmin_root_pass:
@@ -185,6 +209,7 @@ volumes:
   pg_auth_data:
   pg_citizen_docs_data:
   pg_notification_data:
+  pg_audit_data:
   redis_data:
   go-modules:
   rabbitmq_data:

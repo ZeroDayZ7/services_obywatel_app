@@ -24,7 +24,7 @@ func main() {
 	// Initialize production logger
 	log := shared.InitLogger(config.AppConfig.Server.Env, false)
 
-	// Initialize Database (Pobranie puli, automatyczne migracje i schematy)
+	// Initialize Database
 	db, closeDB := config.MustInitDB(config.AppConfig.Database)
 	defer closeDB()
 

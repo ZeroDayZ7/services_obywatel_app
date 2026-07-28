@@ -9,9 +9,7 @@ import (
 	"github.com/zerodayz7/platform/services/audit-service/internal/di"
 )
 
-// NewAuditApp tworzy instancję Fiber App wstrzykując kontener DI.
 func NewAuditApp(container *di.Container) *fiber.App {
-	// 1. Pobranie konfiguracji serwera bezpośrednio z kontenera.
 	cfg := container.Config.Server
 
 	cfgFiber := fiber.Config{
@@ -36,7 +34,6 @@ func NewAuditApp(container *di.Container) *fiber.App {
 
 	app := fiber.New(cfgFiber)
 
-	// 2. Rejestracja globalnych middleware.
 	app.Use(requestid.New())
 	app.Use(recover.New())
 	app.Use(shared.GetLimiter(shared.LimitGlobal, nil))
