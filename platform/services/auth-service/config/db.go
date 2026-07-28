@@ -1,32 +1,20 @@
 package config
 
 import (
-	"fmt"
-
 	"github.com/zerodayz7/platform/pkg/database"
 	"github.com/zerodayz7/platform/pkg/viper"
 	"gorm.io/gorm"
 )
 
-func ensureSchemas(db *gorm.DB) error {
-	for _, s := range AllSchemas() {
-		query := fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s;", s)
-		if err := db.Exec(query).Error; err != nil {
-			return fmt.Errorf("failed to ensure schema %s: %w", s, err)
-		}
-	}
-	return nil
-}
-
 func MustInitDB(cfg viper.DBConfig) (*gorm.DB, func()) {
-	// 1. Inicjalizacja połączenia bez przekazywania modeli (sam klient SQL)
+	// 1. Inicjalizacja połączenia
 	db, closeDB, err := database.NewPostgres(cfg)
 	if err != nil {
 		panic(err)
 	}
 
-	// 2. Automatyczne upewnienie się, że schematy istnieją
-	if err := ensureSchemas(db); err != nil {
+	// 2. Automatyczne upewnienie się, że schematy istnieją (z wykorzystaniem pkg/database)
+	if err := database.EnsureSchemas(db, AllSchemas()...); err != nil {
 		panic(err)
 	}
 
@@ -35,7 +23,7 @@ func MustInitDB(cfg viper.DBConfig) (*gorm.DB, func()) {
 		panic(err)
 	}
 
-	// 4. Uruchomienie seedera przy użyciu pomocnika z pkg
+	// 4. Uruchomienie seedera
 	if err := SeedData(db); err != nil {
 		panic(err)
 	}

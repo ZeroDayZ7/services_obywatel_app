@@ -24,7 +24,7 @@ func main() {
 	// Initialize production logger
 	log := shared.InitLogger(config.AppConfig.Server.Env, false)
 
-	// Initialize Database
+	// Initialize Database (Pobranie puli, automatyczne migracje i schematy)
 	db, closeDB := config.MustInitDB(config.AppConfig.Database)
 	defer closeDB()
 
@@ -50,8 +50,8 @@ func main() {
 		},
 		*log,
 		func() {
-			closeDB()
-			// Additional resource cleanup can be added here
+			// Czyszczenie zasobów działających w tle (np. konteksty workerów)
+			// closeDB jest bezpiecznie wykonywane przez defer w main
 		},
 	)
 }
