@@ -616,8 +616,7 @@ func (s *authService) Verify2FA(ctx context.Context, token string, code []byte, 
 	user.LastIP = ip
 	_ = s.userRepo.Update(ctx, user)
 
-	// 5. Generowanie tokenów i sesji głównej
-	setupToken, sessionID, err := s.CreateAccessToken(uid, fingerprint)
+	setupToken, sessionID, err := s.CreateSetupToken(uid, fingerprint)
 	if err != nil {
 		return nil, errors.ErrInternal
 	}
