@@ -18,29 +18,20 @@ import (
 
 func ReverseProxyFiber(container *di.Container, target string) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		// 1. Pobieramy Twój kontekst (ID requestu itp.)
 		ctx, _ := c.Locals("requestContext").(*reqctx.RequestContext)
 
-		// 2. Przygotowujemy URL docelowy (np. http://auth-service:8080/auth/login)
-		// c.Path() zawiera pełną ścieżkę
 		url := target + c.Path()
 
-		// 3. Dodajemy Twoje customowe nagłówki przed wysłaniem
 		if ctx != nil {
 			c.Request().Header.Set(constants.HeaderRequestID, ctx.RequestID)
 			c.Request().Header.Set(constants.HeaderXForwardedFor, ctx.IP)
 			c.Request().Header.Set(constants.HeaderXRealIP, ctx.IP)
 		}
 
-		// Wymusić przekazanie User-Agent i Fingerprint,
-		// Fiber domyślnie przekazuje większość nagłówków klienta.
-
-		// 4. Wykonujemy Proxy
 		return proxy.Do(c, url)
 	}
 }
 
-// W internal/router/proxy.go popraw ReverseProxy:
 // region ReverseProxy
 func ReverseProxy(container *di.Container, target string) fiber.Handler {
 	log := shared.GetLogger()
@@ -53,10 +44,10 @@ func ReverseProxy(container *di.Container, target string) fiber.Handler {
 		}
 
 		clientHeaders := []string{
-			"Content-Type",
-			"Accept",
-			"User-Agent",
-			"X-Device-Fingerprint",
+			constants.HeaderContentType,
+			constants.HeaderAccept,
+			constants.HeaderUserAgent,
+			constants.HeaderDeviceFingerprint,
 		}
 
 		for _, h := range clientHeaders {
@@ -73,7 +64,7 @@ func ReverseProxy(container *di.Container, target string) fiber.Handler {
 				req.Header.Set(constants.HeaderDeviceFingerprint, ctx.DeviceID)
 			}
 
-			// PODPISYWANIE I PRZEKAZYWANIE KONTEKSTU DLA KAZDEGO ZĄDANIA
+			// PODPISYWANIE I PRZEKAZYWANIE KONTEKSTU DLA KAŻDEGO ŻĄDANIA
 			payload, err := reqctx.Encode(*ctx)
 			if err == nil {
 				sig := reqctx.Sign(payload, container.InternalSecret)
@@ -97,18 +88,18 @@ func ReverseProxySecure(container *di.Container, target string) fiber.Handler {
 			return fiber.ErrUnauthorized
 		}
 
-		// ---  Budujemy request do upstream ---
+		// --- Budujemy request do upstream ---
 		req, err := prepareProxyRequest(c, target)
 		if err != nil {
 			return err
 		}
 
-		// ---  Whitelist nagłówków z klienta (MINIMUM) ---
+		// --- Whitelist nagłówków z klienta (MINIMUM) ---
 		clientHeaders := []string{
-			"Content-Type",
-			"Accept",
-			"User-Agent",
-			"X-Device-Fingerprint",
+			constants.HeaderContentType,
+			constants.HeaderAccept,
+			constants.HeaderUserAgent,
+			constants.HeaderDeviceFingerprint,
 		}
 
 		for _, h := range clientHeaders {
@@ -117,28 +108,28 @@ func ReverseProxySecure(container *di.Container, target string) fiber.Handler {
 			}
 		}
 
-		// --- Nagłówki kontrolowane  ---
+		// --- Nagłówki kontrolowane ---
 		req.Header.Set(constants.HeaderRequestID, ctx.RequestID)
 		req.Header.Set(constants.HeaderXForwardedFor, ctx.IP)
 		req.Header.Set(constants.HeaderXRealIP, ctx.IP)
 
 		if ctx.UserID != nil {
-			req.Header.Set("X-User-Id", ctx.UserID.String())
+			req.Header.Set(constants.HeaderUserID, ctx.UserID.String())
 		}
 		if ctx.SessionID != "" {
-			req.Header.Set("X-Session-Id", ctx.SessionID)
+			req.Header.Set(constants.HeaderSessionID, ctx.SessionID)
 		}
 
 		if ctx.DeviceID != "" {
 			req.Header.Set(constants.HeaderDeviceFingerprint, ctx.DeviceID)
-			req.Header.Set("X-Device-Id", ctx.DeviceID)
+			req.Header.Set(constants.HeaderDeviceID, ctx.DeviceID)
 		}
 
-		// ---  Zero trust: auth-related ---
+		// --- Zero trust: auth-related ---
 		req.Header.Del(constants.HeaderAuth)
 		req.Header.Del(constants.HeaderCookie)
 
-		// --- podpisany kontekst ---
+		// --- Podpisany kontekst ---
 		payload, err := reqctx.Encode(*ctx)
 		if err != nil {
 			log.ErrorObj("Failed to encode request context", err)
@@ -181,11 +172,9 @@ func executeProxyRequest(c *fiber.Ctx, container *di.Container, req *http.Reques
 		log.ErrorObj("Upstream request failed", err)
 		return apperr.SendAppError(c, apperr.ErrUpstreamUnreachable)
 	}
-	// UWAGA: Nie zamykamy resp.Body ręcznie przez defer, jeśli przekazujemy strumień do Fibera!
-	// Fiber przejmuje odpowiedzialność za zamknięcie strumienia po zakończeniu wysyłania odpowiedzi do klienta.
 
 	if resp.StatusCode == fiber.StatusForbidden {
-		resp.Body.Close() // Tu zamykamy ręcznie, bo przerywamy przepływ błędem
+		resp.Body.Close()
 		log.Error("Security Alert: Upstream rejected internal signature or context")
 		return apperr.SendAppError(c, apperr.ErrInternal)
 	}
@@ -202,12 +191,11 @@ func executeProxyRequest(c *fiber.Ctx, container *di.Container, req *http.Reques
 
 	c.Status(resp.StatusCode)
 
-	// Wysyłanie strumieniowe zero-copy (brak wycieków pamięci i alokacji buforów w pętli)
+	// Wysyłanie strumieniowe zero-copy
 	c.Response().SetBodyStream(resp.Body, int(resp.ContentLength))
 	return nil
 }
 
-// Pomocnicza funkcja do filtrowania nagłówków technicznych
 func isHopByHop(header string) bool {
 	headers := map[string]bool{
 		"Connection":          true,

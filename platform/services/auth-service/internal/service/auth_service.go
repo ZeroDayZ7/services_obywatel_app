@@ -11,6 +11,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/zerodayz7/platform/pkg/constants"
 	"github.com/zerodayz7/platform/pkg/errors"
 	"github.com/zerodayz7/platform/pkg/rabbitmq"
 	"github.com/zerodayz7/platform/pkg/redis"
@@ -150,6 +151,7 @@ func (s *authService) VerifyDeviceSignature(ctx context.Context, userIDStr, sess
 		return nil, errors.ErrUntrustedDevice
 	}
 
+	// Dekodowanie wyzwania z Base64 do surowych bajtów binarnych
 	challengeBytes, err := base64.StdEncoding.DecodeString(storedChallenge)
 	if err != nil {
 		log.ErrorObj("Failed to decode challenge from Base64", err)
@@ -310,58 +312,140 @@ func (s *authService) RefreshToken(ctx context.Context, tokenStr string, fingerp
 func (s *authService) RegisterDevice(ctx context.Context, userID uuid.UUID, sessionID string, clientIP string, req schemas.RegisterDeviceRequest) (*http.RegisterDeviceResponse, error) {
 	log := shared.GetLogger()
 
+	log.DebugMap("=== [RegisterDevice] START ===", map[string]any{
+		"user_id":            userID.String(),
+		"session_id":         sessionID,
+		"client_ip":          clientIP,
+		"device_fingerprint": req.DeviceFingerprint,
+		"platform":           req.Platform,
+		"encrypted_name":     req.DeviceNameEncrypted,
+		"pubkey_len":         len(req.PublicKey),
+		"signature_len":      len(req.Signature),
+	})
+
 	// 1. WERYFIKACJA LOGIKI BIZNESOWEJ I SESJI SETUP (NAJPIERW, PRZED ZAPISEM W DB)
 	if sessionID != "" {
+		log.DebugMap("[RegisterDevice] Checking setup session in Redis", map[string]any{"sid": sessionID})
 		setupSess, sessErr := s.cache.GetSetupSession(ctx, sessionID)
 		if sessErr != nil || setupSess == nil {
-			log.WarnMap("Setup session not found or expired", map[string]any{"sid": sessionID})
+			log.WarnMap("[RegisterDevice] Setup session not found or expired", map[string]any{
+				"sid": sessionID,
+				"err": sessErr,
+			})
 			return nil, errors.ErrSessionExpired
 		}
 
+		log.DebugMap("[RegisterDevice] Setup session fetched successfully", map[string]any{
+			"sid":         sessionID,
+			"expected_fp": setupSess.Fingerprint,
+			"received_fp": req.DeviceFingerprint,
+		})
+
 		if setupSess.Fingerprint != req.DeviceFingerprint {
-			log.WarnMap("Fingerprint mismatch during registration", map[string]any{
+			log.WarnMap("[RegisterDevice] Fingerprint mismatch during registration", map[string]any{
 				"expected": setupSess.Fingerprint,
 				"received": req.DeviceFingerprint,
 			})
 			return nil, errors.ErrInvalidDeviceFingerprint
 		}
+	} else {
+		log.WarnMap("[RegisterDevice] Empty sessionID passed to RegisterDevice", map[string]any{
+			"user_id": userID.String(),
+		})
 	}
 
 	// 2. WERYFIKACJA KRYPTOGRAFICZNA (Challenge / ED25519)
+	log.DebugMap("[RegisterDevice] Fetching challenge from Redis", map[string]any{"sid": sessionID})
 	storedChallenge, err := s.cache.GetChallenge(ctx, sessionID)
-	if err != nil {
-		log.WarnMap("Challenge expired or not found", map[string]any{
+	if err != nil || storedChallenge == "" {
+		log.WarnMap("[RegisterDevice] Challenge expired or not found", map[string]any{
 			"user_id": userID,
 			"sid":     sessionID,
+			"err":     err,
 		})
 		return nil, errors.ErrSessionExpired
 	}
 
+	log.DebugMap("[RegisterDevice] Stored challenge retrieved", map[string]any{
+		"sid":               sessionID,
+		"challenge_raw_len": len(storedChallenge),
+		"challenge_raw":     storedChallenge,
+	})
+
+	// Dekodowanie challenge z Base64 (jeśli zapisany w Base64) lub bezpośrednia konwersja na bajty
+	challengeBytes, err := base64.StdEncoding.DecodeString(storedChallenge)
+	if err != nil {
+		log.DebugMap("[RegisterDevice] Challenge is not Base64, falling back to raw bytes", map[string]any{
+			"challenge_string": storedChallenge,
+		})
+		challengeBytes = []byte(storedChallenge)
+	}
+
+	log.DebugMap("[RegisterDevice] Decoding Public Key from Base64", map[string]any{
+		"pubkey_base64": req.PublicKey,
+	})
 	pubKeyBytes, err := base64.StdEncoding.DecodeString(req.PublicKey)
-	if err != nil || len(pubKeyBytes) != ed25519.PublicKeySize {
+	if err != nil {
+		log.ErrorObj("[RegisterDevice] Failed to decode public key Base64", err)
+		return nil, errors.ErrInvalidPairingData
+	}
+	if len(pubKeyBytes) != ed25519.PublicKeySize {
+		log.ErrorMap("[RegisterDevice] Invalid Ed25519 public key size", map[string]any{
+			"expected": ed25519.PublicKeySize,
+			"got":      len(pubKeyBytes),
+		})
 		return nil, errors.ErrInvalidPairingData
 	}
 
+	log.DebugMap("[RegisterDevice] Decoding Signature from Base64", map[string]any{
+		"signature_base64": req.Signature,
+	})
 	sigBytes, err := base64.StdEncoding.DecodeString(req.Signature)
 	if err != nil {
+		log.ErrorObj("[RegisterDevice] Failed to decode signature Base64", err)
+		return nil, errors.ErrInvalidPairingData
+	}
+	if len(sigBytes) != ed25519.SignatureSize {
+		log.ErrorMap("[RegisterDevice] Invalid Ed25519 signature size", map[string]any{
+			"expected": ed25519.SignatureSize,
+			"got":      len(sigBytes),
+		})
 		return nil, errors.ErrInvalidPairingData
 	}
 
-	if !ed25519.Verify(pubKeyBytes, []byte(storedChallenge), sigBytes) {
-		log.ErrorMap("Kryptograficzna weryfikacja urządzenia nieudana", map[string]any{"user_id": userID})
+	log.DebugMap("[RegisterDevice] Executing ed25519.Verify check", map[string]any{
+		"pubkey_bytes_len":    len(pubKeyBytes),
+		"challenge_bytes_len": len(challengeBytes),
+		"sig_bytes_len":       len(sigBytes),
+	})
+
+	if !ed25519.Verify(pubKeyBytes, challengeBytes, sigBytes) {
+		log.ErrorMap("[RegisterDevice] Kryptograficzna weryfikacja urządzenia nieudana", map[string]any{
+			"user_id":          userID,
+			"sid":              sessionID,
+			"challenge_string": storedChallenge,
+			"pubkey_base64":    req.PublicKey,
+			"sig_base64":       req.Signature,
+		})
 		return nil, errors.ErrVerificationFailed
 	}
+	log.DebugMap("[RegisterDevice] ✅ Kryptograficzna weryfikacja ed25519 udana!", map[string]any{
+		"user_id": userID.String(),
+	})
 
 	// 3. POBRANIE PEŁNYCH DANYCH UŻYTKOWNIKA I WERYFIKACJA STATUSU KONTA
+	log.DebugMap("[RegisterDevice] Fetching user record from DB", map[string]any{"user_id": userID.String()})
 	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil || user == nil {
+		log.ErrorObj("[RegisterDevice] User not found in DB", err)
 		return nil, errors.ErrUserNotFound
 	}
 
 	if err := s.CanUserLogin(user); err != nil {
-		log.WarnMap("User account locked/banned during device registration", map[string]any{
+		log.WarnMap("[RegisterDevice] User account locked/banned during device registration", map[string]any{
 			"user_id": user.ID,
 			"status":  user.Status,
+			"err":     err,
 		})
 		return nil, err
 	}
@@ -378,27 +462,36 @@ func (s *authService) RegisterDevice(ctx context.Context, userID uuid.UUID, sess
 		LastIP:              clientIP,
 	}
 
+	log.DebugMap("[RegisterDevice] Saving device to DB", map[string]any{
+		"user_id":     userID.String(),
+		"fingerprint": req.DeviceFingerprint,
+		"platform":    req.Platform,
+	})
 	if err := s.userRepo.SaveDevice(ctx, device); err != nil {
-		log.ErrorObj("Failed to save device", err)
+		log.ErrorObj("[RegisterDevice] Failed to save device to DB", err)
 		return nil, errors.ErrInternal
 	}
+	log.DebugMap("[RegisterDevice] Device saved successfully", map[string]any{"device_id": device.ID})
 
 	// Posprzątaj sesję tymczasową po pomyślnym zapisie w DB
 	if sessionID != "" {
 		_ = s.cache.DeleteChallenge(ctx, sessionID)
 		_ = s.cache.DeleteSetupSession(ctx, sessionID)
-		log.DebugInfo("Setup session cleared, upgrading to full session", sessionID)
+		log.DebugInfo("[RegisterDevice] Setup session and challenge cleared from Redis", sessionID)
 	}
 
 	// 5. GENEROWANIE POŚWIADCZEŃ (Z przypisanym DeviceID do RefreshTokena)
+	log.DebugMap("[RegisterDevice] Generating AccessToken", map[string]any{"user_id": userID.String()})
 	accessToken, newSID, err := s.CreateAccessToken(userID, req.DeviceFingerprint)
 	if err != nil {
+		log.ErrorObj("[RegisterDevice] Failed to create access token", err)
 		return nil, errors.ErrInternal
 	}
 
-	// Przekazujemy &device.ID do nowego tokena
+	log.DebugMap("[RegisterDevice] Generating RefreshToken", map[string]any{"device_id": device.ID})
 	refreshToken, err := s.CreateRefreshToken(userID, req.DeviceFingerprint, &device.ID)
 	if err != nil {
+		log.ErrorObj("[RegisterDevice] Failed to create refresh token", err)
 		return nil, errors.ErrInternal
 	}
 
@@ -410,10 +503,19 @@ func (s *authService) RegisterDevice(ctx context.Context, userID uuid.UUID, sess
 		Permissions: []string(user.Permissions),
 	}
 
+	log.DebugMap("[RegisterDevice] Persisting new full session to Redis", map[string]any{
+		"new_sid": newSID,
+		"ttl":     s.cfg.Session.TTL,
+	})
 	if err = s.cache.SetSession(ctx, newSID, sessionData, s.cfg.Session.TTL); err != nil {
-		log.ErrorObj("Failed to save session", err)
+		log.ErrorObj("[RegisterDevice] Failed to save full session to Redis", err)
 		return nil, errors.ErrInternal
 	}
+
+	log.DebugMap("=== [RegisterDevice] FINISHED SUCCESSFULLY ===", map[string]any{
+		"user_id": userID.String(),
+		"new_sid": newSID,
+	})
 
 	// 7. FINALIZACJA
 	return &http.RegisterDeviceResponse{
@@ -673,6 +775,20 @@ func (s *authService) AttemptLogin(ctx context.Context, email string, password [
 			return nil, errors.ErrInternal
 		}
 
+		// 4. BRAKUJĄCY KROK: Zapisujemy tymczasową sesję pod "setup:session:" dla Gatewaya!
+		sessionData := redis.UserSession{
+			UserID:      user.ID.String(),
+			Fingerprint: fingerprint,
+			Role:        string(user.Role),
+			Permissions: []string(user.Permissions),
+		}
+
+		// Zapis do Redis z prefiksem "setup:session:" i krótkim TTL (np. 5–15 minut)
+		if err := s.cache.SetSetupSession(ctx, sessionID, sessionData, 15*time.Minute); err != nil {
+			log.ErrorObj("Failed to save setup session in Redis", err)
+			return nil, errors.ErrInternal
+		}
+
 		log.DebugInfo("Pre-trust session prepared", map[string]any{
 			"uid": user.ID,
 			"sid": sessionID,
@@ -807,9 +923,10 @@ func (s *authService) UpdatePassword(ctx context.Context, userID uuid.UUID, newP
 func (s *authService) CreateAccessToken(userID uuid.UUID, fingerprint string) (string, string, error) {
 	sessionID := shared.GenerateSessionID()
 	claims := jwt.MapClaims{
-		"uid": userID,
-		"sid": sessionID,
-		"fpt": fingerprint,
+		"uid":   userID,
+		"sid":   sessionID,
+		"fpt":   fingerprint,
+		"scope": constants.ScopeAccess.String(),
 	}
 
 	token, err := security.GenerateJWT(claims, s.cfg.JWT.AccessSecret, s.cfg.JWT.AccessTTL)
@@ -823,7 +940,7 @@ func (s *authService) CreateSetupToken(userID uuid.UUID, fingerprint string) (st
 		"uid":   userID.String(),
 		"sid":   sessionID,
 		"fpt":   fingerprint,
-		"scope": "device_verify",
+		"scope": constants.ScopeDeviceVerify.String(),
 	}
 
 	token, err := security.GenerateJWT(

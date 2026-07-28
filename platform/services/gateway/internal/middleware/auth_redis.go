@@ -51,19 +51,34 @@ func AuthRedisMiddleware(rdb *redis.Client) fiber.Handler {
 			return apperr.SendAppError(c, apperr.ErrInternal)
 		}
 
-		sessionID, _ := claims["sid"].(string)
+		// 1. Walidacja Token Scope (zanim odpytamy Redisa)
+		tokenScope, _ := claims["scope"].(string)
 
+		expectedScope := constants.ScopeAccess.String()
 		redisPrefix := "session:"
-		if path == "/auth/register-device" {
+
+		if path == "/auth/register-device" || path == "/auth/verify-device" {
+			expectedScope = constants.ScopeDeviceVerify.String()
 			redisPrefix = "setup:session:"
 		}
 
+		if tokenScope != expectedScope {
+			log.WarnMap("[AuthRedisMiddleware] Invalid token scope for path", map[string]any{
+				"path":           path,
+				"expected_scope": expectedScope,
+				"received_scope": tokenScope,
+			})
+			return apperr.SendAppError(c, apperr.ErrUnauthorized)
+		}
+
+		sessionID, _ := claims["sid"].(string)
 		fullRedisKey := redisPrefix + sessionID
 
-		// LOG DIAGNOSTYCZNY - Sprawdzenie dokładnego klucza
+		// LOG DIAGNOSTYCZNY - Sprawdzenie dokładnego klucza i scope
 		log.DebugMap("[AuthRedisMiddleware] Fetching session from Redis", map[string]any{
 			"path":           path,
 			"sid_from_jwt":   sessionID,
+			"token_scope":    tokenScope,
 			"redis_prefix":   redisPrefix,
 			"full_redis_key": fullRedisKey,
 		})
