@@ -1,0 +1,103 @@
+x-common-settings: &common-settings
+  restart: ${DOCKER_RESTART_POLICY:-no}
+  environment:
+    - ENV=${APP_ENV:-development}
+  networks:
+    - citizen-app-net
+
+services:
+  db-auth:
+    <<: *common-settings
+    image: postgres:18.3-alpine
+    container_name: auth-database
+    environment:
+      POSTGRES_USER: ${AUTH_DB_USER:-auth_user}
+      POSTGRES_DB: ${AUTH_DB_NAME:-auth_database}
+      POSTGRES_PASSWORD_FILE: /run/secrets/auth_db_pass
+    secrets:
+      - auth_db_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_auth_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  db-notification:
+    <<: *common-settings
+    image: postgres:18.3-alpine
+    container_name: notification-database
+    environment:
+      POSTGRES_USER: ${NOTIFY_DB_USER:-notification_user}
+      POSTGRES_DB: ${NOTIFY_DB_NAME:-notification_database}
+      POSTGRES_PASSWORD_FILE: /run/secrets/notify_db_pass
+    secrets:
+      - notify_db_pass
+    ports:
+      - "5434:5432"
+    volumes:
+      - pg_notification_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  db-citizen-docs:
+    <<: *common-settings
+    image: postgres:18.3-alpine
+    container_name: citizen-docs-database
+    environment:
+      POSTGRES_USER: ${CITIZEN_DB_USER:-citizen_user}
+      POSTGRES_DB: ${CITIZEN_DB_NAME:-citizen_docs_database}
+      POSTGRES_PASSWORD_FILE: /run/secrets/citizen_db_pass
+    secrets:
+      - citizen_db_pass
+    ports:
+      - "5433:5432"
+    volumes:
+      - pg_citizen_docs_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  db-audit:
+    <<: *common-settings
+    image: postgres:18.3-alpine
+    container_name: audit-database
+    environment:
+      POSTGRES_USER: ${AUDIT_DB_USER:-admin}
+      POSTGRES_DB: ${AUDIT_DB_NAME:-audit-database}
+      POSTGRES_PASSWORD_FILE: /run/secrets/audit_db_pass
+    secrets:
+      - audit_db_pass
+    ports:
+      - "5435:5432"
+    volumes:
+      - pg_audit_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+secrets:
+  auth_db_pass:
+    file: ../secrets/.auth_db_password
+  citizen_db_pass:
+    file: ../secrets/.citizen_db_password
+  notify_db_pass:
+    file: ../secrets/.notify_db_password
+  audit_db_pass:
+    file: ../secrets/.audit_db_password
+
+volumes:
+  pg_auth_data:
+  pg_citizen_docs_data:
+  pg_notification_data:
+  pg_audit_data:

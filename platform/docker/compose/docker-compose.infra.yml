@@ -1,0 +1,41 @@
+x-common-settings: &common-settings
+  restart: ${DOCKER_RESTART_POLICY:-no}
+  environment:
+    - ENV=${APP_ENV:-development}
+  networks:
+    - citizen-app-net
+
+services:
+  cache-redis:
+    <<: *common-settings
+    image: redis:8.6-alpine
+    container_name: auth-redis
+    secrets:
+      - redis_auth_pass
+    command: >
+      sh -c 'redis-server --requirepass $$(cat /run/secrets/redis_auth_pass)'
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  rabbitmq:
+    <<: *common-settings
+    image: rabbitmq:4.3.1-management
+    container_name: rabbitmq_server
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: "admin"
+      RABBITMQ_DEFAULT_PASS: "password"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+
+secrets:
+  redis_auth_pass:
+    file: ../secrets/.redis_password
+
+volumes:
+  redis_data:
+  rabbitmq_data:

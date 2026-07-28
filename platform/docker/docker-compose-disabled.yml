@@ -1,0 +1,10 @@
+networks:
+  citizen-app-net:
+    name: obywatel_app__network
+    driver: bridge
+
+include:
+  - ./compose/docker-compose.databases.yml
+  - ./compose/docker-compose.infra.yml
+  - ./compose/docker-compose.services.yml
+  - ./compose/docker-compose.tools.yml

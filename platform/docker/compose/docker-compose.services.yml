@@ -1,0 +1,27 @@
+x-common-settings: &common-settings
+  restart: ${DOCKER_RESTART_POLICY:-no}
+  environment:
+    - ENV=${APP_ENV:-development}
+  networks:
+    - citizen-app-net
+
+services:
+  gateway:
+    <<: *common-settings
+    image: golang:1.26.2-alpine3.23
+    container_name: app-gateway
+    working_dir: /app
+    volumes:
+      - ../../services/gateway:/app
+      - ../../platform:/platform
+      - go-modules:/go/pkg
+    ports:
+      - "8080:8080"
+    depends_on:
+      db-auth:
+        condition: service_healthy
+      cache-redis:
+        condition: service_started
+
+volumes:
+  go-modules:
