@@ -1,11 +1,14 @@
+#region Common Settings
 x-common-settings: &common-settings
   restart: ${DOCKER_RESTART_POLICY:-no}
   environment:
     - ENV=${APP_ENV:-development}
   networks:
     - citizen-app-net
+#endregion
 
 services:
+  #region API Gateway
   gateway:
     <<: *common-settings
     image: golang:1.26.2-alpine3.23
@@ -22,6 +25,9 @@ services:
         condition: service_healthy
       cache-redis:
         condition: service_started
+  #endregion
 
+#region Volumes
 volumes:
   go-modules:
+#endregion

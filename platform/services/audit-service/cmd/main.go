@@ -1,8 +1,12 @@
 package main
 
 import (
+	"context"
 	"os"
+	"os/signal"
+	"syscall"
 
+	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/server"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/pkg/utils"
@@ -12,33 +16,46 @@ import (
 )
 
 func main() {
-	// Bootstrap logger for startup errors
 	bootLog := shared.InitBootstrapLogger(os.Getenv("ENV"), false)
 	defer func() { _ = bootLog.Sync() }()
 
-	// Load global configuration
 	if err := config.LoadConfigGlobal(); err != nil {
 		bootLog.Fatal("Config load failed", "error", err)
 	}
 
-	// Initialize production logger
 	log := shared.InitLogger(config.AppConfig.Server.Env, false)
 
-	// Initialize Database
+	// 1. Baza danych
 	db, closeDB := config.MustInitDB(config.AppConfig.Database)
 	defer closeDB()
 
-	// Initialize DI container
-	container := di.NewContainer(db, nil, log, &config.AppConfig)
+	// 2. Inicjalizacja Redis z wykorzystaniem pkg/redis
+	rdb, err := redis.New(redis.Config(config.AppConfig.Redis))
+	if err != nil {
+		log.Fatal("Redis initialization failed", "error", err)
+	}
+	defer func() {
+		if err := rdb.Close(); err != nil {
+			log.ErrorObj("Failed to close Redis connection", err)
+		}
+	}()
 
-	// Start background worker
-	utils.SafeGo(log, container.AuditWorker.Start)
+	// 3. DI Container z poprawną instancją Redisa
+	container := di.NewContainer(db, rdb, log, &config.AppConfig)
 
-	// Initialize app and routes
+	// 4. Kontekst dla obsługi wyłączenia aplikacji (Graceful Shutdown)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	// 5. Uruchomienie workera
+	utils.SafeGo(log, func() {
+		container.AuditWorker.Start(ctx)
+	})
+
+	// 6. Router i Serwer Fiber
 	app := config.NewAuditApp(container)
 	router.SetupRoutes(app, container)
 
-	// Start server with unified run handler
 	server.Run(
 		app,
 		server.Config{
@@ -50,8 +67,7 @@ func main() {
 		},
 		*log,
 		func() {
-			// Czyszczenie zasobów działających w tle (np. konteksty workerów)
-			// closeDB jest bezpiecznie wykonywane przez defer w main
+			stop() // Wysłanie sygnału zakreślenia kontekstu do workera
 		},
 	)
 }

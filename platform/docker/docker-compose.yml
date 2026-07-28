@@ -98,8 +98,8 @@ services:
     image: postgres:18.3-alpine
     container_name: audit-database
     environment:
-      POSTGRES_USER: ${AUDIT_DB_USER:-admin}
-      POSTGRES_DB: ${AUDIT_DB_NAME:-audit-database}
+      POSTGRES_USER: ${AUDIT_DB_USER:-audit_user}
+      POSTGRES_DB: ${AUDIT_DB_NAME:-audit_db}
       POSTGRES_PASSWORD_FILE: /run/secrets/audit_db_pass
     secrets:
       - audit_db_pass
@@ -118,7 +118,7 @@ services:
   cache-redis:
     <<: *common-settings
     image: redis:8.6-alpine
-    container_name: auth-redis
+    container_name: redis-cache
     secrets:
       - redis_auth_pass
     command: >

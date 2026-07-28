@@ -1,11 +1,14 @@
+#region Common Settings
 x-common-settings: &common-settings
   restart: ${DOCKER_RESTART_POLICY:-no}
   environment:
     - ENV=${APP_ENV:-development}
   networks:
     - citizen-app-net
+#endregion
 
 services:
+  #region Database: Auth
   db-auth:
     <<: *common-settings
     image: postgres:18.3-alpine
@@ -25,7 +28,9 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+  #endregion
 
+  #region Database: Notification
   db-notification:
     <<: *common-settings
     image: postgres:18.3-alpine
@@ -45,7 +50,9 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+  #endregion
 
+  #region Database: Citizen Docs
   db-citizen-docs:
     <<: *common-settings
     image: postgres:18.3-alpine
@@ -65,7 +72,9 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+  #endregion
 
+  #region Database: Audit
   db-audit:
     <<: *common-settings
     image: postgres:18.3-alpine
@@ -85,7 +94,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+  #endregion
+#endregion
 
+#region Secrets
 secrets:
   auth_db_pass:
     file: ../secrets/.auth_db_password
@@ -95,9 +107,12 @@ secrets:
     file: ../secrets/.notify_db_password
   audit_db_pass:
     file: ../secrets/.audit_db_password
+#endregion
 
+#region Volumes
 volumes:
   pg_auth_data:
   pg_citizen_docs_data:
   pg_notification_data:
   pg_audit_data:
+#endregion

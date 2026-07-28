@@ -102,6 +102,9 @@ func (c *Client) AckStreamBatch(
 }
 
 func (c *Client) SendAuditLog(ctx context.Context, stream string, values map[string]any) error {
+	if c == nil || c.Client == nil {
+		return errors.New("redis client is not initialized")
+	}
 	_, err := c.XAdd(ctx, &goredis.XAddArgs{
 		Stream: stream,
 		Values: values,
@@ -110,6 +113,9 @@ func (c *Client) SendAuditLog(ctx context.Context, stream string, values map[str
 }
 
 func (c *Client) EnsureGroup(ctx context.Context, stream, group string) error {
+	if c == nil || c.Client == nil {
+		return errors.New("redis client is not initialized")
+	}
 	err := c.XGroupCreateMkStream(ctx, stream, group, "0").Err()
 	if err != nil && !strings.Contains(err.Error(), "BUSYGROUP") {
 		return err

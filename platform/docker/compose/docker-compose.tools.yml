@@ -1,11 +1,14 @@
+#region Common Settings
 x-common-settings: &common-settings
   restart: ${DOCKER_RESTART_POLICY:-no}
   environment:
     - ENV=${APP_ENV:-development}
   networks:
     - citizen-app-net
+#endregion
 
 services:
+  #region Database Management: pgAdmin
   pgadmin:
     <<: *common-settings
     image: dpage/pgadmin4:9.14
@@ -26,7 +29,9 @@ services:
     depends_on:
       db-auth:
         condition: service_healthy
+  #endregion
 
+  #region Telemetry: OpenTelemetry Collector
   otel-collector:
     <<: *common-settings
     image: otel/opentelemetry-collector-contrib:latest
@@ -37,7 +42,9 @@ services:
     ports:
       - "4318:4318"
       - "4317:4317"
+  #endregion
 
+  #region Tracing: Jaeger
   jaeger:
     <<: *common-settings
     image: jaegertracing/all-in-one:latest
@@ -45,7 +52,10 @@ services:
     ports:
       - "16686:16686"
       - "4319:4317"
+  #endregion
 
+#region Secrets
 secrets:
   pgadmin_root_pass:
     file: ../secrets/.pgadmin_admin_password
+#endregion

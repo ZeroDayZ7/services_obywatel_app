@@ -59,7 +59,6 @@ func NewGatewayApp(container *di.Container) (*fiber.App, error) {
 	app.Use(compress.New(CompressConfig()))
 	app.Use(shared.RequestLoggerMiddleware())
 
-	// Zależności middleware
 	app.Use(JWTMiddlewareWithExclusions())
 	app.Use(middleware.AuthRedisMiddleware(container.Redis.Client))
 	app.Use(middleware.ContextBuilder(container))
