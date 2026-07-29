@@ -95,7 +95,29 @@ services:
       timeout: 5s
       retries: 5
   #endregion
-#endregion
+
+  #region Database: Messaging
+  db-messaging:
+    <<: *common-settings
+    image: postgres:18.3-alpine
+    container_name: messaging-database
+    environment:
+      POSTGRES_USER: ${MESSAGING_DB_USER:-messaging_user}
+      POSTGRES_DB: ${MESSAGING_DB_NAME:-messaging_db}
+      POSTGRES_PASSWORD_FILE: /run/secrets/messaging_db_pass
+    secrets:
+      - messaging_db_pass
+    ports:
+      - "5436:5432"
+    volumes:
+      - pg_messaging_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  #endregion
+
 
 #region Secrets
 secrets:
@@ -107,6 +129,8 @@ secrets:
     file: ../secrets/.notify_db_password
   audit_db_pass:
     file: ../secrets/.audit_db_password
+  messaging_db_pass:
+    file: ../secrets/.messaging_db_password
 #endregion
 
 #region Volumes
@@ -114,5 +138,6 @@ volumes:
   pg_auth_data:
   pg_citizen_docs_data:
   pg_notification_data:
+  pg_messaging_data:
   pg_audit_data:
 #endregion

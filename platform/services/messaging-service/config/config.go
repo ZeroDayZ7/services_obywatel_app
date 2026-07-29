@@ -9,9 +9,11 @@ import (
 )
 
 type SecurityConfig struct {
-	DocsEncryptionKey string `mapstructure:"DOCS_ENCRYPTION_KEY" validate:"required,len=32"`
-	DocsPeselSalt     string `mapstructure:"DOCS_PESEL_SALT" validate:"required,min=16"`
-	HMACSecret        string `mapstructure:"INTERNAL_HMAC_SECRET" validate:"required,min=32"`
+	MessagingEncryptionKey string `mapstructure:"MESSAGING_ENCRYPTION_KEY" validate:"required,len=32"`
+	MessagingHashSalt      string `mapstructure:"MESSAGING_HASH_SALT" validate:"required,min=16"`
+	InternalEncryptionKey  string `mapstructure:"INTERNAL_ENCRYPTION_KEY" validate:"required,len=32"`
+	InternalHashSalt       string `mapstructure:"INTERNAL_HASH_SALT" validate:"required,min=16"`
+	HMACSecret             string `mapstructure:"INTERNAL_HMAC_SECRET" validate:"required,min=32"`
 }
 
 type Config struct {
