@@ -1,21 +1,20 @@
 {
   // (Explorer)
   "files.exclude": {
-    // "**/go.work.sum": true,
-    // "**/go.sum": true,
-    // "**/go.mod": true,
-    // "**/logs/": true,
+    "**/go.work.sum": true,
+    "**/go.sum": true,
+    "**/go.mod": true,
+    "**/logs/": true,
     "**/bin/": true,
     // "**/": true,
-    // "**/.env.dev": true,
-    // "**/.env.example": true,
-    // "**/.env.dev.example": true,
-    // "**/README.md": true,
+    "**/.env.dev": true,
+    "**/.env.example": true,
+    "**/.env.dev.example": true,
+    "**/README.md": true,
     "**/LICENSE": true,
-    "**/.gitattributes": true
-    // "**/.gitignore": true,
-
-    // "**/Dockerfile": true,
+    "**/.gitattributes": true,
+    "**/.gitignore": true,
+    "**/Dockerfile": true,
   },
 
   // (Search)

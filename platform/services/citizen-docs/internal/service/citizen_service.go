@@ -8,18 +8,18 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/pkg/shared"
-	"github.com/zerodayz7/platform/pkg/viper"
+	"github.com/zerodayz7/platform/services/citizen-docs/config"
 	"github.com/zerodayz7/platform/services/citizen-docs/internal/model"
 	"github.com/zerodayz7/platform/services/citizen-docs/internal/repository"
 )
 
 type citizenService struct {
 	repo   repository.CitizenRepo
-	cfg    *viper.Config
+	cfg    *config.Config
 	logger *shared.Logger
 }
 
-func NewCitizenService(repo repository.CitizenRepo, cfg *viper.Config, logger *shared.Logger) CitizenService {
+func NewCitizenService(repo repository.CitizenRepo, cfg *config.Config, logger *shared.Logger) CitizenService {
 	return &citizenService{
 		repo:   repo,
 		cfg:    cfg,
@@ -29,7 +29,7 @@ func NewCitizenService(repo repository.CitizenRepo, cfg *viper.Config, logger *s
 
 // #region CREATE PROFILE
 func (s *citizenService) CreateProfile(ctx context.Context, userID uuid.UUID, data *model.CitizenData) error {
-	encryptionKey := []byte(s.cfg.Internal.EncryptionKey)
+	encryptionKey := []byte(s.cfg.Internal.DocsEncryptionKey)
 
 	plainBytes, err := json.Marshal(data)
 	if err != nil {
@@ -42,7 +42,7 @@ func (s *citizenService) CreateProfile(ctx context.Context, userID uuid.UUID, da
 	}
 
 	hash := sha256.New()
-	hash.Write([]byte(data.PESEL + s.cfg.Internal.HashSalt))
+	hash.Write([]byte(data.PESEL + s.cfg.Internal.DocsPeselSalt))
 	peselHash := hex.EncodeToString(hash.Sum(nil))
 
 	profile := &model.CitizenProfile{

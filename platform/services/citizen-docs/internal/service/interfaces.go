@@ -14,11 +14,15 @@ type CitizenService interface {
 type UserDocumentService interface {
 	CreateDocument(
 		ctx context.Context,
+		profileID uuid.UUID,
+		typeCode string,
 		meta *model.DocumentMeta,
 		front []byte,
 		back []byte,
-		profileID uuid.UUID,
-		docType model.DocumentType,
+		issuerSignature []byte,
+		signingKeyID string,
+		revocationSerial string,
 	) error
 	GetDocumentsByUserID(ctx context.Context, userID uuid.UUID) ([]model.UserDocument, error)
+	GetDocumentsSinceVersion(ctx context.Context, profileID uuid.UUID, sinceVersion uint64) ([]model.UserDocument, error)
 }

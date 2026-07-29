@@ -14,7 +14,6 @@ func SetupDocsRoutes(app *fiber.App, container *di.Container) {
 
 	docs := app.Group("/documents")
 
-	// Pobieramy HMAC secret bezpośrednio z kontenera DI
 	hmacSecret := []byte(container.Config.Internal.HMACSecret)
 	docs.Use(pkgMiddleware.InternalAuthMiddleware(hmacSecret))
 

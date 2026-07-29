@@ -7,18 +7,18 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/pkg/shared"
-	"github.com/zerodayz7/platform/pkg/viper"
+	"github.com/zerodayz7/platform/services/citizen-docs/config"
 	"github.com/zerodayz7/platform/services/citizen-docs/internal/model"
 	"github.com/zerodayz7/platform/services/citizen-docs/internal/repository"
 )
 
 type userDocumentService struct {
 	repo   repository.UserDocumentRepo
-	cfg    *viper.Config
+	cfg    *config.Config
 	logger *shared.Logger
 }
 
-func NewUserDocumentService(repo repository.UserDocumentRepo, cfg *viper.Config, logger *shared.Logger) UserDocumentService {
+func NewUserDocumentService(repo repository.UserDocumentRepo, cfg *config.Config, logger *shared.Logger) UserDocumentService {
 	return &userDocumentService{
 		repo:   repo,
 		cfg:    cfg,
@@ -26,16 +26,19 @@ func NewUserDocumentService(repo repository.UserDocumentRepo, cfg *viper.Config,
 	}
 }
 
-// #region CREATE DOCUMENT
+// CreateDocument szyfruje metadane i obrazy oraz tworzy dokument ze wsparciem dla weryfikacji offline.
 func (s *userDocumentService) CreateDocument(
 	ctx context.Context,
+	profileID uuid.UUID,
+	typeCode string,
 	meta *model.DocumentMeta,
 	front []byte,
 	back []byte,
-	profileID uuid.UUID,
-	docType model.DocumentType,
+	issuerSignature []byte,
+	signingKeyID string,
+	revocationSerial string,
 ) error {
-	encryptionKey := []byte(s.cfg.Internal.EncryptionKey)
+	encryptionKey := []byte(s.cfg.Internal.DocsEncryptionKey)
 
 	metaBytes, err := json.Marshal(meta)
 	if err != nil {
@@ -63,18 +66,27 @@ func (s *userDocumentService) CreateDocument(
 	}
 
 	doc := &model.UserDocument{
-		ProfileID:      profileID,
-		Type:           docType,
-		EncryptedMeta:  encMeta,
-		EncryptedFront: encFront,
-		EncryptedBack:  encBack,
-		Status:         model.DocumentStatusActive,
+		ProfileID:        profileID,
+		TypeCode:         typeCode,
+		EncryptedMeta:    encMeta,
+		EncryptedFront:   encFront,
+		EncryptedBack:    encBack,
+		IssuerSignature:  issuerSignature,
+		SigningKeyID:     signingKeyID,
+		RevocationSerial: revocationSerial,
+		Status:           model.DocumentStatusActive,
+		Version:          1,
 	}
 
 	return s.repo.Create(ctx, doc)
 }
 
-// #region GET DOCUMENTS
+// GetDocumentsByUserID pobiera pełny zestaw dokumentów dla wybranego obywatela.
 func (s *userDocumentService) GetDocumentsByUserID(ctx context.Context, userID uuid.UUID) ([]model.UserDocument, error) {
 	return s.repo.GetByUserID(ctx, userID)
+}
+
+// GetDocumentsSinceVersion pobiera różnicowo (Delta Sync) dokumenty nowsze niż podana wersja.
+func (s *userDocumentService) GetDocumentsSinceVersion(ctx context.Context, profileID uuid.UUID, sinceVersion uint64) ([]model.UserDocument, error) {
+	return s.repo.GetSinceVersion(ctx, profileID, sinceVersion)
 }

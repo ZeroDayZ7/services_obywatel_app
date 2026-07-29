@@ -10,10 +10,22 @@ import (
 
 func ToUserDocumentResponse(doc model.UserDocument) dto.UserDocumentResponse {
 	response := dto.UserDocumentResponse{
-		ID:            doc.ID.String(),
-		Type:          string(doc.Type),
-		Status:        string(doc.Status),
-		EncryptedMeta: base64.StdEncoding.EncodeToString(doc.EncryptedMeta),
+		ID:               doc.ID.String(),
+		TypeCode:         doc.TypeCode,
+		Status:           string(doc.Status),
+		EncryptedMeta:    base64.StdEncoding.EncodeToString(doc.EncryptedMeta),
+		IssuerSignature:  base64.StdEncoding.EncodeToString(doc.IssuerSignature),
+		SigningKeyID:     doc.SigningKeyID,
+		RevocationSerial: doc.RevocationSerial,
+		Version:          doc.Version,
+	}
+
+	if len(doc.EncryptedFront) > 0 {
+		response.EncryptedFront = base64.StdEncoding.EncodeToString(doc.EncryptedFront)
+	}
+
+	if len(doc.EncryptedBack) > 0 {
+		response.EncryptedBack = base64.StdEncoding.EncodeToString(doc.EncryptedBack)
 	}
 
 	if doc.IssuedAt != nil {

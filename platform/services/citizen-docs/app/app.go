@@ -1,4 +1,4 @@
-package config
+package app
 
 import (
 	"github.com/gofiber/fiber/v2"
@@ -9,9 +9,7 @@ import (
 	"github.com/zerodayz7/platform/services/citizen-docs/internal/di"
 )
 
-// NewDocsApp tworzy instancję Fiber przyjmując kontener DI
 func NewDocsApp(container *di.Container) *fiber.App {
-	// Pobieramy konfigurację serwera z kontenera
 	cfg := container.Config.Server
 
 	app := fiber.New(fiber.Config{
@@ -32,16 +30,11 @@ func NewDocsApp(container *di.Container) *fiber.App {
 		ErrorHandler:            server.ErrorHandler(),
 	})
 
-	// Middleware podstawowe
 	app.Use(requestid.New())
 	app.Use(recover.New())
 
-	// Limiter i Logger z pkg/shared
 	app.Use(shared.GetLimiter(shared.LimitGlobal, nil))
 	app.Use(shared.RequestLoggerMiddleware())
-
-	// Jeśli potrzebujesz autoryzacji wewnętrznej (HMAC) jak w auth-service:
-	// app.Use(middleware.InternalAuthMiddleware(container.Config.Internal.HMACSecret))
 
 	return app
 }

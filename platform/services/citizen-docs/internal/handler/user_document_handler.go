@@ -2,8 +2,10 @@ package handler
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"io"
+	"strconv"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -30,21 +32,39 @@ func (h *UserDocumentHandler) CreateDocument(c *fiber.Ctx) error {
 	defer cancel()
 	log := shared.GetLogger()
 
-	// 1. Pobieramy metadane z formularza
+	// 1. Pobieramy i walidujemy ID profilu oraz typ dokumentu
+	profileID, err := uuid.Parse(c.FormValue("profile_id"))
+	if err != nil {
+		return apperr.SendAppError(c, apperr.ErrInvalidRequestBody)
+	}
+
+	typeCode := c.FormValue("type_code")
+	if typeCode == "" {
+		return apperr.SendAppError(c, apperr.ErrInvalidRequestBody)
+	}
+
+	// 2. Parsujemy metadane z formularza
 	metaStr := c.FormValue("meta")
 	var meta model.DocumentMeta
 	if err := json.Unmarshal([]byte(metaStr), &meta); err != nil {
 		return apperr.SendAppError(c, apperr.ErrInvalidRequestBody)
 	}
 
-	// 2. Parsujemy profile_id jako UUID
-	profileID, err := uuid.Parse(c.FormValue("profile_id"))
+	// 3. Odczytujemy pola wymagane do weryfikacji offline (Signatures & Keys)
+	sigBase64 := c.FormValue("issuer_signature")
+	signingKeyID := c.FormValue("signing_key_id")
+	revocationSerial := c.FormValue("revocation_serial")
+
+	if sigBase64 == "" || signingKeyID == "" || revocationSerial == "" {
+		return apperr.SendAppError(c, apperr.ErrInvalidRequestBody)
+	}
+
+	issuerSignature, err := base64.StdEncoding.DecodeString(sigBase64)
 	if err != nil {
 		return apperr.SendAppError(c, apperr.ErrInvalidRequestBody)
 	}
-	docType := model.DocumentType(c.FormValue("type"))
 
-	// 3. Pobieramy i czytamy pliki front/back
+	// 4. Pobieramy pliki obrazów (front/back)
 	frontBytes, err := readFileFromForm(c, "front")
 	if err != nil {
 		log.WarnObj("Failed to read front document file", map[string]any{"err": err.Error()})
@@ -57,21 +77,24 @@ func (h *UserDocumentHandler) CreateDocument(c *fiber.Ctx) error {
 		return apperr.SendAppError(c, apperr.ErrInvalidRequestBody)
 	}
 
-	// 4. Wywołanie logiki biznesowej
+	// 5. Wywołanie logiki biznesowej z nowym kontraktem
 	err = h.service.CreateDocument(
 		ctx,
+		profileID,
+		typeCode,
 		&meta,
 		frontBytes,
 		backBytes,
-		profileID,
-		docType,
+		issuerSignature,
+		signingKeyID,
+		revocationSerial,
 	)
 	if err != nil {
 		log.ErrorObj("Failed to create user document", map[string]any{"profile_id": profileID, "err": err.Error()})
 		return apperr.SendAppError(c, err)
 	}
 
-	log.InfoMap("Document created successfully", map[string]any{"profile_id": profileID, "type": docType})
+	log.InfoMap("Document created successfully", map[string]any{"profile_id": profileID, "type_code": typeCode})
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{"status": "created"})
 }
 
@@ -93,28 +116,54 @@ func (h *UserDocumentHandler) GetDocumentsMe(c *fiber.Ctx) error {
 			"user_id": rc.UserID,
 			"error":   err.Error(),
 		})
-
 		return apperr.SendAppError(c, err)
 	}
 
 	response := mapper.ToUserDocumentResponses(docs)
 
-	// dokładnie to co pójdzie do JSON()
-	jsonResponse, err := json.Marshal(response)
-	if err != nil {
-		log.ErrorObj("Failed to marshal documents response", map[string]any{
-			"error": err.Error(),
-		})
+	log.DebugInfo("GET /documents/me fetched successfully", map[string]any{
+		"user_id": rc.UserID.String(),
+		"count":   len(response),
+	})
 
+	return c.Status(fiber.StatusOK).JSON(response)
+}
+
+// #region GET DOCUMENTS SYNC (DELTA SYNC FOR MOBILE OFFLINE)
+func (h *UserDocumentHandler) GetDocumentsSync(c *fiber.Ctx) error {
+	ctx, cancel := context.WithTimeout(c.UserContext(), 2*time.Second)
+	defer cancel()
+
+	log := shared.GetLogger()
+	rc := reqctx.MustFromFiber(c)
+
+	if rc.UserID == nil {
+		return apperr.SendAppError(c, apperr.ErrUnauthorized)
+	}
+
+	profileIDParam := c.Query("profile_id")
+	profileID, err := uuid.Parse(profileIDParam)
+	if err != nil {
+		return apperr.SendAppError(c, apperr.ErrInvalidRequestBody)
+	}
+
+	sinceVersionStr := c.Query("since_version", "0")
+	sinceVersion, err := strconv.ParseUint(sinceVersionStr, 10, 64)
+	if err != nil {
+		return apperr.SendAppError(c, apperr.ErrInvalidRequestBody)
+	}
+
+	docs, err := h.service.GetDocumentsSinceVersion(ctx, profileID, sinceVersion)
+	if err != nil {
+		log.ErrorObj("Failed to sync user documents", map[string]any{
+			"profile_id":    profileID,
+			"since_version": sinceVersion,
+			"error":         err.Error(),
+		})
 		return apperr.SendAppError(c, err)
 	}
 
-	log.DebugInfo("GET /documents/me response payload", map[string]any{
-		"user_id": rc.UserID.String(),
-		"count":   len(response),
-		"json":    string(jsonResponse),
-	})
-
+	response := mapper.ToUserDocumentResponses(docs)
 	return c.Status(fiber.StatusOK).JSON(response)
 }
 
@@ -124,7 +173,7 @@ func (h *UserDocumentHandler) GetDocumentsMe(c *fiber.Ctx) error {
 func readFileFromForm(c *fiber.Ctx, fieldName string) ([]byte, error) {
 	fileHeader, err := c.FormFile(fieldName)
 	if err != nil {
-		return nil, nil // Plik jest opcjonalny
+		return nil, nil // Plik opcjonalny
 	}
 
 	file, err := fileHeader.Open()
@@ -133,10 +182,5 @@ func readFileFromForm(c *fiber.Ctx, fieldName string) ([]byte, error) {
 	}
 	defer file.Close()
 
-	data, err := io.ReadAll(file)
-	if err != nil {
-		return nil, err
-	}
-
-	return data, nil
+	return io.ReadAll(file)
 }

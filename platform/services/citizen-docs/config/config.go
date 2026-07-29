@@ -1,35 +1,39 @@
 package config
 
 import (
-	"fmt"
+	"time"
 
 	"github.com/gofiber/fiber/v2/middleware/session"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/pkg/viper"
-	pkgConfig "github.com/zerodayz7/platform/pkg/viper"
 )
 
+type SecurityConfig struct {
+	DocsEncryptionKey string `mapstructure:"DOCS_ENCRYPTION_KEY" validate:"required,len=32"`
+	DocsPeselSalt     string `mapstructure:"DOCS_PESEL_SALT" validate:"required,min=16"`
+	HMACSecret        string `mapstructure:"INTERNAL_HMAC_SECRET" validate:"required,min=32"`
+}
+
+type Config struct {
+	Server   viper.ServerConfig  `mapstructure:",squash"`
+	Database viper.DBConfig      `mapstructure:",squash"`
+	Redis    viper.RedisConfig   `mapstructure:",squash"`
+	Session  viper.SessionConfig `mapstructure:",squash"`
+	OTEL     viper.OTELConfig    `mapstructure:",squash"`
+	Internal SecurityConfig      `mapstructure:",squash"`
+	Shutdown time.Duration       `mapstructure:"SHUTDOWN_TIMEOUT_SEC" validate:"required"`
+}
+
 var (
-	AppConfig viper.Config
+	AppConfig Config
 	Store     *session.Store
 )
 
 func LoadConfigGlobal() error {
 	log := shared.GetLogger()
 
-	// InitConfig automatycznie wypełni AppConfig danymi z .env
-	// Używamy nazwy "citizen-docs" dla spójności logów/konfiguracji
-	if err := pkgConfig.InitConfig(&AppConfig, "citizen-docs"); err != nil {
+	if err := viper.InitConfig(&AppConfig, "citizen-docs"); err != nil {
 		return err
-	}
-
-	// Walidacja krytycznych pól dla serwisu dokumentów
-	// if AppConfig.Internal.EncryptionKey == "" {
-	// 	return fmt.Errorf("INTERNAL_ENCRYPTION_KEY is required for document security")
-	// }
-
-	if AppConfig.Internal.HashSalt == "" {
-		return fmt.Errorf("INTERNAL_HASH_SALT is required for PESEL hashing")
 	}
 
 	log.Info("Citizen-Docs configuration loaded successfully")
