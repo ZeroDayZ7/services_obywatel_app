@@ -15,6 +15,6 @@ type CitizenRepo interface {
 
 type UserDocumentRepo interface {
 	Create(ctx context.Context, doc *model.UserDocument) error
-	GetByUserID(ctx context.Context, userID uuid.UUID) ([]model.UserDocument, error)
+	GetByProfileID(ctx context.Context, profileID uuid.UUID) ([]model.UserDocument, error)
 	GetSinceVersion(ctx context.Context, profileID uuid.UUID, sinceVersion uint64) ([]model.UserDocument, error)
 }

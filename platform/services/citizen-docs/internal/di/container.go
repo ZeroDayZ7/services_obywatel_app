@@ -20,7 +20,7 @@ func NewContainer(db *gorm.DB, logger *shared.Logger, cfg *config.Config) *Conta
 	docRepo := repository.NewUserDocumentRepository(db)
 	citizenRepo := repository.NewCitizenRepository(db)
 
-	docSvc := service.NewUserDocumentService(docRepo, cfg, logger)
+	docSvc := service.NewUserDocumentService(docRepo, citizenRepo, cfg, logger)
 	citizenSvc := service.NewCitizenService(citizenRepo, cfg, logger)
 
 	return &Container{

@@ -141,22 +141,16 @@ func (h *UserDocumentHandler) GetDocumentsSync(c *fiber.Ctx) error {
 		return apperr.SendAppError(c, apperr.ErrUnauthorized)
 	}
 
-	profileIDParam := c.Query("profile_id")
-	profileID, err := uuid.Parse(profileIDParam)
-	if err != nil {
-		return apperr.SendAppError(c, apperr.ErrInvalidRequestBody)
-	}
-
 	sinceVersionStr := c.Query("since_version", "0")
 	sinceVersion, err := strconv.ParseUint(sinceVersionStr, 10, 64)
 	if err != nil {
 		return apperr.SendAppError(c, apperr.ErrInvalidRequestBody)
 	}
 
-	docs, err := h.service.GetDocumentsSinceVersion(ctx, profileID, sinceVersion)
+	docs, err := h.service.GetDocumentsSinceVersion(ctx, *rc.UserID, sinceVersion)
 	if err != nil {
 		log.ErrorObj("Failed to sync user documents", map[string]any{
-			"profile_id":    profileID,
+			"user_id":       rc.UserID.String(),
 			"since_version": sinceVersion,
 			"error":         err.Error(),
 		})

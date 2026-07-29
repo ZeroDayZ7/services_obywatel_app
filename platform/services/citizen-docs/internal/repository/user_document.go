@@ -21,14 +21,12 @@ func (r *userDocumentRepository) Create(ctx context.Context, doc *model.UserDocu
 	return r.db.WithContext(ctx).Create(doc).Error
 }
 
-// #region READ BY USER ID
-func (r *userDocumentRepository) GetByUserID(ctx context.Context, userID uuid.UUID) ([]model.UserDocument, error) {
+// #region READ BY PROFILE ID
+func (r *userDocumentRepository) GetByProfileID(ctx context.Context, profileID uuid.UUID) ([]model.UserDocument, error) {
 	var docs []model.UserDocument
 
 	err := r.db.WithContext(ctx).
-		Table("user_documents").
-		Joins("JOIN citizen_profiles ON citizen_profiles.id = user_documents.profile_id").
-		Where("citizen_profiles.user_id = ? AND user_documents.deleted_at IS NULL", userID).
+		Where("profile_id = ? AND deleted_at IS NULL", profileID).
 		Find(&docs).Error
 
 	return docs, err
