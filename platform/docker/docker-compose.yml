@@ -90,7 +90,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-  
+
   # region db-audit
   # --- AUDIT DATABASE ---
   db-audit:
@@ -107,6 +107,28 @@ services:
       - "5435:5432"
     volumes:
       - pg_audit_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # region db-messaging
+  # --- MESSAGING DATABASE ---
+  db-messaging:
+    <<: *common-settings
+    image: postgres:18.3-alpine
+    container_name: messaging-database
+    environment:
+      POSTGRES_USER: ${MESSAGING_DB_USER:-messaging_user}
+      POSTGRES_DB: ${MESSAGING_DB_NAME:-messaging_db}
+      POSTGRES_PASSWORD_FILE: /run/secrets/messaging_db_pass
+    secrets:
+      - messaging_db_pass
+    ports:
+      - "5436:5432"
+    volumes:
+      - pg_messaging_data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 10s
@@ -203,6 +225,8 @@ secrets:
     file: ./secrets/.redis_password
   pgadmin_root_pass:
     file: ./secrets/.pgadmin_admin_password
+  messaging_db_pass:
+    file: ./secrets/.messaging_db_password
 
   # region volumes
 volumes:
@@ -210,6 +234,7 @@ volumes:
   pg_citizen_docs_data:
   pg_notification_data:
   pg_audit_data:
+  pg_messaging_data:
   redis_data:
   go-modules:
   rabbitmq_data:

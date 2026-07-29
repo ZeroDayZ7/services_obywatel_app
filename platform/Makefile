@@ -4,7 +4,7 @@ SERVICES_DIR = ./services
 PKG_DIR = ./pkg
 
 # Microservices list (folder names inside SERVICES_DIR)
-SERVICES = gateway auth-service citizen-docs notification-service audit-service version-service
+SERVICES = gateway auth-service citizen-docs notification-service audit-service version-service messaging-service
 
 # --- DOCKER SETTINGS ---
 TAG = latest
