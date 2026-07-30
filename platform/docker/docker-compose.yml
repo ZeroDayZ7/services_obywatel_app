@@ -140,7 +140,7 @@ services:
   cache-redis:
     <<: *common-settings
     image: redis:8.6-alpine
-    container_name: redis-cache
+    container_name: cache-redis-ob
     secrets:
       - redis_auth_pass
     command: >
