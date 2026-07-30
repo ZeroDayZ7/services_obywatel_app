@@ -3,12 +3,14 @@ module github.com/zerodayz7/platform/services/gateway
 go 1.26.2
 
 require (
+	github.com/fasthttp/websocket v1.5.12
 	github.com/gofiber/contrib/jwt v1.1.2
 	github.com/gofiber/contrib/otelfiber/v2 v2.2.3
 	github.com/gofiber/fiber/v2 v2.52.14
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
 	github.com/redis/go-redis/v9 v9.21.0
+	github.com/valyala/fasthttp v1.73.0
 	github.com/zerodayz7/platform/pkg v0.0.0-00010101000000-000000000000
 )
 
@@ -37,6 +39,7 @@ require (
 	github.com/philhofer/fwd v1.2.0 // indirect
 	github.com/rabbitmq/amqp091-go v1.13.0 // indirect
 	github.com/sagikazarmark/locafero v0.12.0 // indirect
+	github.com/savsgio/gotils v0.0.0-20240704082632-aef3928b8a38 // indirect
 	github.com/spf13/afero v1.15.0 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
@@ -44,7 +47,6 @@ require (
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/tinylib/msgp v1.6.4 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
-	github.com/valyala/fasthttp v1.73.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib v1.44.0 // indirect
 	go.opentelemetry.io/otel v1.44.0 // indirect

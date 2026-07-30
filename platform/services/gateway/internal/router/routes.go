@@ -19,7 +19,7 @@ func SetupRoutes(app *fiber.App, container *di.Container) {
 			"auth":      services.Auth + "/health",
 			"documents": services.Documents + "/health",
 			"notify":    services.Notify + "/health",
-			"users":     services.Users + "/health",
+			"messaging": services.Messaging + "/health",
 		},
 	}
 	health.RegisterRoutes(app, checker)
@@ -27,8 +27,9 @@ func SetupRoutes(app *fiber.App, container *di.Container) {
 	// 2. Rejestracja modułów tras
 	RegisterAuthRoutes(app, container)
 	RegisterDocumentRoutes(app, container)
-	RegisterUserRoutes(app, container)
 	RegisterNotifyRoutes(app, container)
+
+	RegisterWsRoutes(app, container)
 
 	// 3. Handlery końcowe (Fallback / 404)
 	pkgRouter.SetupFallbackHandlers(app)
