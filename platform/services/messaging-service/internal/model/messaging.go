@@ -8,6 +8,7 @@ import (
 	"gorm.io/gorm"
 )
 
+// #region Base Models
 // BaseModel – Standardowe pola audytowe z indykatorem wersji dla Delta Sync
 type BaseModel struct {
 	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
@@ -15,16 +16,9 @@ type BaseModel struct {
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
 }
 
-// --- ENUMY DOMENOWE ---
+// #endregion
 
-type ContactStatus string
-
-const (
-	ContactStatusPending  ContactStatus = "pending"
-	ContactStatusAccepted ContactStatus = "accepted"
-	ContactStatusBlocked  ContactStatus = "blocked"
-)
-
+// #region Messaging Enums
 type ConversationType string
 
 const (
@@ -40,8 +34,9 @@ const (
 	MessageTypeSystem MessageType = "system"
 )
 
-// --- KRYPTOGRAFIA I ZARZĄDZANIE KLUCZAMI (Signal Protocol / E2EE Architecture) ---
+// #endregion
 
+// #region E2EE & Crypto Entities
 // UserDeviceIdentity – Przechowuje publiczne klucze urządzenia użytkownika potrzebne do nawiązania sesji E2EE
 type UserDeviceIdentity struct {
 	ID        uuid.UUID `gorm:"type:uuid;primaryKey;default:uuidv7()"`
@@ -70,26 +65,9 @@ type UserPreKey struct {
 	BaseModel
 }
 
-// --- DOMENA KONTAKTY (Contacts) ---
+// #endregion
 
-// Contact – Relacja między użytkownikami z natywnym wsparciem dla synchronizacji i aliasów
-type Contact struct {
-	ID        uuid.UUID     `gorm:"type:uuid;primaryKey;default:uuidv7()"`
-	OwnerID   uuid.UUID     `gorm:"type:uuid;index:idx_owner_contact,unique;not null"` // Użytkownik posiadający ten kontakt
-	ContactID uuid.UUID     `gorm:"type:uuid;index:idx_owner_contact,unique;not null"` // Użytkownik docelowy
-	Status    ContactStatus `gorm:"type:varchar(20);not null;default:'pending';index"`
-
-	// Zaszyfrowany lokalnie alias/nazwa dostosowana przez użytkownika
-	EncryptedAlias []byte `gorm:"type:bytea" json:"-"`
-
-	// Wersjonowanie zmiany relacji dla silnika synchronizacji (Delta Sync)
-	Version uint64 `gorm:"not null;default:1;index"`
-
-	BaseModel
-}
-
-// --- DOMENA KONWERSACJE I WIADOMOŚCI (Chats & Messages) ---
-
+// #region Conversation & Message Entities
 // Conversation – Konwersacja prywatna lub grupowa
 type Conversation struct {
 	ID    uuid.UUID        `gorm:"type:uuid;primaryKey;default:uuidv7()"`
@@ -146,8 +124,9 @@ type Message struct {
 	BaseModel
 }
 
-// --- STRUKTURY PAMIĘCIOWE (DTOs / Dynamic Sync Outbox Payload) ---
+// #endregion
 
+// #region Sync & Outbox DTOs
 // SyncDeltaRequest – Żądanie synchronizacji różnicowej wysyłane z aplikacji mobilnej
 type SyncDeltaRequest struct {
 	LastKnownContactVersion uint64 `json:"last_known_contact_version"`
@@ -170,8 +149,6 @@ type OutboxEventPayload struct {
 	CreatedAt      time.Time      `json:"created_at"`
 }
 
-// --- REQUEST / RESPONSE DTOs ---
-
 // OutboxBatchRequest - Paczka zdarzeń wysyłana z klienta w trybie offline
 type OutboxBatchRequest struct {
 	Messages []OutboxEventPayload `json:"messages"`
@@ -182,6 +159,9 @@ type OutboxBatchResponse struct {
 	ProcessedCount int `json:"processed_count"`
 }
 
+// #endregion
+
+// #region Conversation & Crypto DTOs
 // CreateConversationRequest - Żądanie utworzenia nowej konwersacji
 type CreateConversationRequest struct {
 	Type         ConversationType `json:"type"`
@@ -210,3 +190,5 @@ type UserPreKeysResponse struct {
 	OneTimePreKey   []byte    `json:"one_time_pre_key,omitempty"`
 	OneTimePreKeyID uint32    `json:"one_time_pre_key_id,omitempty"`
 }
+
+// #endregion

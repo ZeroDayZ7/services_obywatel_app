@@ -16,13 +16,20 @@ type Container struct {
 	Logger           *shared.Logger
 	WsHub            *internalWs.Hub
 	MessagingSvc     service.MessagingService
+	ContactsSvc      service.ContactsService
 	MessagingHandler *handler.MessagingHandler
+	ContactsHandler  *handler.ContactsHandler
 }
 
 func NewContainer(db *gorm.DB, logger *shared.Logger, cfg *config.Config, wsHub *internalWs.Hub) *Container {
 	messagingRepo := repository.NewMessagingRepository(db)
+	contactsRepo := repository.NewContactsRepository(db) // Nowy repozytorium
+
 	messagingSvc := service.NewMessagingService(messagingRepo, cfg, logger)
+	contactsSvc := service.NewContactsService(contactsRepo, logger)
+
 	messagingHandler := handler.NewMessagingHandler(messagingSvc)
+	contactsHandler := handler.NewContactsHandler(contactsSvc)
 
 	return &Container{
 		DB:               db,
@@ -30,6 +37,8 @@ func NewContainer(db *gorm.DB, logger *shared.Logger, cfg *config.Config, wsHub 
 		Logger:           logger,
 		WsHub:            wsHub,
 		MessagingSvc:     messagingSvc,
+		ContactsSvc:      contactsSvc,
 		MessagingHandler: messagingHandler,
+		ContactsHandler:  contactsHandler,
 	}
 }
