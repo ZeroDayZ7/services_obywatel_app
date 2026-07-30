@@ -12,15 +12,29 @@ func SetupMessagingRoutes(app *fiber.App, container *di.Container) {
 	SetupHealthRoutes(app)
 	SetupWsRoutes(app, container)
 
-	api := app.Group("/messaging")
+	api := app.Group("/")
 
 	hmacSecret := []byte(container.Config.Internal.HMACSecret)
 	api.Use(pkgMiddleware.InternalAuthMiddleware(hmacSecret))
 
-	// Trasy synchronizacji i wiadomości
-	api.Post("/sync", h.SyncDelta)
-	api.Post("/messages", h.SendMessage)
-	api.Get("/contacts", h.GetContacts)
+	// --- CONVERSATIONS & MESSAGES ---
+	convs := api.Group("/conversations")
+	convs.Get("", h.GetConversations)
+	convs.Post("", h.CreateConversation)
+	convs.Get("/:id", h.GetConversationByID)
+	convs.Get("/:id/messages", h.GetMessages)
+	convs.Post("/:id/messages", h.SendMessage)
+	convs.Post("/:id/read", h.MarkAsRead)
+
+	// --- DELTA SYNC & OUTBOX ---
+	sync := api.Group("/sync")
+	sync.Get("/delta", h.SyncDelta)
+	sync.Post("/outbox", h.ProcessOutbox)
+
+	// --- E2EE CRYPTO KEYS ---
+	crypto := api.Group("/crypto")
+	crypto.Post("/keys/device", h.UploadDeviceKeys)
+	crypto.Get("/keys/prekeys/:userId", h.GetUserPreKeys)
 
 	SetupFallbackHandlers(app)
 }

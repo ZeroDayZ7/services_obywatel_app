@@ -28,6 +28,7 @@ func SetupRoutes(app *fiber.App, container *di.Container) {
 	RegisterAuthRoutes(app, container)
 	RegisterDocumentRoutes(app, container)
 	RegisterNotifyRoutes(app, container)
+	RegisterMessagingRoutes(app, container)
 
 	RegisterWsRoutes(app, container)
 

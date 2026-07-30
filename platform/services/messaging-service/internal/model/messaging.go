@@ -169,3 +169,44 @@ type OutboxEventPayload struct {
 	Payload        datatypes.JSON `json:"payload"`
 	CreatedAt      time.Time      `json:"created_at"`
 }
+
+// --- REQUEST / RESPONSE DTOs ---
+
+// OutboxBatchRequest - Paczka zdarzeń wysyłana z klienta w trybie offline
+type OutboxBatchRequest struct {
+	Messages []OutboxEventPayload `json:"messages"`
+}
+
+// OutboxBatchResponse - Wynik przetworzenia paczki outbox
+type OutboxBatchResponse struct {
+	ProcessedCount int `json:"processed_count"`
+}
+
+// CreateConversationRequest - Żądanie utworzenia nowej konwersacji
+type CreateConversationRequest struct {
+	Type         ConversationType `json:"type"`
+	Title        string           `json:"title,omitempty"`
+	RecipientIDs []uuid.UUID      `json:"recipient_ids"`
+}
+
+// UploadDeviceKeysRequest - Rejestracja kluczy E2EE dla urządzenia
+type UploadDeviceKeysRequest struct {
+	DeviceID        string   `json:"device_id"`
+	PublicKey       []byte   `json:"public_key"`
+	SignedPreKey    []byte   `json:"signed_pre_key"`
+	SignedPreKeySig []byte   `json:"signed_pre_key_sig"`
+	SignedPreKeyID  uint32   `json:"signed_pre_key_id"`
+	OneTimePreKeys  [][]byte `json:"one_time_pre_keys,omitempty"`
+}
+
+// UserPreKeysResponse - Klucze publiczne użytkownika do zestawienia sesji E2EE (X3DH)
+type UserPreKeysResponse struct {
+	UserID          uuid.UUID `json:"user_id"`
+	DeviceID        string    `json:"device_id"`
+	IdentityKey     []byte    `json:"identity_key"`
+	SignedPreKey    []byte    `json:"signed_pre_key"`
+	SignedPreKeySig []byte    `json:"signed_pre_key_sig"`
+	SignedPreKeyID  uint32    `json:"signed_pre_key_id"`
+	OneTimePreKey   []byte    `json:"one_time_pre_key,omitempty"`
+	OneTimePreKeyID uint32    `json:"one_time_pre_key_id,omitempty"`
+}
