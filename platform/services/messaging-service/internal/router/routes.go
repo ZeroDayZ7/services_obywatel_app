@@ -10,6 +10,7 @@ func SetupMessagingRoutes(app *fiber.App, container *di.Container) {
 	h := container.MessagingHandler
 
 	SetupHealthRoutes(app)
+	SetupWsRoutes(app, container)
 
 	api := app.Group("/messaging")
 

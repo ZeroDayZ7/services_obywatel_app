@@ -10,6 +10,6 @@ func RegisterWsRoutes(app *fiber.App, container *di.Container) {
 	app.Get(
 		"/ws/messaging",
 		gwMiddleware.RBACRequired("messaging.access"),
-		handleWSProxy(container, "/ws/messaging"),
+		handleWSProxy(container.Config.Services.Messaging),
 	)
 }

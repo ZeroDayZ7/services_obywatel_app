@@ -9,6 +9,7 @@ import (
 	"github.com/zerodayz7/platform/services/messaging-service/config"
 	"github.com/zerodayz7/platform/services/messaging-service/internal/di"
 	"github.com/zerodayz7/platform/services/messaging-service/internal/router"
+	"github.com/zerodayz7/platform/services/messaging-service/internal/websocket"
 )
 
 func main() {
@@ -22,16 +23,18 @@ func main() {
 	log := shared.InitLogger(config.AppConfig.Server.Env, false)
 
 	db, closeDB := config.MustInitDB(config.AppConfig.Database)
-	defer closeDB()
 
-	container := di.NewContainer(db, log, &config.AppConfig)
+	wsHub := websocket.NewHub()
+	go wsHub.Run()
 
-	docsApp := app.NewApp(container)
+	container := di.NewContainer(db, log, &config.AppConfig, wsHub)
 
-	router.SetupMessagingRoutes(docsApp, container)
+	messagingApp := app.NewApp(container)
+
+	router.SetupMessagingRoutes(messagingApp, container)
 
 	server.Run(
-		docsApp,
+		messagingApp,
 		server.Config{
 			Port:       config.AppConfig.Server.Port,
 			AppName:    config.AppConfig.Server.AppName,

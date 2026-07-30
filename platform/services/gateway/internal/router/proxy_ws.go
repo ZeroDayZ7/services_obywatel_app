@@ -10,28 +10,26 @@ import (
 	"github.com/valyala/fasthttp"
 	"github.com/zerodayz7/platform/pkg/constants"
 	"github.com/zerodayz7/platform/pkg/shared"
-	"github.com/zerodayz7/platform/services/gateway/internal/di"
 )
 
 var upgrader = websocket.FastHTTPUpgrader{
 	CheckOrigin: func(ctx *fasthttp.RequestCtx) bool {
-		return true // CORS obsłużony na poziomie Gatewaya
+		return true
 	},
 }
 
-func handleWSProxy(container *di.Container, targetPath string) fiber.Handler {
-	targetWS := container.Config.Services.WS
-	// Normalizacja protokołu HTTP -> WS jeśli podano http:// w env
-	targetWS = strings.Replace(targetWS, "http://", "ws://", 1)
+func handleWSProxy(upstreamURL string) fiber.Handler {
+	targetWS := strings.Replace(upstreamURL, "http://", "ws://", 1)
 	targetWS = strings.Replace(targetWS, "https://", "wss://", 1)
 
 	log := shared.GetLogger()
 
 	return func(c *fiber.Ctx) error {
+		path := c.Path()
 		query := string(c.Request().URI().QueryString())
 		ctx := c.Context()
 
-		reqHeaders := http.Header{}
+		reqHeaders := make(http.Header)
 
 		if userID := c.Get(constants.HeaderUserID); userID != "" {
 			reqHeaders.Set(constants.HeaderUserID, userID)
@@ -46,7 +44,7 @@ func handleWSProxy(container *di.Container, targetPath string) fiber.Handler {
 		}
 
 		return upgrader.Upgrade(ctx, func(clientConn *websocket.Conn) {
-			targetURL := targetWS + targetPath
+			targetURL := targetWS + path
 			if len(query) > 0 {
 				targetURL += "?" + query
 			}
@@ -67,7 +65,7 @@ func handleWSProxy(container *di.Container, targetPath string) fiber.Handler {
 				_ = backendConn.Close()
 			}
 
-			// Pętla Client -> Backend
+			// Client -> Backend
 			go func() {
 				defer once.Do(closeConns)
 				for {
@@ -81,7 +79,7 @@ func handleWSProxy(container *di.Container, targetPath string) fiber.Handler {
 				}
 			}()
 
-			// Pętla Backend -> Client
+			// Backend -> Client
 			go func() {
 				defer once.Do(closeConns)
 				for {
