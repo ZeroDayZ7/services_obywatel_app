@@ -1,6 +1,10 @@
+name: obywatel-app
+
 #region Common Settings
 x-common-settings: &common-settings
   restart: ${DOCKER_RESTART_POLICY:-no}
+  env_file:
+    - ../.env
   environment:
     - ENV=${APP_ENV:-development}
   networks:
@@ -58,4 +62,11 @@ services:
 secrets:
   pgadmin_root_pass:
     file: ../secrets/.pgadmin_admin_password
+#endregion
+
+#region Networks
+networks:
+  citizen-app-net:
+    name: obywatel_app__network
+    driver: bridge
 #endregion

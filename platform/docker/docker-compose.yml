@@ -30,7 +30,7 @@ services:
   db-auth:
     <<: *common-settings
     image: postgres:18.3-alpine
-    container_name: auth-database
+    container_name: db-auth
     environment:
       POSTGRES_USER: ${AUTH_DB_USER:-auth_user}
       POSTGRES_DB: ${AUTH_DB_NAME:-auth_database}
@@ -52,7 +52,7 @@ services:
   db-notification:
     <<: *common-settings
     image: postgres:18.3-alpine
-    container_name: notification-database
+    container_name: db-notification
     environment:
       POSTGRES_USER: ${NOTIFY_DB_USER:-notification_user}
       POSTGRES_DB: ${NOTIFY_DB_NAME:-notification_database}
@@ -74,7 +74,7 @@ services:
   db-citizen-docs:
     <<: *common-settings
     image: postgres:18.3-alpine
-    container_name: citizen-docs-database
+    container_name: db-citizen-docs
     environment:
       POSTGRES_USER: ${CITIZEN_DB_USER:-citizen_user}
       POSTGRES_DB: ${CITIZEN_DB_NAME:-citizen_docs_database}
@@ -96,7 +96,7 @@ services:
   db-audit:
     <<: *common-settings
     image: postgres:18.3-alpine
-    container_name: audit-database
+    container_name: db-audit
     environment:
       POSTGRES_USER: ${AUDIT_DB_USER:-audit_user}
       POSTGRES_DB: ${AUDIT_DB_NAME:-audit_db}
@@ -118,7 +118,7 @@ services:
   db-messaging:
     <<: *common-settings
     image: postgres:18.3-alpine
-    container_name: messaging-database
+    container_name: db-messaging
     environment:
       POSTGRES_USER: ${MESSAGING_DB_USER:-messaging_user}
       POSTGRES_DB: ${MESSAGING_DB_NAME:-messaging_db}
@@ -140,7 +140,7 @@ services:
   cache-redis:
     <<: *common-settings
     image: redis:8.6-alpine
-    container_name: cache-redis-ob
+    container_name: cache-redis
     secrets:
       - redis_auth_pass
     command: >

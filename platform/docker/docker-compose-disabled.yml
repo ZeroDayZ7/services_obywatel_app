@@ -1,3 +1,5 @@
+name: obywatel-app
+
 networks:
   citizen-app-net:
     name: obywatel_app__network
