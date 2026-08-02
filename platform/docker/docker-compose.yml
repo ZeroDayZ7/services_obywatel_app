@@ -30,10 +30,10 @@ services:
   db-auth:
     <<: *common-settings
     image: postgres:18.3-alpine
-    container_name: auth-database
+    container_name: db-auth
     environment:
-      POSTGRES_USER: ${AUTH_DB_USER:-citizen_admin}
-      POSTGRES_DB: ${AUTH_DB_NAME:-auth_db}
+      POSTGRES_USER: ${AUTH_DB_USER:-auth_user}
+      POSTGRES_DB: ${AUTH_DB_NAME:-auth_database}
       POSTGRES_PASSWORD_FILE: /run/secrets/auth_db_pass
     secrets:
       - auth_db_pass
@@ -52,7 +52,7 @@ services:
   db-notification:
     <<: *common-settings
     image: postgres:18.3-alpine
-    container_name: notification-database
+    container_name: db-notification
     environment:
       POSTGRES_USER: ${NOTIFY_DB_USER:-notification_user}
       POSTGRES_DB: ${NOTIFY_DB_NAME:-notification_database}
@@ -74,7 +74,7 @@ services:
   db-citizen-docs:
     <<: *common-settings
     image: postgres:18.3-alpine
-    container_name: citizen-docs-database
+    container_name: db-citizen-docs
     environment:
       POSTGRES_USER: ${CITIZEN_DB_USER:-citizen_user}
       POSTGRES_DB: ${CITIZEN_DB_NAME:-citizen_docs_database}
@@ -91,12 +91,56 @@ services:
       timeout: 5s
       retries: 5
 
+  # region db-audit
+  # --- AUDIT DATABASE ---
+  db-audit:
+    <<: *common-settings
+    image: postgres:18.3-alpine
+    container_name: db-audit
+    environment:
+      POSTGRES_USER: ${AUDIT_DB_USER:-audit_user}
+      POSTGRES_DB: ${AUDIT_DB_NAME:-audit_db}
+      POSTGRES_PASSWORD_FILE: /run/secrets/audit_db_pass
+    secrets:
+      - audit_db_pass
+    ports:
+      - "5435:5432"
+    volumes:
+      - pg_audit_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # region db-messaging
+  # --- MESSAGING DATABASE ---
+  db-messaging:
+    <<: *common-settings
+    image: postgres:18.3-alpine
+    container_name: db-messaging
+    environment:
+      POSTGRES_USER: ${MESSAGING_DB_USER:-messaging_user}
+      POSTGRES_DB: ${MESSAGING_DB_NAME:-messaging_db}
+      POSTGRES_PASSWORD_FILE: /run/secrets/messaging_db_pass
+    secrets:
+      - messaging_db_pass
+    ports:
+      - "5436:5432"
+    volumes:
+      - pg_messaging_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # region cache-redis
   # --- SESSION & CACHING ---
   cache-redis:
     <<: *common-settings
     image: redis:8.6-alpine
-    container_name: auth-redis
+    container_name: cache-redis
     secrets:
       - redis_auth_pass
     command: >
@@ -175,16 +219,22 @@ secrets:
     file: ./secrets/.citizen_db_password
   notify_db_pass:
     file: ./secrets/.notify_db_password
+  audit_db_pass:
+    file: ./secrets/.audit_db_password
   redis_auth_pass:
     file: ./secrets/.redis_password
   pgadmin_root_pass:
     file: ./secrets/.pgadmin_admin_password
+  messaging_db_pass:
+    file: ./secrets/.messaging_db_password
 
   # region volumes
 volumes:
   pg_auth_data:
   pg_citizen_docs_data:
   pg_notification_data:
+  pg_audit_data:
+  pg_messaging_data:
   redis_data:
   go-modules:
   rabbitmq_data:

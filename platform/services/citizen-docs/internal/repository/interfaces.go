@@ -1,5 +1,3 @@
-// platform/services/citizen-docs/internal/repository/interfaces.go
-
 package repository
 
 import (
@@ -17,5 +15,6 @@ type CitizenRepo interface {
 
 type UserDocumentRepo interface {
 	Create(ctx context.Context, doc *model.UserDocument) error
-	GetByProfileID(ctx context.Context, profileID uint) ([]model.UserDocument, error)
+	GetByProfileID(ctx context.Context, profileID uuid.UUID) ([]model.UserDocument, error)
+	GetSinceVersion(ctx context.Context, profileID uuid.UUID, sinceVersion uint64) ([]model.UserDocument, error)
 }

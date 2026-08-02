@@ -1,0 +1,72 @@
+name: obywatel-app
+
+#region Common Settings
+x-common-settings: &common-settings
+  restart: ${DOCKER_RESTART_POLICY:-no}
+  env_file:
+    - ../.env
+  environment:
+    - ENV=${APP_ENV:-development}
+  networks:
+    - citizen-app-net
+#endregion
+
+services:
+  #region Database Management: pgAdmin
+  pgadmin:
+    <<: *common-settings
+    image: dpage/pgadmin4:9.14
+    container_name: pgadmin-management
+    ports:
+      - "5050:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD_FILE: /run/secrets/pgadmin_root_pass
+      PGADMIN_CONFIG_ENHANCED_COOKIE_PROTECTION: "True"
+    secrets:
+      - pgadmin_root_pass
+    command: >
+      sh -c "export PGADMIN_DEFAULT_PASSWORD=$$(cat /run/secrets/pgadmin_root_pass) &&
+             /entrypoint.sh"
+    volumes:
+      - ../pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      db-auth:
+        condition: service_healthy
+  #endregion
+
+  #region Telemetry: OpenTelemetry Collector
+  otel-collector:
+    <<: *common-settings
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: telemetry-collector
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ../otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - "4318:4318"
+      - "4317:4317"
+  #endregion
+
+  #region Tracing: Jaeger
+  jaeger:
+    <<: *common-settings
+    image: jaegertracing/all-in-one:latest
+    container_name: telemetry-jaeger
+    ports:
+      - "16686:16686"
+      - "4319:4317"
+  #endregion
+
+#region Secrets
+secrets:
+  pgadmin_root_pass:
+    file: ../secrets/.pgadmin_admin_password
+#endregion
+
+#region Networks
+networks:
+  citizen-app-net:
+    name: obywatel_app__network
+    driver: bridge
+#endregion

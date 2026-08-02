@@ -1,4 +1,6 @@
 sqlc generate
 
+go run ./cmd
 
-go run ./cmd/api
+go get -u ./...
+make -C platform updatedeps

@@ -1,33 +1,30 @@
 {
   // (Explorer)
   "files.exclude": {
-    "**/go.work.sum": true,
-    "**/go.sum": true,
+    // "**/go.work.sum": true,
+    // "**/go.sum": true,
     // "**/go.mod": true,
     // "**/logs/": true,
-    "**/bin/": true,
-    // "**/": true,
-    "**/.env.dev": true,
-    "**/.env.example": true,
-    "**/.env.dev.example": true,
-    "**/README.md": true,
-    "**/LICENSE": true,
-    "**/.gitattributes": true,
-    "**/.gitignore": true,
-
-    "**/Dockerfile": true,
-
+    // "**/bin/": true,
+    // "**/.env.dev": true,
+    // "**/.env.example": true,
+    // "**/.env.dev.example": true,
+    // "**/README.md": true,
+    // "**/LICENSE": true,
+    // "**/.gitattributes": true,
+    // "**/.gitignore": true,
+    // "**/Dockerfile": true,
   },
 
   // (Search)
   "search.exclude": {
-    "**/go.work.sum": true,
-    "**/go.sum": true,
+    // "**/go.work.sum": true,
+    // "**/go.sum": true,
     // "**/go.mod": true,
     "**/logs/": true,
     "**/bin/": true,
-    "**/.env.example": true,
-    "**/.env.dev.example": true,
+    // "**/.env.example": true,
+    // "**/.env.dev.example": true,
     "**/README.md": true,
     "**/LICENSE": true,
     "**/.gitattributes": true,
@@ -40,16 +37,6 @@
     },
     "editor.defaultFormatter": "golang.go"
   },
-  // "gopls": {
-  //   "ui.diagnostic.staticcheck": true,
-  //   "ui.completion.usePlaceholders": true,
-  //   "analyses": {
-  //     "useany": true,
-  //     "unusedparams": true,
-  //     "simplifyrange": true
-  //   },
-  //   "diagnosticsDelay": "100ms"
-  // },
   "go.formatTool": "gofumpt",
   "go.lintTool": "golangci-lint",
   "go.lintOnSave": "package",

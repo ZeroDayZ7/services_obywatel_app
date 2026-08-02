@@ -68,7 +68,7 @@ func SetSharedDefaults(serviceName string) {
 	viper.SetDefault("SERVICE_AUTH_URL", "http://localhost:8082")
 	viper.SetDefault("SERVICE_DOCS_URL", "http://localhost:8083")
 	viper.SetDefault("SERVICE_NOTIFY_URL", "http://localhost:8084")
-	viper.SetDefault("SERVICE_USERS_URL", "http://localhost:3000")
+	viper.SetDefault("SERVICE_MESSAGING_URL", "http://localhost:8086")
 
 	viper.SetDefault("INTERNAL_HMAC_SECRET", "")
 	viper.SetDefault("INTERNAL_ENCRYPTION_KEY", "")
@@ -80,4 +80,6 @@ func SetSharedDefaults(serviceName string) {
 	viper.SetDefault("RABBITMQ_USER", "admin")
 	viper.SetDefault("RABBITMQ_PASSWORD", "csof_password")
 	viper.SetDefault("RABBITMQ_VHOST", "/")
+
+	viper.SetDefault("SERVICE_WS_URL", "ws://localhost:8084")
 }

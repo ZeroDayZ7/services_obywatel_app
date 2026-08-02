@@ -5,6 +5,7 @@ import (
 
 	"github.com/zerodayz7/platform/pkg/server"
 	"github.com/zerodayz7/platform/pkg/shared"
+	"github.com/zerodayz7/platform/services/citizen-docs/app"
 	"github.com/zerodayz7/platform/services/citizen-docs/config"
 	"github.com/zerodayz7/platform/services/citizen-docs/internal/di"
 	"github.com/zerodayz7/platform/services/citizen-docs/internal/router"
@@ -25,12 +26,12 @@ func main() {
 
 	container := di.NewContainer(db, log, &config.AppConfig)
 
-	app := config.NewDocsApp(container)
+	docsApp := app.NewDocsApp(container)
 
-	router.SetupDocsRoutes(app, container.UserDocumentSvc)
+	router.SetupDocsRoutes(docsApp, container)
 
 	server.Run(
-		app,
+		docsApp,
 		server.Config{
 			Port:       config.AppConfig.Server.Port,
 			AppName:    config.AppConfig.Server.AppName,

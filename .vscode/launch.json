@@ -96,6 +96,22 @@
       "cwd": "${workspaceFolder}/platform/services/audit-service",
       "showLog": false,
       "output": "${workspaceFolder}/platform/services/audit-service/bin/audit_debug.exe"
+    },
+    {
+      "name": "Messaging Service",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/platform/services/messaging-service/cmd/main.go",
+      "args": [],
+      "env": {
+        "ENV": "development",
+        "APP_ENV": "dev"
+      },
+      "buildFlags": "-tags=dev",
+      "cwd": "${workspaceFolder}/platform/services/messaging-service",
+      "showLog": false,
+      "output": "${workspaceFolder}/platform/services/messaging-service/bin/messaging_debug.exe"
     }
   ]
 }

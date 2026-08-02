@@ -9,9 +9,9 @@ import (
 func RegisterDocumentRoutes(app *fiber.App, container *di.Container) {
 	target := container.Config.Services.Documents
 
-	// Grupa dokumentów z bazowym RBAC
-	docs := app.Group("/documents", gwMiddleware.RBACRequired("documents.read"))
+	docs := app.Group("/documents")
 
-	// Domyślny proxy catch-all dla dokumentów
-	docs.All("/*", ReverseProxySecure(container, target))
+	// 1:1 odzwierciedlenie tras z mikroserwisu citizen-docs
+	docs.Post("/", gwMiddleware.RBACRequired("documents.write"), ReverseProxySecure(container, target))
+	docs.Get("/me", gwMiddleware.RBACRequired("documents.read"), ReverseProxySecure(container, target))
 }

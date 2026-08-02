@@ -15,11 +15,11 @@ func SetupRoutes(app *fiber.App, container *di.Container) {
 		Redis:   container.Redis.Client,
 		Service: "gateway",
 		Version: container.Config.Server.AppVersion,
-		Upstreams: []string{
-			services.Auth + "/health",
-			services.Documents + "/health",
-			services.Notify + "/health",
-			services.Users + "/health",
+		Upstreams: map[string]string{
+			"auth":      services.Auth + "/health",
+			"documents": services.Documents + "/health",
+			"notify":    services.Notify + "/health",
+			"messaging": services.Messaging + "/health",
 		},
 	}
 	health.RegisterRoutes(app, checker)
@@ -27,8 +27,10 @@ func SetupRoutes(app *fiber.App, container *di.Container) {
 	// 2. Rejestracja modułów tras
 	RegisterAuthRoutes(app, container)
 	RegisterDocumentRoutes(app, container)
-	RegisterUserRoutes(app, container)
 	RegisterNotifyRoutes(app, container)
+	RegisterMessagingRoutes(app, container)
+
+	RegisterWsRoutes(app, container)
 
 	// 3. Handlery końcowe (Fallback / 404)
 	pkgRouter.SetupFallbackHandlers(app)

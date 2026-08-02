@@ -1,17 +1,18 @@
 package constants
 
 // HTTP Headers - Standard & Proxy
-// Używane do poprawnej identyfikacji adresu IP oraz standardowej obsługi sesji.
 const (
 	HeaderXForwardedFor = "X-Forwarded-For"
 	HeaderXRealIP       = "X-Real-IP"
 	HeaderRequestID     = "X-Request-ID"
 	HeaderAuth          = "Authorization"
 	HeaderCookie        = "Cookie"
+	HeaderContentType   = "Content-Type"
+	HeaderAccept        = "Accept"
+	HeaderUserAgent     = "User-Agent"
 )
 
 // HTTP Headers - User & Device Identification
-// Kluczowe dla śledzenia kontekstu użytkownika i urządzenia wewnątrz systemu.
 const (
 	HeaderUserID            = "X-User-Id"
 	HeaderSessionID         = "X-Session-Id"
@@ -20,10 +21,7 @@ const (
 )
 
 // HTTP Headers - Internal Security (Zero Trust)
-// Wykorzystywane do bezpiecznej komunikacji między mikroserwisami.
 const (
-	// HeaderInternalContext zawiera zakodowany payload (base64) z danymi kontekstu.
-	HeaderInternalContext = "X-Internal-Context"
-	// HeaderInternalSignature służy do weryfikacji integralności payloadu.
+	HeaderInternalContext   = "X-Internal-Context"
 	HeaderInternalSignature = "X-Internal-Signature"
 )

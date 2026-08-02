@@ -1,0 +1,63 @@
+name: obywatel-app
+
+#region Common Settings
+x-common-settings: &common-settings
+  restart: ${DOCKER_RESTART_POLICY:-no}
+  env_file:
+    - ../.env
+  environment:
+    - ENV=${APP_ENV:-development}
+  networks:
+    - citizen-app-net
+#endregion
+
+services:
+  #region Cache: Redis
+  cache-redis:
+    <<: *common-settings
+    image: redis:8.6-alpine
+    container_name: cache-redis
+    secrets:
+      - redis_auth_pass
+    command: >
+      sh -c 'redis-server --requirepass $$(cat /run/secrets/redis_auth_pass)'
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+  #endregion
+
+  #region Message Broker: RabbitMQ
+  rabbitmq:
+    <<: *common-settings
+    image: rabbitmq:4.3.1-management
+    container_name: rabbitmq_server
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: "admin"
+      RABBITMQ_DEFAULT_PASS: "password"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+  #endregion
+#endregion
+
+#region Secrets
+secrets:
+  redis_auth_pass:
+    file: ../secrets/.redis_password
+#endregion
+
+#region Volumes
+volumes:
+  redis_data:
+  rabbitmq_data:
+#endregion
+
+#region Networks
+networks:
+  citizen-app-net:
+    name: obywatel_app__network
+    driver: bridge
+#endregion

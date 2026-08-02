@@ -3,7 +3,6 @@ package health
 import (
 	"context"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -14,7 +13,7 @@ type Checker struct {
 	Redis     *redis.Client
 	Service   string
 	Version   string
-	Upstreams []string
+	Upstreams map[string]string
 }
 
 func (c *Checker) RunChecks(ctx context.Context) map[string]string {
@@ -28,47 +27,32 @@ func (c *Checker) RunChecks(ctx context.Context) map[string]string {
 		}
 	}
 
-	for _, url := range c.Upstreams {
-		name := "upstream_" + extractName(url)
+	// Wspólny HTTP client zamiast alokacji w pętli
+	client := &http.Client{Timeout: 2 * time.Second}
 
-		// Tworzymy request z kontekstem
-		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	for name, url := range c.Upstreams {
+		key := "upstream_" + name
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 		if err != nil {
-			checks[name] = "down"
+			checks[key] = "down"
 			continue
 		}
 
-		client := &http.Client{Timeout: 2 * time.Second}
 		resp, err := client.Do(req)
-
 		if err == nil && resp.StatusCode < 500 {
-			checks[name] = "ok"
-			resp.Body.Close()
+			checks[key] = "ok"
+			_ = resp.Body.Close()
 		} else {
-			checks[name] = "down"
+			checks[key] = "down"
 		}
 	}
 
 	return checks
 }
-func extractName(url string) string {
-	if i := strings.Index(url, "://"); i != -1 {
-		url = url[i+3:]
-	}
-	if i := strings.Index(url, "/"); i != -1 {
-		url = url[:i]
-	}
-	if i := strings.Index(url, ":"); i != -1 {
-		url = url[:i]
-	}
-	return url
-}
 
 func (c *Checker) Handler(ctx *fiber.Ctx) error {
-	// Używamy kontekstu z Fibera i Twojej nowej logiki
 	checks := c.RunChecks(ctx.UserContext())
-
-	// Używamy Twojego NewResponse
 	resp := NewResponse(c.Service, c.Version, checks)
 
 	return ctx.JSON(resp)

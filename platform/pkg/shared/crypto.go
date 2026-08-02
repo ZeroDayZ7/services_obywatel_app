@@ -5,8 +5,11 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/ed25519"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"io"
 )
 
@@ -42,4 +45,19 @@ func Encrypt(plaintext []byte, key []byte) ([]byte, error) {
 		return nil, err
 	}
 	return gcm.Seal(nonce, nonce, plaintext, nil), nil
+}
+
+// ComputeHMACSHA256 oblicza keyed-hash (HMAC-SHA256) dla podanych danych i klucza,
+// zwracając wynik w postaci ciągu szesnastkowego (hex).
+func ComputeHMACSHA256(data []byte, key []byte) string {
+	h := hmac.New(sha256.New, key)
+	h.Write(data)
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// ComputeHMACSHA256Base64 oblicza HMAC-SHA256 i zwraca wynik zakodowany w Base64.
+func ComputeHMACSHA256Base64(data []byte, key []byte) string {
+	h := hmac.New(sha256.New, key)
+	h.Write(data)
+	return base64.StdEncoding.EncodeToString(h.Sum(nil))
 }

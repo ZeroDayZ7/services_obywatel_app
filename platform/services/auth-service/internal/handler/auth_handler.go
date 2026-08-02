@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/pkg/constants"
 	reqctx "github.com/zerodayz7/platform/pkg/context"
 	apperr "github.com/zerodayz7/platform/pkg/errors"
@@ -60,18 +61,36 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 func (h *AuthHandler) VerifyDevice(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(c.UserContext(), 2*time.Second)
 	defer cancel()
+	log := shared.GetLogger()
 
-	// 1. Dane z Body (od Użytkownika)
+	// 1. Dane z Body
 	var body schemas.VerifyDeviceRequest
 	if err := c.BodyParser(&body); err != nil {
+		log.WarnObj("VerifyDevice: Błąd parsowania body", map[string]any{"err": err.Error()})
 		return apperr.SendAppError(c, apperr.ErrInvalidRequestBody)
 	}
 
-	// 2. Dane z Contextu (Zaufane, od Gatewaya przez middleware)
+	// 2. Dane z Contextu (weryfikacja czy Middleware przekazał dane z setupTokena)
 	rc := reqctx.MustFromFiber(c)
 
-	// 3. Delegacja - przekazujemy czyste parametry
-	// Wyciągamy DeviceID (fingerprint), który u Ciebie jest w RequestContext
+	log.InfoMap("VerifyDevice: Odebrano żądanie", map[string]any{
+		"user_id":    rc.UserID.String(),
+		"session_id": rc.SessionID,
+		"device_id":  rc.DeviceID,
+		"has_sig":    body.Signature != "",
+	})
+
+	// Sprawdzenie czy kontekst nie jest pusty
+	if rc.UserID == nil || *rc.UserID == uuid.Nil || rc.SessionID == "" || rc.DeviceID == "" {
+		log.ErrorObj("VerifyDevice: Brak wymaganych danych w RequestContext (błąd Middleware)", map[string]any{
+			"user_id":    rc.UserID,
+			"session_id": rc.SessionID,
+			"device_id":  rc.DeviceID,
+		})
+		return apperr.SendAppError(c, apperr.ErrUnauthorized)
+	}
+
+	// 3. Delegacja do serwisu
 	response, err := h.authService.VerifyDeviceSignature(
 		ctx,
 		rc.UserID.String(),
@@ -80,8 +99,18 @@ func (h *AuthHandler) VerifyDevice(c *fiber.Ctx) error {
 		rc.DeviceID,
 	)
 	if err != nil {
+		log.WarnObj("VerifyDevice: Weryfikacja podpisu nie powiodła się", map[string]any{
+			"user_id":    rc.UserID.String(),
+			"session_id": rc.SessionID,
+			"device_id":  rc.DeviceID,
+			"err":        err.Error(),
+		})
 		return apperr.SendAppError(c, err)
 	}
+
+	log.InfoMap("VerifyDevice: Urządzenie pomyślnie zweryfikowane", map[string]any{
+		"user_id": rc.UserID.String(),
+	})
 
 	return c.JSON(response)
 }
