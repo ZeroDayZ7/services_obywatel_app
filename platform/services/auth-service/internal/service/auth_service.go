@@ -292,6 +292,7 @@ func (s *authService) RefreshToken(ctx context.Context, tokenStr string, fingerp
 	sessionData := redis.UserSession{
 		UserID:      user.ID.String(),
 		Fingerprint: fingerprint,
+		PublicKey:   device.PublicKey,
 		Role:        string(user.Role),
 		Permissions: []string(user.Permissions),
 	}
@@ -778,6 +779,7 @@ func (s *authService) AttemptLogin(ctx context.Context, email string, password [
 		sessionData := redis.UserSession{
 			UserID:      user.ID.String(),
 			Fingerprint: fingerprint,
+			PublicKey:   device.PublicKey,
 			Role:        string(user.Role),
 			Permissions: []string(user.Permissions),
 		}

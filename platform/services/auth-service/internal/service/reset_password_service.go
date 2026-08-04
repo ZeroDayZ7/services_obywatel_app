@@ -67,8 +67,15 @@ func (s *passwordResetService) StartResetProcess(ctx context.Context, agreementN
 	}
 
 	token := shared.GenerateUuidV7()
-	code := fmt.Sprintf("%06d", shared.RandInt(100000, 999999))
-	hashed, _ := bcrypt.GenerateFromPassword([]byte(code), bcrypt.DefaultCost)
+	code, err := shared.GenerateSecureOTP()
+	if err != nil {
+		return "", errors.ErrInternal
+	}
+
+	hashed, err := bcrypt.GenerateFromPassword([]byte(code), bcrypt.DefaultCost)
+	if err != nil {
+		return "", errors.ErrInternal
+	}
 
 	session := ResetSession{
 		UserID:          user.ID.String(),
