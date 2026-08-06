@@ -27,6 +27,10 @@ func mockImageData(name string) []byte {
 	return []byte("MOCK_IMAGE_BYTES_FOR_" + name)
 }
 
+func mockDEK(name string) []byte {
+	return []byte("MOCK_DEK_FOR_" + name)
+}
+
 func SeedData(db *gorm.DB) error {
 	log := shared.GetLogger()
 
@@ -80,19 +84,22 @@ func SeedData(db *gorm.DB) error {
 
 	docID1, _ := uuid.NewV7()
 	doc1 := model.UserDocument{
-		ID:               docID1,
-		ProfileID:        profileID1,
-		TypeCode:         "ID_CARD",
-		Status:           model.DocumentStatusActive,
-		EncryptedMeta:    bytesMetaID,
-		EncryptedFront:   mockImageData("id_card_front"),
-		EncryptedBack:    mockImageData("id_card_back"),
-		IssuerSignature:  mockSignature("ID_CARD_JAN_KOWALSKI"),
-		SigningKeyID:     "GOV-PL-KMS-2024-KEY-01",
-		RevocationSerial: "REV-ID-2024-009812",
-		Version:          1,
-		IssuedAt:         &issuedAtID,
-		ExpiresAt:        &expiresAtID,
+		ID:                docID1,
+		ProfileID:         profileID1,
+		TypeCode:          "ID_CARD",
+		Status:            model.DocumentStatusActive,
+		EncryptedMeta:     bytesMetaID,
+		EncryptedMetaDEK:  mockDEK("id_card_meta"),
+		EncryptedFront:    mockImageData("id_card_front"),
+		EncryptedFrontDEK: mockDEK("id_card_front"),
+		EncryptedBack:     mockImageData("id_card_back"),
+		EncryptedBackDEK:  mockDEK("id_card_back"),
+		IssuerSignature:   mockSignature("ID_CARD_JAN_KOWALSKI"),
+		SigningKeyID:      "GOV-PL-KMS-2024-KEY-01",
+		RevocationSerial:  "REV-ID-2024-009812",
+		Version:           1,
+		IssuedAt:          &issuedAtID,
+		ExpiresAt:         &expiresAtID,
 	}
 
 	// 1.2 Prawo Jazdy (Aktywne)
@@ -110,19 +117,22 @@ func SeedData(db *gorm.DB) error {
 
 	docID2, _ := uuid.NewV7()
 	doc2 := model.UserDocument{
-		ID:               docID2,
-		ProfileID:        profileID1,
-		TypeCode:         "DRIVER_LICENSE",
-		Status:           model.DocumentStatusActive,
-		EncryptedMeta:    bytesMetaDL,
-		EncryptedFront:   mockImageData("dl_front"),
-		EncryptedBack:    mockImageData("dl_back"),
-		IssuerSignature:  mockSignature("DL_JAN_KOWALSKI"),
-		SigningKeyID:     "GOV-PL-KMS-2024-KEY-02",
-		RevocationSerial: "REV-DL-2024-004112",
-		Version:          2,
-		IssuedAt:         &issuedAtDL,
-		ExpiresAt:        &expiresAtDL,
+		ID:                docID2,
+		ProfileID:         profileID1,
+		TypeCode:          "DRIVER_LICENSE",
+		Status:            model.DocumentStatusActive,
+		EncryptedMeta:     bytesMetaDL,
+		EncryptedMetaDEK:  mockDEK("dl_meta"),
+		EncryptedFront:    mockImageData("dl_front"),
+		EncryptedFrontDEK: mockDEK("dl_front"),
+		EncryptedBack:     mockImageData("dl_back"),
+		EncryptedBackDEK:  mockDEK("dl_back"),
+		IssuerSignature:   mockSignature("DL_JAN_KOWALSKI"),
+		SigningKeyID:      "GOV-PL-KMS-2024-KEY-02",
+		RevocationSerial:  "REV-DL-2024-004112",
+		Version:           2,
+		IssuedAt:          &issuedAtDL,
+		ExpiresAt:         &expiresAtDL,
 	}
 
 	// 1.3 Karta Dużej Rodziny (Aktywna)
@@ -138,24 +148,27 @@ func SeedData(db *gorm.DB) error {
 
 	docID3, _ := uuid.NewV7()
 	doc3 := model.UserDocument{
-		ID:               docID3,
-		ProfileID:        profileID1,
-		TypeCode:         "LARGE_FAMILY_CARD",
-		Status:           model.DocumentStatusActive,
-		EncryptedMeta:    bytesMetaKDR,
-		EncryptedFront:   mockImageData("kdr_front"),
-		IssuerSignature:  mockSignature("KDR_JAN_KOWALSKI"),
-		SigningKeyID:     "GOV-PL-KMS-2023-KEY-05",
-		RevocationSerial: "REV-KDR-2023-991201",
-		Version:          1,
-		IssuedAt:         &issuedAtKDR,
-		ExpiresAt:        nil,
+		ID:                docID3,
+		ProfileID:         profileID1,
+		TypeCode:          "LARGE_FAMILY_CARD",
+		Status:            model.DocumentStatusActive,
+		EncryptedMeta:     bytesMetaKDR,
+		EncryptedMetaDEK:  mockDEK("kdr_meta"),
+		EncryptedFront:    mockImageData("kdr_front"),
+		EncryptedFrontDEK: mockDEK("kdr_front"),
+		IssuerSignature:   mockSignature("KDR_JAN_KOWALSKI"),
+		SigningKeyID:      "GOV-PL-KMS-2023-KEY-05",
+		RevocationSerial:  "REV-KDR-2023-991201",
+		Version:           1,
+		IssuedAt:          &issuedAtKDR,
+		ExpiresAt:         nil,
 	}
 
 	profile1 := model.CitizenProfile{
 		ID:            profileID1,
 		UserID:        testUserID1,
 		EncryptedData: bytesCitizenData1,
+		EncryptedDEK:  mockDEK("profile_jan"),
 		PeselHash:     shared.ComputeHMACSHA256([]byte("90010112345"), seedSecret),
 		Documents:     []model.UserDocument{doc1, doc2, doc3},
 	}
@@ -199,19 +212,22 @@ func SeedData(db *gorm.DB) error {
 
 	docID4, _ := uuid.NewV7()
 	doc4 := model.UserDocument{
-		ID:               docID4,
-		ProfileID:        profileID2,
-		TypeCode:         "STUDENT_ID",
-		Status:           model.DocumentStatusExpired,
-		EncryptedMeta:    bytesMetaStudent,
-		EncryptedFront:   mockImageData("student_id_front"),
-		EncryptedBack:    mockImageData("student_id_back"),
-		IssuerSignature:  mockSignature("STUDENT_ANNA_NOWAK"),
-		SigningKeyID:     "POLSL-KMS-2022-KEY-01",
-		RevocationSerial: "REV-ELS-2022-000102",
-		Version:          1,
-		IssuedAt:         &issuedAtStudent,
-		ExpiresAt:        &expiresAtStudent,
+		ID:                docID4,
+		ProfileID:         profileID2,
+		TypeCode:          "STUDENT_ID",
+		Status:            model.DocumentStatusExpired,
+		EncryptedMeta:     bytesMetaStudent,
+		EncryptedMetaDEK:  mockDEK("student_meta"),
+		EncryptedFront:    mockImageData("student_id_front"),
+		EncryptedFrontDEK: mockDEK("student_id_front"),
+		EncryptedBack:     mockImageData("student_id_back"),
+		EncryptedBackDEK:  mockDEK("student_id_back"),
+		IssuerSignature:   mockSignature("STUDENT_ANNA_NOWAK"),
+		SigningKeyID:      "POLSL-KMS-2022-KEY-01",
+		RevocationSerial:  "REV-ELS-2022-000102",
+		Version:           1,
+		IssuedAt:          &issuedAtStudent,
+		ExpiresAt:         &expiresAtStudent,
 	}
 
 	// 2.2 Unieważniony Dowód Osobisty
@@ -227,25 +243,29 @@ func SeedData(db *gorm.DB) error {
 
 	docID5, _ := uuid.NewV7()
 	doc5 := model.UserDocument{
-		ID:               docID5,
-		ProfileID:        profileID2,
-		TypeCode:         "ID_CARD",
-		Status:           model.DocumentStatusRevoked,
-		EncryptedMeta:    bytesMetaRevoked,
-		EncryptedFront:   mockImageData("revoked_id_front"),
-		EncryptedBack:    mockImageData("revoked_id_back"),
-		IssuerSignature:  mockSignature("REVOKED_ID_ANNA_NOWAK"),
-		SigningKeyID:     "GOV-PL-KMS-2021-KEY-09",
-		RevocationSerial: "REV-ID-2023-999999",
-		Version:          3,
-		IssuedAt:         &issuedAtRev,
-		ExpiresAt:        &expiresAtRev,
+		ID:                docID5,
+		ProfileID:         profileID2,
+		TypeCode:          "ID_CARD",
+		Status:            model.DocumentStatusRevoked,
+		EncryptedMeta:     bytesMetaRevoked,
+		EncryptedMetaDEK:  mockDEK("revoked_meta"),
+		EncryptedFront:    mockImageData("revoked_id_front"),
+		EncryptedFrontDEK: mockDEK("revoked_id_front"),
+		EncryptedBack:     mockImageData("revoked_id_back"),
+		EncryptedBackDEK:  mockDEK("revoked_id_back"),
+		IssuerSignature:   mockSignature("REVOKED_ID_ANNA_NOWAK"),
+		SigningKeyID:      "GOV-PL-KMS-2021-KEY-09",
+		RevocationSerial:  "REV-ID-2023-999999",
+		Version:           3,
+		IssuedAt:          &issuedAtRev,
+		ExpiresAt:         &expiresAtRev,
 	}
 
 	profile2 := model.CitizenProfile{
 		ID:            profileID2,
 		UserID:        testUserID2,
 		EncryptedData: bytesCitizenData2,
+		EncryptedDEK:  mockDEK("profile_anna"),
 		PeselHash:     shared.ComputeHMACSHA256([]byte("95050554321"), seedSecret),
 		Documents:     []model.UserDocument{doc4, doc5},
 	}

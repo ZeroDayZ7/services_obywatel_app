@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/zerodayz7/platform/pkg/envelope"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/citizen-docs/config"
 	"github.com/zerodayz7/platform/services/citizen-docs/internal/model"
@@ -17,6 +18,7 @@ type userDocumentService struct {
 	citizenRepo repository.CitizenRepo
 	cfg         *config.Config
 	logger      *shared.Logger
+	cryptor     *envelope.EnvelopeCryptor
 }
 
 func NewUserDocumentService(
@@ -24,16 +26,18 @@ func NewUserDocumentService(
 	citizenRepo repository.CitizenRepo,
 	cfg *config.Config,
 	logger *shared.Logger,
+	cryptor *envelope.EnvelopeCryptor,
 ) UserDocumentService {
 	return &userDocumentService{
 		docRepo:     docRepo,
 		citizenRepo: citizenRepo,
 		cfg:         cfg,
 		logger:      logger,
+		cryptor:     cryptor,
 	}
 }
 
-// CreateDocument szyfruje metadane i obrazy oraz tworzy dokument ze wsparciem dla weryfikacji offline.
+// CreateDocument szyfruje metadane i obrazy przy użyciu Envelope Encryption i KMS.
 func (s *userDocumentService) CreateDocument(
 	ctx context.Context,
 	profileID uuid.UUID,
@@ -45,39 +49,51 @@ func (s *userDocumentService) CreateDocument(
 	signingKeyID string,
 	revocationSerial string,
 ) error {
-	encryptionKey := []byte(s.cfg.Internal.DocsEncryptionKey)
+	// Określamy alias KMS na podstawie typu dokumentu (ID, PRAWO JAZDY, PASZPORT)
+	keyAlias := getKeyAliasForTypeCode(typeCode)
 
 	metaBytes, err := json.Marshal(meta)
 	if err != nil {
 		return fmt.Errorf("failed to marshal document meta: %w", err)
 	}
 
-	encMeta, err := shared.Encrypt(metaBytes, encryptionKey)
+	// 1. Szyfrowanie Metadanych
+	encMetaPayload, err := s.cryptor.Seal(ctx, keyAlias, metaBytes)
 	if err != nil {
-		return fmt.Errorf("failed to encrypt document meta: %w", err)
+		return fmt.Errorf("failed to encrypt document meta via KMS: %w", err)
 	}
 
-	var encFront, encBack []byte
+	// 2. Szyfrowanie Frontu (opcjonalne)
+	var encFrontData, encFrontDEK []byte
 	if len(front) > 0 {
-		encFront, err = shared.Encrypt(front, encryptionKey)
+		frontPayload, err := s.cryptor.Seal(ctx, keyAlias, front)
 		if err != nil {
-			return fmt.Errorf("failed to encrypt front document: %w", err)
+			return fmt.Errorf("failed to encrypt front image via KMS: %w", err)
 		}
+		encFrontData = frontPayload.EncryptedData
+		encFrontDEK = frontPayload.EncryptedDEK
 	}
 
+	// 3. Szyfrowanie Tyłu (opcjonalne)
+	var encBackData, encBackDEK []byte
 	if len(back) > 0 {
-		encBack, err = shared.Encrypt(back, encryptionKey)
+		backPayload, err := s.cryptor.Seal(ctx, keyAlias, back)
 		if err != nil {
-			return fmt.Errorf("failed to encrypt back document: %w", err)
+			return fmt.Errorf("failed to encrypt back image via KMS: %w", err)
 		}
+		encBackData = backPayload.EncryptedData
+		encBackDEK = backPayload.EncryptedDEK
 	}
 
 	doc := &model.UserDocument{
 		ProfileID:        profileID,
 		TypeCode:         typeCode,
-		EncryptedMeta:    encMeta,
-		EncryptedFront:   encFront,
-		EncryptedBack:    encBack,
+		EncryptedMeta:    encMetaPayload.EncryptedData,
+		EncryptedMetaDEK: encMetaPayload.EncryptedDEK, // DEK dla metadanych
+		EncryptedFront:   encFrontData,
+		EncryptedFrontDEK: encFrontDEK,               // DEK dla zdjęcia przodu
+		EncryptedBack:    encBackData,
+		EncryptedBackDEK:  encBackDEK,                // DEK dla zdjęcia tyłu
 		IssuerSignature:  issuerSignature,
 		SigningKeyID:     signingKeyID,
 		RevocationSerial: revocationSerial,
@@ -88,7 +104,6 @@ func (s *userDocumentService) CreateDocument(
 	return s.docRepo.Create(ctx, doc)
 }
 
-// GetDocumentsByUserID pobiera pełny zestaw dokumentów dla wybranego obywatela (mapuje userID -> profileID).
 func (s *userDocumentService) GetDocumentsByUserID(ctx context.Context, userID uuid.UUID) ([]model.UserDocument, error) {
 	profile, err := s.citizenRepo.GetByUserID(ctx, userID)
 	if err != nil {
@@ -98,7 +113,6 @@ func (s *userDocumentService) GetDocumentsByUserID(ctx context.Context, userID u
 	return s.docRepo.GetByProfileID(ctx, profile.ID)
 }
 
-// GetDocumentsSinceVersion pobiera różnicowo (Delta Sync) dokumenty nowsze niż podana wersja dla wybranego obywatela.
 func (s *userDocumentService) GetDocumentsSinceVersion(ctx context.Context, userID uuid.UUID, sinceVersion uint64) ([]model.UserDocument, error) {
 	profile, err := s.citizenRepo.GetByUserID(ctx, userID)
 	if err != nil {
@@ -106,4 +120,16 @@ func (s *userDocumentService) GetDocumentsSinceVersion(ctx context.Context, user
 	}
 
 	return s.docRepo.GetSinceVersion(ctx, profile.ID, sinceVersion)
+}
+
+// Pomocnik do pobierania właściwego aliasu klucza w zależności od typu dokumentu
+func getKeyAliasForTypeCode(typeCode string) string {
+	switch typeCode {
+	case "DRIVER_LICENSE":
+		return "docs-driver-license"
+	case "PASSPORT":
+		return "docs-passport"
+	default:
+		return "docs-id-cards"
+	}
 }

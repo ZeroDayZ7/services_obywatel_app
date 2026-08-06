@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/gofiber/fiber/v2/middleware/session"
@@ -9,9 +10,8 @@ import (
 )
 
 type SecurityConfig struct {
-	DocsEncryptionKey string `mapstructure:"DOCS_ENCRYPTION_KEY" validate:"required,len=32"`
-	DocsPeselSalt     string `mapstructure:"DOCS_PESEL_SALT" validate:"required,min=16"`
-	HMACSecret        string `mapstructure:"INTERNAL_HMAC_SECRET" validate:"required,min=32"`
+	DocsPeselSalt string `mapstructure:"DOCS_PESEL_SALT" validate:"required,min=16"`
+	HMACSecret    string `mapstructure:"INTERNAL_HMAC_SECRET"`
 }
 
 type Config struct {
@@ -20,8 +20,9 @@ type Config struct {
 	Redis    viper.RedisConfig   `mapstructure:",squash"`
 	Session  viper.SessionConfig `mapstructure:",squash"`
 	OTEL     viper.OTELConfig    `mapstructure:",squash"`
+	KMS      viper.KMSConfig     `mapstructure:",squash"`
 	Internal SecurityConfig      `mapstructure:",squash"`
-	Shutdown time.Duration       `mapstructure:"SHUTDOWN_TIMEOUT_SEC" validate:"required"`
+	Shutdown time.Duration       `mapstructure:"SHUTDOWN_TIMEOUT" validate:"required"`
 }
 
 var (
@@ -32,8 +33,13 @@ var (
 func LoadConfigGlobal() error {
 	log := shared.GetLogger()
 
+	viper.SetBaseDefaults("citizen-docs")
+	viper.SetDBDefaults()
+	viper.SetRedisDefaults()
+	viper.SetSessionDefaults()
+
 	if err := viper.InitConfig(&AppConfig, "citizen-docs"); err != nil {
-		return err
+		return fmt.Errorf("failed to initialize citizen-docs config: %w", err)
 	}
 
 	log.Info("Citizen-Docs configuration loaded successfully")

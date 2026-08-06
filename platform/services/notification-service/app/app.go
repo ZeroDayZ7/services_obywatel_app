@@ -1,4 +1,4 @@
-package config
+package app
 
 import (
 	"github.com/gofiber/fiber/v2"
@@ -6,10 +6,11 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/requestid"
 	"github.com/zerodayz7/platform/pkg/server"
 	"github.com/zerodayz7/platform/pkg/shared"
-	"github.com/zerodayz7/platform/services/audit-service/internal/di"
+	"github.com/zerodayz7/platform/services/notification-service/internal/di"
 )
 
-func NewAuditApp(container *di.Container) *fiber.App {
+func NewNotificationApp(container *di.Container) *fiber.App {
+	// Pobieramy konfigurację serwera z kontenera
 	cfg := container.Config.Server
 
 	cfgFiber := fiber.Config{
@@ -34,10 +35,14 @@ func NewAuditApp(container *di.Container) *fiber.App {
 
 	app := fiber.New(cfgFiber)
 
+	// Middleware
 	app.Use(requestid.New())
 	app.Use(recover.New())
 	app.Use(shared.GetLimiter(shared.LimitGlobal, nil))
 	app.Use(shared.RequestLoggerMiddleware())
+
+	// Jeśli potrzebujesz InternalAuthMiddleware w powiadomieniach:
+	// app.Use(middleware.InternalAuthMiddleware(container.Config.Internal.InternalSecret))
 
 	return app
 }

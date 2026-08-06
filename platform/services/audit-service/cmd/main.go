@@ -10,6 +10,7 @@ import (
 	"github.com/zerodayz7/platform/pkg/server"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/pkg/utils"
+	"github.com/zerodayz7/platform/services/audit-service/app"
 	"github.com/zerodayz7/platform/services/audit-service/config"
 	"github.com/zerodayz7/platform/services/audit-service/internal/di"
 	"github.com/zerodayz7/platform/services/audit-service/internal/router"
@@ -53,11 +54,11 @@ func main() {
 	})
 
 	// 6. Router i Serwer Fiber
-	app := config.NewAuditApp(container)
-	router.SetupRoutes(app, container)
+	auditApp := app.NewAuditApp(container)
+	router.SetupRoutes(auditApp, container)
 
 	server.Run(
-		app,
+		auditApp,
 		server.Config{
 			Port:       config.AppConfig.Server.Port,
 			AppName:    config.AppConfig.Server.AppName,

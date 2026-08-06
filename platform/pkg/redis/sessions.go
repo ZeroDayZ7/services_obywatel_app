@@ -12,6 +12,7 @@ type UserSession struct {
 	Fingerprint string   `json:"fingerprint"`
 	Role        string   `json:"role,omitempty"`
 	Permissions []string `json:"permissions,omitempty"`
+	PublicKey   string   `json:"public_key"`
 	Challenge   string   `json:"challenge,omitempty"`
 	IP          string   `json:"ip,omitempty"`
 }

@@ -3,7 +3,7 @@ package di
 import (
 	"github.com/zerodayz7/platform/pkg/rabbitmq"
 	"github.com/zerodayz7/platform/pkg/redis"
-	"github.com/zerodayz7/platform/pkg/viper"
+	"github.com/zerodayz7/platform/services/auth-service/config"
 	"gorm.io/gorm"
 )
 
@@ -15,14 +15,14 @@ type Container struct {
 	Cache          *redis.Cache
 	EventPublisher rabbitmq.EventPublisher
 	InternalSecret []byte
-	Config         *viper.Config
+	Config         *config.Config
 }
 
 func NewContainer(
 	db *gorm.DB,
 	redisClient *redis.Client,
 	eventPublisher rabbitmq.EventPublisher,
-	cfg *viper.Config,
+	cfg *config.Config,
 ) *Container {
 	cache := redis.NewCache(
 		redisClient,

@@ -2,7 +2,6 @@ package router
 
 import (
 	"github.com/gofiber/fiber/v2"
-	pkgMiddleware "github.com/zerodayz7/platform/pkg/middleware"
 	"github.com/zerodayz7/platform/services/messaging-service/internal/di"
 )
 
@@ -14,8 +13,6 @@ func SetupMessagingRoutes(app *fiber.App, container *di.Container) {
 	SetupWsRoutes(app, container)
 
 	api := app.Group("/")
-	hmacSecret := []byte(container.Config.Internal.HMACSecret)
-	api.Use(pkgMiddleware.InternalAuthMiddleware(hmacSecret))
 
 	// --- CONTACTS ---
 	contacts := api.Group("/contacts")

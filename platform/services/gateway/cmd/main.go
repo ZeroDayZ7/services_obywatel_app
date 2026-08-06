@@ -1,33 +1,62 @@
 package main
 
 import (
+	"context"
 	"os"
+	"time"
 
+	"github.com/zerodayz7/platform/pkg/kms"
 	"github.com/zerodayz7/platform/pkg/rabbitmq"
 	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/server"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/pkg/telemetry"
+	"github.com/zerodayz7/platform/services/gateway/app"
 	"github.com/zerodayz7/platform/services/gateway/config"
 	"github.com/zerodayz7/platform/services/gateway/internal/di"
 	"github.com/zerodayz7/platform/services/gateway/internal/router"
 )
 
 func main() {
-	// 0. Bootstrap Logger
+	// 0. Bootstrap logger setup
 	bootLog := shared.InitBootstrapLogger(os.Getenv("ENV"), false)
 	defer func() { _ = bootLog.Sync() }()
 
-	// 1. Config
+	// 1. Load configuration
 	if err := config.LoadConfigGlobal(); err != nil {
 		bootLog.Error("Config load failed", "error", err)
 		os.Exit(1)
 	}
 
-	// 2. Logger
+	// 2. KMS setup & Public Key fetch
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	kmsCfg := kms.Config{
+		Endpoint:      config.AppConfig.KMS.Endpoint,
+		ServiceName:   config.AppConfig.Server.AppName,
+		ServiceSecret: config.AppConfig.KMS.InternalSecret,
+	}
+
+	bootLog.Info("🔍 Checking KMS service health...")
+	if err := kms.HealthCheck(ctx, kmsCfg); err != nil {
+		bootLog.Error("❌ KMS Health Check failed", "error", err)
+		os.Exit(1)
+	}
+
+	pubKey, err := kms.FetchPublicKey(ctx, kmsCfg, "shared-jwt")
+	if err != nil {
+		bootLog.Error("❌ KMS Public Key fetch failed", "error", err)
+		os.Exit(1)
+	}
+
+	config.AppConfig.JWT.AccessPublicKey = pubKey
+	bootLog.Info("✅ KMS Public Key loaded successfully")
+
+	// 3. Application logger
 	log := shared.InitLogger(config.AppConfig.Server.Env, false)
 
-	// 3. Telemetry (Tracer)
+	// 4. Telemetry setup
 	if config.AppConfig.OTEL.Enabled {
 		cleanup := telemetry.InitTracer(
 			config.AppConfig.Server.AppName,
@@ -36,30 +65,22 @@ func main() {
 		defer cleanup()
 	}
 
-	// 4. Redis
+	// 5. Redis connection
 	redisClient, err := redis.New(redis.Config(config.AppConfig.Redis))
-	if err != nil {
+	if err != nil || redisClient == nil {
 		log.Error("Redis initialization failed", "error", err)
 		os.Exit(1)
 	}
-
-	if redisClient == nil {
-		log.Error("Redis client is nil")
-		os.Exit(1)
-	}
-
 	defer func() {
 		if err := redisClient.Close(); err != nil {
 			log.Error("Failed to close Redis client", "error", err)
 		}
 	}()
 
-	// 5. RabbitMQ
+	// 6. RabbitMQ event publisher
 	var eventPublisher rabbitmq.EventPublisher
-
 	if config.AppConfig.RabbitMQ.Enabled {
-		log.Info("RabbitMQ is ENABLED. Connecting to broker...")
-		var err error
+		log.Info("RabbitMQ is ENABLED. Connecting...")
 		eventPublisher, err = rabbitmq.NewLivePublisher(config.AppConfig.RabbitMQ.GetURL())
 		if err != nil {
 			log.Error("RabbitMQ initialization failed", "error", err)
@@ -69,21 +90,26 @@ func main() {
 		log.Warn("RabbitMQ is DISABLED. Fallback to No-Op Driver.")
 		eventPublisher = rabbitmq.NewNoOpPublisher()
 	}
+	defer func() {
+		if err := eventPublisher.Close(); err != nil {
+			log.Error("Failed to close RabbitMQ connection cleanly", "error", err)
+		}
+	}()
 
-	// 6. DI & App Setup
+	// 7. DI Container & App initialization
 	container := di.NewContainer(redisClient, eventPublisher, &config.AppConfig)
 
-	app, err := config.NewGatewayApp(container)
+	gatewayApp, err := app.NewGatewayApp(container)
 	if err != nil {
 		log.Error("App setup failed", "error", err)
 		os.Exit(1)
 	}
 
-	router.SetupRoutes(app, container)
+	router.SetupRoutes(gatewayApp, container)
 
-	// 7. Run server
+	// 8. Start server
 	server.Run(
-		app,
+		gatewayApp,
 		server.Config{
 			Port:       config.AppConfig.Server.Port,
 			AppName:    config.AppConfig.Server.AppName,
@@ -92,16 +118,6 @@ func main() {
 			Shutdown:   config.AppConfig.Shutdown,
 		},
 		*log,
-		func() {
-			log.Info("Shutting down resources")
-
-			if err := redisClient.Close(); err != nil {
-				log.Error("Failed to close Redis client", "error", err)
-			}
-
-			if err := eventPublisher.Close(); err != nil {
-				log.Error("Failed to close RabbitMQ connection cleanly", "error", err)
-			}
-		},
+		nil,
 	)
 }

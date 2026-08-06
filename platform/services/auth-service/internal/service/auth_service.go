@@ -17,7 +17,7 @@ import (
 	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/schemas"
 	"github.com/zerodayz7/platform/pkg/shared"
-	"github.com/zerodayz7/platform/pkg/viper"
+	"github.com/zerodayz7/platform/services/auth-service/config"
 	"github.com/zerodayz7/platform/services/auth-service/internal/http"
 	"github.com/zerodayz7/platform/services/auth-service/internal/model"
 	repo "github.com/zerodayz7/platform/services/auth-service/internal/repository"
@@ -54,7 +54,7 @@ type authService struct {
 	refreshRepo    repo.RefreshTokenRepository
 	cache          *redis.Cache
 	eventPublisher rabbitmq.EventPublisher
-	cfg            *viper.Config
+	cfg            *config.Config
 }
 
 func NewAuthService(
@@ -62,7 +62,7 @@ func NewAuthService(
 	refreshRepo repo.RefreshTokenRepository,
 	cache *redis.Cache,
 	eventPublisher rabbitmq.EventPublisher,
-	cfg *viper.Config,
+	cfg *config.Config,
 ) AuthService {
 	return &authService{
 		userRepo:       userRepo,
@@ -292,6 +292,7 @@ func (s *authService) RefreshToken(ctx context.Context, tokenStr string, fingerp
 	sessionData := redis.UserSession{
 		UserID:      user.ID.String(),
 		Fingerprint: fingerprint,
+		PublicKey:   device.PublicKey,
 		Role:        string(user.Role),
 		Permissions: []string(user.Permissions),
 	}
@@ -778,6 +779,7 @@ func (s *authService) AttemptLogin(ctx context.Context, email string, password [
 		sessionData := redis.UserSession{
 			UserID:      user.ID.String(),
 			Fingerprint: fingerprint,
+			PublicKey:   device.PublicKey,
 			Role:        string(user.Role),
 			Permissions: []string(user.Permissions),
 		}
@@ -928,7 +930,7 @@ func (s *authService) CreateAccessToken(userID uuid.UUID, fingerprint string) (s
 		"scope": constants.ScopeAccess.String(),
 	}
 
-	token, err := security.GenerateJWT(claims, s.cfg.JWT.AccessSecret, s.cfg.JWT.AccessTTL)
+	token, err := security.GenerateJWT(claims, s.cfg.JWT.AccessPrivateKey, s.cfg.JWT.AccessTTL)
 	return token, sessionID, err
 }
 
@@ -944,7 +946,7 @@ func (s *authService) CreateSetupToken(userID uuid.UUID, fingerprint string) (st
 
 	token, err := security.GenerateJWT(
 		claims,
-		s.cfg.JWT.AccessSecret,
+		s.cfg.JWT.AccessPrivateKey,
 		15*time.Minute,
 	)
 

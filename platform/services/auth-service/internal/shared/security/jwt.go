@@ -1,6 +1,7 @@
 package security
 
 import (
+	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
@@ -11,20 +12,25 @@ import (
 
 // ------------------- ACCESS TOKEN (JWT) -------------------
 
-func GenerateJWT(claims jwt.MapClaims, secret string, ttl time.Duration) (string, error) {
+func GenerateJWT(claims jwt.MapClaims, privKey ed25519.PrivateKey, ttl time.Duration) (string, error) {
 	claims["exp"] = jwt.NewNumericDate(time.Now().Add(ttl))
 	claims["iat"] = jwt.NewNumericDate(time.Now())
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString([]byte(secret))
+	// W golang-jwt/v5 właściwa instancja to jwt.SigningMethodEdDSA
+	token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims)
+
+	// Podpisujemy KLUCZEM PRYWATNYM
+	return token.SignedString(privKey)
 }
 
-func ValidateJWT(tokenString, secret string) (*jwt.Token, error) {
+func ValidateJWT(tokenString string, pubKey ed25519.PublicKey) (*jwt.Token, error) {
 	return jwt.Parse(tokenString, func(token *jwt.Token) (any, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+		// Sprawdzamy, czy metoda to Ed25519 (EdDSA)
+		if _, ok := token.Method.(*jwt.SigningMethodEd25519); !ok {
 			return nil, errors.New("unexpected signing method")
 		}
-		return []byte(secret), nil
+		// Zwracamy KLUCZ PUBLICZNY do weryfikacji podpisu
+		return pubKey, nil
 	})
 }
 
@@ -37,8 +43,6 @@ func GenerateRandomToken(length int) (string, error) {
 	}
 	return base64.URLEncoding.WithPadding(base64.NoPadding).EncodeToString(b), nil
 }
-
-// ------------------- REFRESH TOKEN (LOSOWY) -------------------
 
 func GenerateRefreshToken() (string, error) {
 	return GenerateRandomToken(64)
