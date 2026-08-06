@@ -34,22 +34,14 @@ func main() {
 
 	kmsCfg := kms.Config{
 		Endpoint:      config.AppConfig.KMS.Endpoint,
-		ServiceName:   config.AppConfig.Server.AppName,
+		ServiceName:   config.AppConfig.Server.AppName, // "auth-service"
 		ServiceSecret: config.AppConfig.KMS.InternalSecret,
 	}
 
-	bootLog.Info("Inicjalizacja pobierania klucza z KMS...",
-		"endpoint", kmsCfg.Endpoint,
-		"service", kmsCfg.ServiceName,
-	)
-
-	privKey, err := kms.FetchAuthPrivateKey(ctx, kmsCfg)
+	// TUTAJ: Przekazujemy "shared-jwt" jako cel
+	privKey, err := kms.FetchAuthPrivateKey(ctx, kmsCfg, "shared-jwt")
 	if err != nil {
-		bootLog.Error("❌ Krytyczny błąd bootstrapu klucza KMS",
-			"error", err,
-			"endpoint", kmsCfg.Endpoint,
-			"service_id", kmsCfg.ServiceName,
-		)
+		bootLog.Error("❌ Krytyczny błąd bootstrapu klucza KMS", "error", err)
 		os.Exit(1)
 	}
 

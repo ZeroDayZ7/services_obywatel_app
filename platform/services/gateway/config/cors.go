@@ -9,6 +9,6 @@ func CorsConfig() cors.Config {
 		AllowOrigins:     AppConfig.CORSAllowOrigins,
 		AllowMethods:     "GET,POST,PUT,PATCH,DELETE,OPTIONS",
 		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, X-CSRF-Token",
-		AllowCredentials: true,
+		AllowCredentials: false,
 	}
 }

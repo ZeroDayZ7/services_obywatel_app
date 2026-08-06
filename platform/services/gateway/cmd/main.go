@@ -1,3 +1,5 @@
+// cmdr: cmd\main.go
+
 package main
 
 import (
@@ -32,13 +34,16 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	pubKey, err := kms.FetchPublicKey(ctx, kms.Config{
+	kmsCfg := kms.Config{
 		Endpoint:      config.AppConfig.KMS.Endpoint,
-		ServiceName:   config.AppConfig.Server.AppName,
+		ServiceName:   config.AppConfig.Server.AppName, // "gateway-service"
 		ServiceSecret: config.AppConfig.KMS.InternalSecret,
-	}, "auth-service")
+	}
+
+	// TUTAJ: Przekazujemy "shared-jwt" jako cel
+	pubKey, err := kms.FetchPublicKey(ctx, kmsCfg, "shared-jwt")
 	if err != nil {
-		bootLog.Error("KMS Public Key bootstrap failed", "error", err)
+		bootLog.Error("❌ KMS Public Key bootstrap failed", "error", err)
 		os.Exit(1)
 	}
 

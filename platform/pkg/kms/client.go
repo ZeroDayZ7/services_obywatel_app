@@ -6,8 +6,10 @@ import (
 	"crypto/ed25519"
 	"crypto/hmac"
 	"crypto/sha256"
+	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"io"
 	"log"
@@ -33,8 +35,7 @@ const (
 	HeaderContentType   = "Content-Type"
 
 	MIMEApplicationJSON = "application/json"
-
-	DefaultAlgorithm = "Ed25519"
+	DefaultAlgorithm    = "Ed25519"
 )
 
 // ============================================================================
@@ -61,15 +62,18 @@ type privateKeyResponse struct {
 }
 
 type publicKeyResponse struct {
-	ServiceID      string `json:"service_id"`
-	Algorithm      string `json:"algorithm"`
-	Version        int    `json:"version"`
-	PublicKeyBytes []byte `json:"public_key_bytes"`
+	ID           string `json:"id"`
+	ServiceID    string `json:"service_id"`
+	Algorithm    string `json:"algorithm"`
+	Purpose      string `json:"purpose"`
+	PublicKeyPEM string `json:"public_key_pem"`
+	Version      int    `json:"version"`
+	IsActive     bool   `json:"is_active"`
 }
 
 // #region FetchAuthPrivateKey
-// FetchAuthPrivateKey pobiera klucz prywatny dla bieżącego serwisu (używając HTTP POST)
-func FetchAuthPrivateKey(ctx context.Context, cfg Config) (ed25519.PrivateKey, error) {
+// FetchAuthPrivateKey pobiera klucz prywatny wskazanego serwisu targetService (np. "shared-jwt")
+func FetchAuthPrivateKey(ctx context.Context, cfg Config, targetService string) (ed25519.PrivateKey, error) {
 	if cfg.Timeout == 0 {
 		cfg.Timeout = DefaultTimeout
 	}
@@ -77,8 +81,13 @@ func FetchAuthPrivateKey(ctx context.Context, cfg Config) (ed25519.PrivateKey, e
 	reqCtx, cancel := context.WithTimeout(ctx, cfg.Timeout)
 	defer cancel()
 
+	// Jeśli targetService jest pusty, domyślnie bierzemy klucz własny
+	if targetService == "" {
+		targetService = cfg.ServiceName
+	}
+
 	reqBody := getPrivateKeyRequest{
-		ServiceID: cfg.ServiceName,
+		ServiceID: targetService,
 		Algorithm: DefaultAlgorithm,
 	}
 
@@ -97,7 +106,7 @@ func FetchAuthPrivateKey(ctx context.Context, cfg Config) (ed25519.PrivateKey, e
 
 	signAndSetHeaders(req, http.MethodPost, path, cfg)
 
-	log.Printf("[KMS-CLIENT] Wysyłanie żądania POST -> %s", url)
+	log.Printf("[KMS-CLIENT] Wysyłanie żądania POST -> %s (Target target_service: %s, Requester: %s)", url, targetService, cfg.ServiceName)
 
 	client := &http.Client{}
 	res, err := client.Do(req)
@@ -112,7 +121,7 @@ func FetchAuthPrivateKey(ctx context.Context, cfg Config) (ed25519.PrivateKey, e
 	}
 
 	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("kms: unexpected status code %d fetching private key, body: %s", res.StatusCode, string(bodyBytes))
+		return nil, fmt.Errorf("kms: unexpected status code %d fetching private key for %s, body: %s", res.StatusCode, targetService, string(bodyBytes))
 	}
 
 	var out privateKeyResponse
@@ -125,8 +134,6 @@ func FetchAuthPrivateKey(ctx context.Context, cfg Config) (ed25519.PrivateKey, e
 	}
 
 	var privKey ed25519.PrivateKey
-
-	// Ed25519: Jeśli z KMS dostajemy 32 bajty (seed), zamieniamy go na pełny klucz prywatny (64 bajty)
 	if len(out.PrivateKeyBytes) == ed25519.SeedSize {
 		privKey = ed25519.NewKeyFromSeed(out.PrivateKeyBytes)
 	} else if len(out.PrivateKeyBytes) == ed25519.PrivateKeySize {
@@ -135,14 +142,14 @@ func FetchAuthPrivateKey(ctx context.Context, cfg Config) (ed25519.PrivateKey, e
 		return nil, fmt.Errorf("kms: invalid private key bytes length: %d (expected 32 or 64)", len(out.PrivateKeyBytes))
 	}
 
-	log.Printf("[KMS-CLIENT] ✅ Sukces! Pobrano klucz prywatny Ed25519 (wersja %d, rozmiarem %d bajtów)", out.Version, len(privKey))
+	log.Printf("[KMS-CLIENT] ✅ Pobrano klucz PRYWATNY Ed25519 dla targetu '%s' (wersja %d)", out.ServiceID, out.Version)
 	return privKey, nil
 }
 
 // #endregion
 
 // #region FetchPublicKey
-// FetchPublicKey pobiera klucz publiczny wskazanego serwisu (używając HTTP GET)
+// FetchPublicKey pobiera klucz publiczny wskazanego serwisu targetService (np. "shared-jwt")
 func FetchPublicKey(ctx context.Context, cfg Config, targetService string) (ed25519.PublicKey, error) {
 	if cfg.Timeout == 0 {
 		cfg.Timeout = DefaultTimeout
@@ -161,7 +168,7 @@ func FetchPublicKey(ctx context.Context, cfg Config, targetService string) (ed25
 
 	signAndSetHeaders(req, http.MethodGet, path, cfg)
 
-	log.Printf("[KMS-CLIENT] Wysyłanie żądania GET -> %s", url)
+	log.Printf("[KMS-CLIENT] Wysyłanie żądania GET -> %s (Requester: %s)", url, cfg.ServiceName)
 
 	client := &http.Client{}
 	res, err := client.Do(req)
@@ -184,11 +191,30 @@ func FetchPublicKey(ctx context.Context, cfg Config, targetService string) (ed25
 		return nil, fmt.Errorf("kms: failed to decode response JSON: %w", err)
 	}
 
-	if len(out.PublicKeyBytes) != ed25519.PublicKeySize {
-		return nil, fmt.Errorf("kms: invalid public key length: %d (expected %d)", len(out.PublicKeyBytes), ed25519.PublicKeySize)
+	if out.PublicKeyPEM == "" {
+		return nil, fmt.Errorf("kms: public_key_pem is empty in KMS response payload")
 	}
 
-	return ed25519.PublicKey(out.PublicKeyBytes), nil
+	// 1. Dekodujemy nagłówek i treść PEM
+	block, _ := pem.Decode([]byte(out.PublicKeyPEM))
+	if block == nil {
+		return nil, fmt.Errorf("kms: failed to decode PEM block containing public key")
+	}
+
+	// 2. Parsujemy strukturę PKIX do ogólnego klucza publicznego
+	parsedKey, err := x509.ParsePKIXPublicKey(block.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("kms: failed to parse PKIX public key: %w", err)
+	}
+
+	// 3. Rzutujemy parsowany klucz na typ ed25519.PublicKey
+	pubKey, ok := parsedKey.(ed25519.PublicKey)
+	if !ok {
+		return nil, fmt.Errorf("kms: parsed key is not of type ed25519.PublicKey (got %T)", parsedKey)
+	}
+
+	log.Printf("[KMS-CLIENT] ✅ Pomyślnie pobrano i przetworzono klucz PUBLICZNY PEM Ed25519 dla '%s' (wersja %d)", out.ServiceID, out.Version)
+	return pubKey, nil
 }
 
 // #endregion
@@ -196,7 +222,6 @@ func FetchPublicKey(ctx context.Context, cfg Config, targetService string) (ed25
 // #region Helpers & HMAC Signing
 func signAndSetHeaders(req *http.Request, method, path string, cfg Config) {
 	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
-
 	payloadToSign := fmt.Sprintf("%s:%s:%s", method, path, timestamp)
 
 	mac := hmac.New(sha256.New, []byte(cfg.ServiceSecret))
