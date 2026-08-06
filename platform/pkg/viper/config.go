@@ -13,7 +13,7 @@ import (
 var validate = validator.New()
 
 func InitConfig(cfg any, serviceName string) error {
-	SetSharedDefaults(serviceName)
+	SetBaseDefaults(serviceName)
 
 	viper.SetConfigName(".env")
 	viper.SetConfigType("env")
@@ -37,15 +37,15 @@ func InitConfig(cfg any, serviceName string) error {
 	))
 
 	if err := viper.Unmarshal(cfg, decodeHook); err != nil {
-		return fmt.Errorf("nie udało się zmapować konfiguracji: %w", err)
+		return fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 
 	if err := validate.Struct(cfg); err != nil {
 		var errorMsgs []string
 		for _, err := range err.(validator.ValidationErrors) {
-			errorMsgs = append(errorMsgs, fmt.Sprintf("- Pole '%s' nie spełnia warunku '%s' (wartość: %v)", err.Field(), err.Tag(), err.Value()))
+			errorMsgs = append(errorMsgs, fmt.Sprintf("- Field '%s' failed on '%s' (value: %v)", err.Field(), err.Tag(), err.Value()))
 		}
-		return fmt.Errorf("walidacja konfiguracji nie powiodła się:\n%s", strings.Join(errorMsgs, "\n"))
+		return fmt.Errorf("config validation failed:\n%s", strings.Join(errorMsgs, "\n"))
 	}
 
 	return nil
@@ -71,7 +71,6 @@ func bindEnvs(cfg any) error {
 		fieldVal := v.Field(i)
 
 		if field.Type.Kind() == reflect.Struct {
-
 			if err := bindEnvs(fieldVal.Addr().Interface()); err != nil {
 				return err
 			}

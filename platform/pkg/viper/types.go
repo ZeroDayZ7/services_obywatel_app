@@ -1,79 +1,10 @@
 package viper
 
 import (
-	"crypto/ed25519"
 	"fmt"
 	"strings"
 	"time"
 )
-
-type ServicesConfig struct {
-	Auth      string `mapstructure:"SERVICE_AUTH_URL" validate:"required,url"`
-	Documents string `mapstructure:"SERVICE_DOCS_URL" validate:"required,url"`
-	Notify    string `mapstructure:"SERVICE_NOTIFY_URL" validate:"required,url"`
-	Messaging string `mapstructure:"SERVICE_MESSAGING_URL" validate:"required,url"`
-	WS        string `mapstructure:"SERVICE_WS_URL" validate:"required"`
-}
-
-type RabbitMQConfig struct {
-	Enabled  bool   `mapstructure:"RABBITMQ_ENABLED"`
-	Host     string `mapstructure:"RABBITMQ_HOST" validate:"required_if=Enabled true"`
-	Port     int    `mapstructure:"RABBITMQ_PORT" validate:"required_if=Enabled true"`
-	User     string `mapstructure:"RABBITMQ_USER" validate:"required_if=Enabled true"`
-	Password string `mapstructure:"RABBITMQ_PASSWORD" validate:"required_if=Enabled true"`
-	VHost    string `mapstructure:"RABBITMQ_VHOST"`
-}
-
-func (r RabbitMQConfig) GetURL() string {
-	vhost := r.VHost
-	if vhost == "" {
-		vhost = "/"
-	}
-	if !strings.HasPrefix(vhost, "/") {
-		vhost = "/" + vhost
-	}
-	return fmt.Sprintf("amqp://%s:%s@%s:%d%s", r.User, r.Password, r.Host, r.Port, vhost)
-}
-
-type InternalSecurityConfig struct {
-	// HMAC musi mieć co najmniej 32 znaki dla realnego bezpieczeństwa (używany do podpisów)
-	HMACSecret string `mapstructure:"INTERNAL_HMAC_SECRET" validate:"required,min=32"`
-
-	// EncryptionKey musi mieć dokładnie 32 znaki dla AES-256 (szyfrowanie danych PII)
-	EncryptionKey string `mapstructure:"INTERNAL_ENCRYPTION_KEY" validate:"required,len=32"`
-
-	// HashSalt używany do "solenia" hashy PESEL/Email (zapobiega rainbow tables)
-	HashSalt string `mapstructure:"INTERNAL_HASH_SALT" validate:"omitempty,min=16"`
-}
-
-type OTELConfig struct {
-	Enabled     bool   `mapstructure:"OTEL_ENABLED"`
-	Endpoint    string `mapstructure:"OTEL_ENDPOINT" validate:"required_if=Enabled true"`
-	ServiceName string `mapstructure:"OTEL_SERVICE_NAME" validate:"required_if=Enabled true"`
-}
-
-type DBConfig struct {
-	Host            string        `mapstructure:"DB_HOST" validate:"required"`
-	Port            int           `mapstructure:"DB_PORT" validate:"required"`
-	User            string        `mapstructure:"DB_USER" validate:"required"`
-	Password        string        `mapstructure:"DB_PASSWORD" validate:"required"`
-	DBName          string        `mapstructure:"DB_NAME" validate:"required"`
-	SSLMode         string        `mapstructure:"DB_SSLMODE" validate:"required"`
-	MaxOpenConns    int           `mapstructure:"DB_MAX_OPEN_CONNS" validate:"omitempty,min=1"`
-	MaxIdleConns    int           `mapstructure:"DB_MAX_IDLE_CONNS" validate:"omitempty,min=1"`
-	ConnMaxLifetime time.Duration `mapstructure:"DB_CONN_MAX_LIFETIME"`
-}
-
-type ProxyConfig struct {
-	MaxIdleConns        int           `mapstructure:"PROXY_MAX_IDLE_CONNS" validate:"min=1"`
-	IdleConnTimeout     time.Duration `mapstructure:"PROXY_IDLE_CONN_TIMEOUT"`
-	MaxIdleConnsPerHost int           `mapstructure:"PROXY_MAX_IDLE_CONNS_PER_HOST" validate:"min=1"`
-	RequestTimeout      time.Duration `mapstructure:"PROXY_REQUEST_TIMEOUT"`
-}
-
-type SessionConfig struct {
-	TTL time.Duration `mapstructure:"REDIS_SESSION_TTL" validate:"required"`
-}
 
 type ServerConfig struct {
 	AppName       string        `mapstructure:"APP_NAME" validate:"required"`
@@ -90,6 +21,25 @@ type ServerConfig struct {
 	WriteTimeout  time.Duration `mapstructure:"WRITE_TIMEOUT"`
 }
 
+type DBConfig struct {
+	Host            string        `mapstructure:"DB_HOST" validate:"required"`
+	Port            int           `mapstructure:"DB_PORT" validate:"required"`
+	User            string        `mapstructure:"DB_USER" validate:"required"`
+	Password        string        `mapstructure:"DB_PASSWORD" validate:"required"`
+	DBName          string        `mapstructure:"DB_NAME" validate:"required"`
+	SSLMode         string        `mapstructure:"DB_SSLMODE" validate:"required"`
+	MaxOpenConns    int           `mapstructure:"DB_MAX_OPEN_CONNS" validate:"omitempty,min=1"`
+	MaxIdleConns    int           `mapstructure:"DB_MAX_IDLE_CONNS" validate:"omitempty,min=1"`
+	ConnMaxLifetime time.Duration `mapstructure:"DB_CONN_MAX_LIFETIME"`
+}
+
+func (cfg DBConfig) GetDSN() string {
+	return fmt.Sprintf(
+		"host=%s user=%s password=%s dbname=%s port=%d sslmode=%s",
+		cfg.Host, cfg.User, cfg.Password, cfg.DBName, cfg.Port, cfg.SSLMode,
+	)
+}
+
 type RedisConfig struct {
 	Host         string        `mapstructure:"REDIS_HOST" validate:"required"`
 	Port         string        `mapstructure:"REDIS_PORT" validate:"required,numeric"`
@@ -101,40 +51,51 @@ type RedisConfig struct {
 	Timeout      time.Duration `mapstructure:"REDIS_TIMEOUT" validate:"required"`
 }
 
+type InternalSecurityConfig struct {
+	HMACSecret    string `mapstructure:"INTERNAL_HMAC_SECRET" validate:"required,min=32"`
+	EncryptionKey string `mapstructure:"INTERNAL_ENCRYPTION_KEY" validate:"required,len=32"`
+	HashSalt      string `mapstructure:"INTERNAL_HASH_SALT" validate:"omitempty,min=16"`
+}
+
+type OTELConfig struct {
+	Enabled     bool   `mapstructure:"OTEL_ENABLED"`
+	Endpoint    string `mapstructure:"OTEL_ENDPOINT" validate:"required_if=Enabled true"`
+	ServiceName string `mapstructure:"OTEL_SERVICE_NAME" validate:"required_if=Enabled true"`
+}
+
+type RabbitMQConfig struct {
+	Enabled  bool   `mapstructure:"RABBITMQ_ENABLED"`
+	Host     string `mapstructure:"RABBITMQ_HOST" validate:"required_if=Enabled true"`
+	Port     int    `mapstructure:"RABBITMQ_PORT" validate:"required_if=Enabled true"`
+	User     string `mapstructure:"RABBITMQ_USER" validate:"required_if=Enabled true"`
+	Password string `mapstructure:"RABBITMQ_PASSWORD" validate:"required_if=Enabled true"`
+	VHost    string `mapstructure:"RABBITMQ_VHOST"`
+}
+
 type KMSConfig struct {
 	Endpoint       string `mapstructure:"KMS_ENDPOINT" validate:"required,url"`
 	InternalSecret string `mapstructure:"KMS_INTERNAL_SECRET" validate:"required,min=32"`
 }
 
-type JWTConfig struct {
-	AccessSecretRaw  string             `mapstructure:"JWT_ACCESS_SECRET" validate:"omitempty,min=16"`
-	AccessPrivateKey ed25519.PrivateKey `mapstructure:"-"`
-	AccessPublicKey  ed25519.PublicKey  `mapstructure:"-"`
-	RefreshSecret    string             `mapstructure:"JWT_REFRESH_SECRET" validate:"required,min=16"`
-	AccessTTL        time.Duration      `mapstructure:"JWT_ACCESS_TTL" validate:"required"`
-	RefreshTTL       time.Duration      `mapstructure:"JWT_REFRESH_TTL" validate:"required"`
+type SessionConfig struct {
+	TTL time.Duration `mapstructure:"SESSION_TTL" validate:"required"`
 }
 
-type Config struct {
-	Server    ServerConfig           `mapstructure:",squash"`
-	Redis     RedisConfig            `mapstructure:",squash"`
-	Session   SessionConfig          `mapstructure:",squash"`
-	Proxy     ProxyConfig            `mapstructure:",squash"`
-	CORSAllow string                 `mapstructure:"CORS_ALLOW_ORIGINS" validate:"required"`
-	Shutdown  time.Duration          `mapstructure:"SHUTDOWN_TIMEOUT" validate:"required"`
-	JWT       JWTConfig              `mapstructure:",squash"`
-	OTEL      OTELConfig             `mapstructure:",squash"`
-	Internal  InternalSecurityConfig `mapstructure:",squash"`
-	Services  ServicesConfig         `mapstructure:",squash"`
-	Database  DBConfig               `mapstructure:",squash"`
-	RabbitMQ  RabbitMQConfig         `mapstructure:",squash"`
-	KMS       KMSConfig              `mapstructure:",squash"`
+func (r RabbitMQConfig) GetURL() string {
+	vhost := r.VHost
+	if vhost == "" {
+		vhost = "/"
+	}
+	if !strings.HasPrefix(vhost, "/") {
+		vhost = "/" + vhost
+	}
+	return fmt.Sprintf("amqp://%s:%s@%s:%d%s", r.User, r.Password, r.Host, r.Port, vhost)
 }
 
-// GetDSN tworzy string połączenia dla GORM/Postgres
-func (cfg DBConfig) GetDSN() string {
-	return fmt.Sprintf(
-		"host=%s user=%s password=%s dbname=%s port=%d sslmode=%s",
-		cfg.Host, cfg.User, cfg.Password, cfg.DBName, cfg.Port, cfg.SSLMode,
-	)
+type ServicesConfig struct {
+	Auth      string `mapstructure:"SERVICE_AUTH_URL" validate:"required,url"`
+	Documents string `mapstructure:"SERVICE_DOCS_URL" validate:"required,url"`
+	Notify    string `mapstructure:"SERVICE_NOTIFY_URL" validate:"required,url"`
+	Messaging string `mapstructure:"SERVICE_MESSAGING_URL" validate:"required,url"`
+	WS        string `mapstructure:"SERVICE_WS_URL" validate:"required"`
 }

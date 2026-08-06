@@ -5,7 +5,7 @@ import (
 
 	"github.com/zerodayz7/platform/pkg/rabbitmq"
 	"github.com/zerodayz7/platform/pkg/redis"
-	"github.com/zerodayz7/platform/pkg/viper"
+	"github.com/zerodayz7/platform/services/gateway/config"
 )
 
 type Container struct {
@@ -14,13 +14,13 @@ type Container struct {
 	EventPublisher rabbitmq.EventPublisher
 	HTTPClient     *http.Client
 	InternalSecret []byte
-	Config         *viper.Config
+	Config         *config.Config
 }
 
 func NewContainer(
 	redisClient *redis.Client,
 	eventPublisher rabbitmq.EventPublisher,
-	cfg *viper.Config,
+	cfg *config.Config,
 ) *Container {
 	cache := redis.NewCache(redisClient, cfg.Session.TTL)
 

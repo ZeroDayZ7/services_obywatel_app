@@ -1,4 +1,4 @@
-package config
+package app
 
 import (
 	"fmt"
@@ -12,6 +12,7 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/requestid"
 	"github.com/zerodayz7/platform/pkg/server"
 	"github.com/zerodayz7/platform/pkg/shared"
+	"github.com/zerodayz7/platform/services/gateway/config"
 	"github.com/zerodayz7/platform/services/gateway/internal/di"
 	"github.com/zerodayz7/platform/services/gateway/internal/middleware"
 )
@@ -50,16 +51,16 @@ func NewGatewayApp(container *di.Container) (*fiber.App, error) {
 	app.Use(otelfiber.Middleware())
 	app.Use(requestid.New())
 	app.Use(recover.New())
-	app.Use(helmet.New(HelmetConfig()))
-	app.Use(cors.New(CorsConfig()))
+	app.Use(helmet.New(config.HelmetConfig()))
+	app.Use(cors.New(config.CorsConfig()))
 
 	storage := container.Redis.AsFiberStorage()
 
 	app.Use(shared.GetLimiter(shared.LimitGlobal, storage))
-	app.Use(compress.New(CompressConfig()))
+	app.Use(compress.New(config.CompressConfig()))
 	app.Use(shared.RequestLoggerMiddleware())
 
-	app.Use(JWTMiddlewareWithExclusions())
+	app.Use(config.JWTMiddlewareWithExclusions())
 	app.Use(middleware.AuthRedisMiddleware(container.Redis.Client))
 	app.Use(middleware.ContextBuilder(container))
 

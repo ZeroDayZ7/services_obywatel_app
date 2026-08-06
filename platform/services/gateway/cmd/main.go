@@ -11,6 +11,7 @@ import (
 	"github.com/zerodayz7/platform/pkg/server"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/pkg/telemetry"
+	"github.com/zerodayz7/platform/services/gateway/app"
 	"github.com/zerodayz7/platform/services/gateway/config"
 	"github.com/zerodayz7/platform/services/gateway/internal/di"
 	"github.com/zerodayz7/platform/services/gateway/internal/router"
@@ -33,15 +34,14 @@ func main() {
 
 	pubKey, err := kms.FetchPublicKey(ctx, kms.Config{
 		Endpoint:      config.AppConfig.KMS.Endpoint,
-		ServiceName:   config.AppConfig.Server.AppName, // "api-gateway"
+		ServiceName:   config.AppConfig.Server.AppName,
 		ServiceSecret: config.AppConfig.KMS.InternalSecret,
-	}, "auth-service") // Prosimy KMS o klucz publiczny auth-service
+	}, "auth-service")
 	if err != nil {
 		bootLog.Error("KMS Public Key bootstrap failed", "error", err)
 		os.Exit(1)
 	}
 
-	// Wpisujemy pobrany klucz publiczny do RAM Gatewaya
 	config.AppConfig.JWT.AccessPublicKey = pubKey
 
 	// 2. Logger
@@ -93,17 +93,17 @@ func main() {
 	// 6. DI & App Setup
 	container := di.NewContainer(redisClient, eventPublisher, &config.AppConfig)
 
-	app, err := config.NewGatewayApp(container)
+	gatewayApp, err := app.NewGatewayApp(container)
 	if err != nil {
 		log.Error("App setup failed", "error", err)
 		os.Exit(1)
 	}
 
-	router.SetupRoutes(app, container)
+	router.SetupRoutes(gatewayApp, container)
 
 	// 7. Run server
 	server.Run(
-		app,
+		gatewayApp,
 		server.Config{
 			Port:       config.AppConfig.Server.Port,
 			AppName:    config.AppConfig.Server.AppName,

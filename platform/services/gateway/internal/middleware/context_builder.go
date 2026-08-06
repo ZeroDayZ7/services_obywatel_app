@@ -5,6 +5,7 @@ import (
 	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 
+	"github.com/zerodayz7/platform/pkg/constants"
 	appcontext "github.com/zerodayz7/platform/pkg/context"
 	apperr "github.com/zerodayz7/platform/pkg/errors"
 	"github.com/zerodayz7/platform/pkg/redis"
@@ -21,7 +22,7 @@ func ContextBuilder(container *di.Container) fiber.Handler {
 			"method": c.Method(),
 		})
 
-		fingerprint := c.Get("X-Device-Fingerprint")
+		fingerprint := c.Get(constants.HeaderDeviceFingerprint)
 		requestID, _ := c.Locals("requestid").(string)
 
 		reqCtx := &appcontext.RequestContext{
