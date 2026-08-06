@@ -11,6 +11,7 @@ import (
 	"github.com/zerodayz7/platform/pkg/server"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/pkg/telemetry"
+	"github.com/zerodayz7/platform/services/auth-service/app"
 	"github.com/zerodayz7/platform/services/auth-service/config"
 	"github.com/zerodayz7/platform/services/auth-service/internal/di"
 	"github.com/zerodayz7/platform/services/auth-service/internal/router"
@@ -96,7 +97,7 @@ func main() {
 
 	// 7. DI & App Setup
 	container := di.NewContainer(db, redisClient, eventPublisher, &config.AppConfig)
-	app := config.NewAuthApp(container)
+	app := app.NewAuthApp(container)
 
 	router.SetupRoutes(app, container)
 
