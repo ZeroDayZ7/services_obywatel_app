@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 
 	"github.com/google/uuid"
+	"github.com/zerodayz7/platform/pkg/envelope"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/citizen-docs/config"
 	"github.com/zerodayz7/platform/services/citizen-docs/internal/model"
@@ -14,29 +15,35 @@ import (
 )
 
 type citizenService struct {
-	repo   repository.CitizenRepo
-	cfg    *config.Config
-	logger *shared.Logger
+	repo    repository.CitizenRepo
+	cfg     *config.Config
+	logger  *shared.Logger
+	cryptor *envelope.EnvelopeCryptor
 }
 
-func NewCitizenService(repo repository.CitizenRepo, cfg *config.Config, logger *shared.Logger) CitizenService {
+func NewCitizenService(
+	repo repository.CitizenRepo,
+	cfg *config.Config,
+	logger *shared.Logger,
+	cryptor *envelope.EnvelopeCryptor,
+) CitizenService {
 	return &citizenService{
-		repo:   repo,
-		cfg:    cfg,
-		logger: logger,
+		repo:    repo,
+		cfg:     cfg,
+		logger:  logger,
+		cryptor: cryptor,
 	}
 }
 
 // #region CREATE PROFILE
 func (s *citizenService) CreateProfile(ctx context.Context, userID uuid.UUID, data *model.CitizenData) error {
-	encryptionKey := []byte(s.cfg.Internal.DocsEncryptionKey)
-
 	plainBytes, err := json.Marshal(data)
 	if err != nil {
 		return err
 	}
 
-	encryptedBlob, err := shared.Encrypt(plainBytes, encryptionKey)
+	// 1. Szyfrujemy kopertowo (KMS generuje/zaszyfrowuje DEK dla aliasu "docs-id-cards")
+	payload, err := s.cryptor.Seal(ctx, "docs-id-cards", plainBytes)
 	if err != nil {
 		return err
 	}
@@ -47,9 +54,11 @@ func (s *citizenService) CreateProfile(ctx context.Context, userID uuid.UUID, da
 
 	profile := &model.CitizenProfile{
 		UserID:        userID,
-		EncryptedData: encryptedBlob,
+		EncryptedData: payload.EncryptedData,
+		EncryptedDEK:  payload.EncryptedDEK,
 		PeselHash:     peselHash,
 	}
 
 	return s.repo.Create(ctx, profile)
 }
+// #endregion

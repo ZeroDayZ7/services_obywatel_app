@@ -25,8 +25,9 @@ import (
 const (
 	DefaultTimeout = 5 * time.Second
 
-	PrivateKeyEndpoint = "/api/v1/keys/private"
-	PublicKeyEndpoint  = "/api/v1/keys/public/%s/%s"
+	PrivateKeyEndpoint   = "/api/v1/keys/private"
+	PublicKeyEndpoint    = "/api/v1/keys/public/%s/%s"
+	SymmetricKeyEndpoint = "/api/v1/keys/symmetric"
 
 	HeaderServiceName   = "X-Service-Name"
 	HeaderTimestamp     = "X-Timestamp"
@@ -36,6 +37,7 @@ const (
 
 	MIMEApplicationJSON = "application/json"
 	DefaultAlgorithm    = "Ed25519"
+	AlgorithmAES256GCM  = "AES256GCM"
 )
 
 // ============================================================================
@@ -71,8 +73,19 @@ type publicKeyResponse struct {
 	IsActive     bool   `json:"is_active"`
 }
 
+type getSymmetricKeyRequest struct {
+	ServiceID string `json:"service_id"`
+	Algorithm string `json:"algorithm"`
+}
+
+type symmetricKeyResponse struct {
+	ServiceID string `json:"service_id"`
+	Algorithm string `json:"algorithm"`
+	Version   int    `json:"version"`
+	KeyBytes  []byte `json:"key_bytes"`
+}
+
 // #region FetchAuthPrivateKey
-// FetchAuthPrivateKey pobiera klucz prywatny wskazanego serwisu targetService (np. "shared-jwt")
 func FetchAuthPrivateKey(ctx context.Context, cfg Config, targetService string) (ed25519.PrivateKey, error) {
 	if cfg.Timeout == 0 {
 		cfg.Timeout = DefaultTimeout
@@ -81,7 +94,6 @@ func FetchAuthPrivateKey(ctx context.Context, cfg Config, targetService string) 
 	reqCtx, cancel := context.WithTimeout(ctx, cfg.Timeout)
 	defer cancel()
 
-	// Jeśli targetService jest pusty, domyślnie bierzemy klucz własny
 	if targetService == "" {
 		targetService = cfg.ServiceName
 	}
@@ -105,8 +117,6 @@ func FetchAuthPrivateKey(ctx context.Context, cfg Config, targetService string) 
 	}
 
 	signAndSetHeaders(req, http.MethodPost, path, cfg)
-
-	log.Printf("[KMS-CLIENT] Wysyłanie żądania POST -> %s (Target target_service: %s, Requester: %s)", url, targetService, cfg.ServiceName)
 
 	client := &http.Client{}
 	res, err := client.Do(req)
@@ -149,7 +159,6 @@ func FetchAuthPrivateKey(ctx context.Context, cfg Config, targetService string) 
 // #endregion
 
 // #region FetchPublicKey
-// FetchPublicKey pobiera klucz publiczny wskazanego serwisu targetService (np. "shared-jwt")
 func FetchPublicKey(ctx context.Context, cfg Config, targetService string) (ed25519.PublicKey, error) {
 	if cfg.Timeout == 0 {
 		cfg.Timeout = DefaultTimeout
@@ -167,8 +176,6 @@ func FetchPublicKey(ctx context.Context, cfg Config, targetService string) (ed25
 	}
 
 	signAndSetHeaders(req, http.MethodGet, path, cfg)
-
-	log.Printf("[KMS-CLIENT] Wysyłanie żądania GET -> %s (Requester: %s)", url, cfg.ServiceName)
 
 	client := &http.Client{}
 	res, err := client.Do(req)
@@ -195,19 +202,16 @@ func FetchPublicKey(ctx context.Context, cfg Config, targetService string) (ed25
 		return nil, fmt.Errorf("kms: public_key_pem is empty in KMS response payload")
 	}
 
-	// 1. Dekodujemy nagłówek i treść PEM
 	block, _ := pem.Decode([]byte(out.PublicKeyPEM))
 	if block == nil {
 		return nil, fmt.Errorf("kms: failed to decode PEM block containing public key")
 	}
 
-	// 2. Parsujemy strukturę PKIX do ogólnego klucza publicznego
 	parsedKey, err := x509.ParsePKIXPublicKey(block.Bytes)
 	if err != nil {
 		return nil, fmt.Errorf("kms: failed to parse PKIX public key: %w", err)
 	}
 
-	// 3. Rzutujemy parsowany klucz na typ ed25519.PublicKey
 	pubKey, ok := parsedKey.(ed25519.PublicKey)
 	if !ok {
 		return nil, fmt.Errorf("kms: parsed key is not of type ed25519.PublicKey (got %T)", parsedKey)
@@ -215,6 +219,71 @@ func FetchPublicKey(ctx context.Context, cfg Config, targetService string) (ed25
 
 	log.Printf("[KMS-CLIENT] ✅ Pomyślnie pobrano i przetworzono klucz PUBLICZNY PEM Ed25519 dla '%s' (wersja %d)", out.ServiceID, out.Version)
 	return pubKey, nil
+}
+
+// #endregion
+
+// #region FetchSymmetricKey
+// FetchSymmetricKey pobiera klucz symetryczny HMAC/AES z KMS przy starcie serwisu
+func FetchSymmetricKey(ctx context.Context, cfg Config, targetService string) ([]byte, error) {
+	if cfg.Timeout == 0 {
+		cfg.Timeout = DefaultTimeout
+	}
+
+	reqCtx, cancel := context.WithTimeout(ctx, cfg.Timeout)
+	defer cancel()
+
+	if targetService == "" {
+		return nil, fmt.Errorf("kms: targetService cannot be empty for symmetric key request")
+	}
+
+	reqBody := getSymmetricKeyRequest{
+		ServiceID: targetService,
+		Algorithm: AlgorithmAES256GCM,
+	}
+
+	jsonBytes, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("kms: failed to marshal symmetric key request: %w", err)
+	}
+
+	path := SymmetricKeyEndpoint
+	url := fmt.Sprintf("%s%s", cfg.Endpoint, path)
+
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, url, bytes.NewBuffer(jsonBytes))
+	if err != nil {
+		return nil, fmt.Errorf("kms: failed to create request: %w", err)
+	}
+
+	signAndSetHeaders(req, http.MethodPost, path, cfg)
+
+	client := &http.Client{}
+	res, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("kms: request execution failed: %w", err)
+	}
+	defer res.Body.Close()
+
+	bodyBytes, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, fmt.Errorf("kms: failed to read response body: %w", err)
+	}
+
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("kms: unexpected status code %d fetching symmetric key for %s, body: %s", res.StatusCode, targetService, string(bodyBytes))
+	}
+
+	var out symmetricKeyResponse
+	if err := json.Unmarshal(bodyBytes, &out); err != nil {
+		return nil, fmt.Errorf("kms: failed to decode response JSON: %w", err)
+	}
+
+	if len(out.KeyBytes) == 0 {
+		return nil, fmt.Errorf("kms: key_bytes is empty in KMS response payload")
+	}
+
+	log.Printf("[KMS-CLIENT] ✅ Pomyślnie pobrano klucz SYMETRYCZNY dla targetu '%s' (wersja %d)", out.ServiceID, out.Version)
+	return out.KeyBytes, nil
 }
 
 // #endregion

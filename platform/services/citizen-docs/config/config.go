@@ -10,9 +10,8 @@ import (
 )
 
 type SecurityConfig struct {
-	DocsEncryptionKey string `mapstructure:"DOCS_ENCRYPTION_KEY" validate:"required,len=32"`
-	DocsPeselSalt     string `mapstructure:"DOCS_PESEL_SALT" validate:"required,min=16"`
-	HMACSecret        string `mapstructure:"INTERNAL_HMAC_SECRET" validate:"required,min=32"`
+	DocsPeselSalt string `mapstructure:"DOCS_PESEL_SALT" validate:"required,min=16"`
+	HMACSecret    string `mapstructure:"INTERNAL_HMAC_SECRET"`
 }
 
 type Config struct {
@@ -21,6 +20,7 @@ type Config struct {
 	Redis    viper.RedisConfig   `mapstructure:",squash"`
 	Session  viper.SessionConfig `mapstructure:",squash"`
 	OTEL     viper.OTELConfig    `mapstructure:",squash"`
+	KMS      viper.KMSConfig     `mapstructure:",squash"`
 	Internal SecurityConfig      `mapstructure:",squash"`
 	Shutdown time.Duration       `mapstructure:"SHUTDOWN_TIMEOUT" validate:"required"`
 }
