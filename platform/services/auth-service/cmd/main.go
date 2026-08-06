@@ -32,15 +32,28 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	privKey, err := kms.FetchAuthPrivateKey(ctx, kms.Config{
+	kmsCfg := kms.Config{
 		Endpoint:      config.AppConfig.KMS.Endpoint,
 		ServiceName:   config.AppConfig.Server.AppName,
 		ServiceSecret: config.AppConfig.KMS.InternalSecret,
-	})
+	}
+
+	bootLog.Info("Inicjalizacja pobierania klucza z KMS...",
+		"endpoint", kmsCfg.Endpoint,
+		"service", kmsCfg.ServiceName,
+	)
+
+	privKey, err := kms.FetchAuthPrivateKey(ctx, kmsCfg)
 	if err != nil {
-		bootLog.Error("KMS Key bootstrap failed", "error", err)
+		bootLog.Error("❌ Krytyczny błąd bootstrapu klucza KMS",
+			"error", err,
+			"endpoint", kmsCfg.Endpoint,
+			"service_id", kmsCfg.ServiceName,
+		)
 		os.Exit(1)
 	}
+
+	bootLog.Info("✅ Pomyślnie pobrano i zweryfikowano klucz prywatny z KMS")
 
 	// Wpisujemy pobrany z RAM KMS klucz prywatny do konfiguracji w RAM auth-service
 	config.AppConfig.JWT.AccessPrivateKey = privKey

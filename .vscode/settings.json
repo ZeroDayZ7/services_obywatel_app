@@ -5,7 +5,7 @@
     // "**/go.sum": true,
     // "**/go.mod": true,
     // "**/logs/": true,
-    // "**/bin/": true,
+    "**/bin/": true,
     // "**/.env.dev": true,
     // "**/.env.example": true,
     // "**/.env.dev.example": true,
