@@ -224,22 +224,27 @@ func FetchPublicKey(ctx context.Context, cfg Config, targetService string) (ed25
 // #endregion
 
 // #region FetchSymmetricKey
-// FetchSymmetricKey pobiera klucz symetryczny HMAC/AES z KMS przy starcie serwisu
-func FetchSymmetricKey(ctx context.Context, cfg Config, targetService string) ([]byte, error) {
+// FetchSymmetricKey pobiera klucz symetryczny HMAC/AES z KMS przy starcie serwisu.
+// Przyjmuje algorytm (np. "AES256GCM" lub "HmacSha256"). Jeśli przekazano "", domyślnie używa AES256GCM.
+func FetchSymmetricKey(ctx context.Context, cfg Config, targetService string, algorithm string) ([]byte, error) {
 	if cfg.Timeout == 0 {
 		cfg.Timeout = DefaultTimeout
 	}
-
-	reqCtx, cancel := context.WithTimeout(ctx, cfg.Timeout)
-	defer cancel()
 
 	if targetService == "" {
 		return nil, fmt.Errorf("kms: targetService cannot be empty for symmetric key request")
 	}
 
+	if algorithm == "" {
+		algorithm = AlgorithmAES256GCM
+	}
+
+	reqCtx, cancel := context.WithTimeout(ctx, cfg.Timeout)
+	defer cancel()
+
 	reqBody := getSymmetricKeyRequest{
 		ServiceID: targetService,
-		Algorithm: AlgorithmAES256GCM,
+		Algorithm: algorithm,
 	}
 
 	jsonBytes, err := json.Marshal(reqBody)
@@ -255,11 +260,22 @@ func FetchSymmetricKey(ctx context.Context, cfg Config, targetService string) ([
 		return nil, fmt.Errorf("kms: failed to create request: %w", err)
 	}
 
+	// Generujemy i ustawiamy nagłówki autoryzacyjne
 	signAndSetHeaders(req, http.MethodPost, path, cfg)
+
+	// LOGI DIAGNOSTYCZNE PRZED WYSŁANIEM ŻĄDANIA
+	log.Printf("[KMS-CLIENT] 🔍 --- ODBICIE ŻĄDANIA KMS ---")
+	log.Printf("[KMS-CLIENT] 🌐 URL: %s %s", req.Method, url)
+	log.Printf("[KMS-CLIENT] 📦 Payload JSON: %s", string(jsonBytes))
+	log.Printf("[KMS-CLIENT] 🔑 X-Service-Name: %s", req.Header.Get(HeaderServiceName))
+	log.Printf("[KMS-CLIENT] ⏰ X-Timestamp: %s", req.Header.Get(HeaderTimestamp))
+	log.Printf("[KMS-CLIENT] ✍️  X-HMAC-Signature: %s", req.Header.Get(HeaderHMACSignature))
+	log.Printf("[KMS-CLIENT] ---------------------------------")
 
 	client := &http.Client{}
 	res, err := client.Do(req)
 	if err != nil {
+		log.Printf("[KMS-CLIENT] ❌ Błąd sieciowy/wykonania requestu: %v", err)
 		return nil, fmt.Errorf("kms: request execution failed: %w", err)
 	}
 	defer res.Body.Close()
@@ -270,7 +286,10 @@ func FetchSymmetricKey(ctx context.Context, cfg Config, targetService string) ([
 	}
 
 	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("kms: unexpected status code %d fetching symmetric key for %s, body: %s", res.StatusCode, targetService, string(bodyBytes))
+		log.Printf("[KMS-CLIENT] ❌ ODPOWIEDŹ BŁĘDU KMS [%d]", res.StatusCode)
+		log.Printf("[KMS-CLIENT] 📩 Response Body: %s", string(bodyBytes))
+		log.Printf("[KMS-CLIENT] ---------------------------------")
+		return nil, fmt.Errorf("kms: unexpected status code %d fetching symmetric key for %s (alg: %s), body: %s", res.StatusCode, targetService, algorithm, string(bodyBytes))
 	}
 
 	var out symmetricKeyResponse
@@ -282,7 +301,7 @@ func FetchSymmetricKey(ctx context.Context, cfg Config, targetService string) ([
 		return nil, fmt.Errorf("kms: key_bytes is empty in KMS response payload")
 	}
 
-	log.Printf("[KMS-CLIENT] ✅ Pomyślnie pobrano klucz SYMETRYCZNY dla targetu '%s' (wersja %d)", out.ServiceID, out.Version)
+	log.Printf("[KMS-CLIENT] ✅ Pomyślnie pobrano klucz SYMETRYCZNY dla targetu '%s' [%s] (wersja %d)", out.ServiceID, out.Algorithm, out.Version)
 	return out.KeyBytes, nil
 }
 

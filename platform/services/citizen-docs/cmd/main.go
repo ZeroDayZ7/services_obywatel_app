@@ -49,7 +49,9 @@ func main() {
 	// 3. FETCH INTERNAL HMAC SECRET Z KMS
 	// =========================================================================
 	bootLog.Info("🔑 Pobieranie klucza 'internal-communication-hmac' z KMS...")
-	internalHMACKey, err := kms.FetchSymmetricKey(ctx, kmsCfg, "internal-communication-hmac")
+
+	// DODANO czwarty parametr: "HmacSha256" (zamiast domyślnego "AES256GCM")
+	internalHMACKey, err := kms.FetchSymmetricKey(ctx, kmsCfg, "internal-communication-hmac", "HmacSha256")
 	if err != nil {
 		bootLog.Fatal("❌ Nie udało się pobrać klucza HMAC z KMS", "error", err)
 	}

@@ -12,6 +12,7 @@ func SetBaseDefaults(serviceName string) {
 	viper.SetDefault("IDLE_TIMEOUT", "30s")
 	viper.SetDefault("READ_TIMEOUT", "15s")
 	viper.SetDefault("WRITE_TIMEOUT", "15s")
+	viper.SetDefault("SHUTDOWN_TIMEOUT", "10s")
 
 	viper.SetDefault("OTEL_ENABLED", false)
 	viper.SetDefault("OTEL_ENDPOINT", "http://localhost:4318/v1/traces")
