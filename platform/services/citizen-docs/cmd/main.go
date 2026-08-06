@@ -16,9 +16,11 @@ import (
 )
 
 func main() {
+	// 0. Bootstrap Logger
 	bootLog := shared.InitBootstrapLogger(os.Getenv("ENV"), false)
 	defer func() { _ = bootLog.Sync() }()
 
+	// 1. Load Config
 	if err := config.LoadConfigGlobal(); err != nil {
 		bootLog.Fatal("Config load failed", "error", err)
 	}
@@ -26,7 +28,7 @@ func main() {
 	log := shared.InitLogger(config.AppConfig.Server.Env, false)
 
 	// =========================================================================
-	// 1. KROK: HEALTH CHECK KMS
+	// 2. KMS SETUP & HEALTH CHECK
 	// =========================================================================
 	kmsCfg := kms.Config{
 		Endpoint:      config.AppConfig.KMS.Endpoint,
@@ -44,7 +46,7 @@ func main() {
 	bootLog.Info("✅ KMS jest dostępny i gotowy do pracy")
 
 	// =========================================================================
-	// 2. KROK: POBRANIE INTERNAL HMAC SECRET Z KMS DO WERYFIKACJI GATEWAYA
+	// 3. FETCH INTERNAL HMAC SECRET Z KMS
 	// =========================================================================
 	bootLog.Info("🔑 Pobieranie klucza 'internal-communication-hmac' z KMS...")
 	internalHMACKey, err := kms.FetchSymmetricKey(ctx, kmsCfg, "internal-communication-hmac")
@@ -52,27 +54,24 @@ func main() {
 		bootLog.Fatal("❌ Nie udało się pobrać klucza HMAC z KMS", "error", err)
 	}
 
-	// Przypisujemy dynamicznie pobrany z KMS klucz do konfiguracji pod middleware weryfikacyjny z Gatewaya
 	config.AppConfig.Internal.HMACSecret = string(internalHMACKey)
 	bootLog.Info("✅ Klucz HMAC komunikacji wewnętrznej pobrany pomyślnie")
 
 	// =========================================================================
-	// 3. INICJALIZACJA ENVELOPE CRYPTOR I BAZY DANYCH
+	// 4. INICJALIZACJA CRYPTOR, BAZY DANYCH I DI
 	// =========================================================================
 	cryptor := envelope.NewEnvelopeCryptor(kmsCfg)
 
 	db, closeDB := config.MustInitDB(config.AppConfig.Database)
 	defer closeDB()
 
-	// Wstrzykujemy zarówno bazę, jak i cryptor do kontenera DI
 	container := di.NewContainer(db, log, &config.AppConfig, cryptor)
 
 	docsApp := app.NewDocsApp(container)
-
 	router.SetupDocsRoutes(docsApp, container)
 
 	// =========================================================================
-	// 4. URUCHOMIENIE SERWERA
+	// 5. URUCHOMIENIE SERWERA
 	// =========================================================================
 	server.Run(
 		docsApp,
@@ -84,8 +83,6 @@ func main() {
 			Shutdown:   config.AppConfig.Shutdown,
 		},
 		*log,
-		func() {
-			closeDB()
-		},
+		nil,
 	)
 }
