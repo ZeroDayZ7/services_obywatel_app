@@ -24,6 +24,7 @@ type Config struct {
 	Server   viper.ServerConfig           `mapstructure:",squash"`
 	Database viper.DBConfig               `mapstructure:",squash"`
 	Redis    viper.RedisConfig            `mapstructure:",squash"`
+	Session  viper.SessionConfig          `mapstructure:",squash"`
 	Internal viper.InternalSecurityConfig `mapstructure:",squash"`
 	OTEL     viper.OTELConfig             `mapstructure:",squash"`
 	RabbitMQ viper.RabbitMQConfig         `mapstructure:",squash"`

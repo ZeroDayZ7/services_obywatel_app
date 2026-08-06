@@ -28,21 +28,30 @@ func main() {
 		os.Exit(1)
 	}
 
-	// 1.1 Bootstrap Keys from KMS (Rust)
+	// 1.1 KMS Setup & Health Check
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	privKey, err := kms.FetchAuthPrivateKey(ctx, kms.Config{
+	kmsCfg := kms.Config{
 		Endpoint:      config.AppConfig.KMS.Endpoint,
-		ServiceName:   config.AppConfig.Server.AppName,
+		ServiceName:   config.AppConfig.Server.AppName, // "auth-service"
 		ServiceSecret: config.AppConfig.KMS.InternalSecret,
-	})
-	if err != nil {
-		bootLog.Error("KMS Key bootstrap failed", "error", err)
+	}
+
+	bootLog.Info("🔍 Sprawdzanie stanu serwisu KMS...")
+	if err := kms.HealthCheck(ctx, kmsCfg); err != nil {
+		bootLog.Error("❌ KMS Health Check nie powiódł się", "error", err)
 		os.Exit(1)
 	}
 
-	// Wpisujemy pobrany z RAM KMS klucz prywatny do konfiguracji w RAM auth-service
+	// 1.2 Bootstrap Keys from KMS
+	privKey, err := kms.FetchAuthPrivateKey(ctx, kmsCfg, "shared-jwt")
+	if err != nil {
+		bootLog.Error("❌ Krytyczny błąd bootstrapu klucza KMS", "error", err)
+		os.Exit(1)
+	}
+
+	bootLog.Info("✅ Pomyślnie pobrano i zweryfikowano klucz prywatny z KMS")
 	config.AppConfig.JWT.AccessPrivateKey = privKey
 
 	// 2. Logger
@@ -63,12 +72,10 @@ func main() {
 		log.Error("Redis initialization failed", "error", err)
 		os.Exit(1)
 	}
-
 	if redisClient == nil {
 		log.Error("Redis client is nil")
 		os.Exit(1)
 	}
-
 	defer func() {
 		if err := redisClient.Close(); err != nil {
 			log.Error("Failed to close Redis client", "error", err)
@@ -81,7 +88,6 @@ func main() {
 
 	// 6. RabbitMQ
 	var eventPublisher rabbitmq.EventPublisher
-
 	if config.AppConfig.RabbitMQ.Enabled {
 		log.Info("RabbitMQ is ENABLED. Connecting to broker...")
 		var err error
@@ -94,16 +100,21 @@ func main() {
 		log.Warn("RabbitMQ is DISABLED. Fallback to No-Op Driver.")
 		eventPublisher = rabbitmq.NewNoOpPublisher()
 	}
+	defer func() {
+		if err := eventPublisher.Close(); err != nil {
+			log.Error("Failed to close RabbitMQ connection cleanly", "error", err)
+		}
+	}()
 
 	// 7. DI & App Setup
 	container := di.NewContainer(db, redisClient, eventPublisher, &config.AppConfig)
-	app := app.NewAuthApp(container)
+	authApp := app.NewAuthApp(container)
 
-	router.SetupRoutes(app, container)
+	router.SetupRoutes(authApp, container)
 
 	// 8. Run server
 	server.Run(
-		app,
+		authApp,
 		server.Config{
 			Port:       config.AppConfig.Server.Port,
 			AppName:    config.AppConfig.Server.AppName,
@@ -112,18 +123,6 @@ func main() {
 			Shutdown:   config.AppConfig.Shutdown,
 		},
 		*log,
-		func() {
-			log.Info("Shutting down resources")
-
-			closeDB()
-
-			if err := redisClient.Close(); err != nil {
-				log.Error("Failed to close Redis client", "error", err)
-			}
-
-			if err := eventPublisher.Close(); err != nil {
-				log.Error("Failed to close RabbitMQ connection cleanly", "error", err)
-			}
-		},
+		nil, // Graceful shutdown jest obsługiwany przez klauzulę defer w main()
 	)
 }

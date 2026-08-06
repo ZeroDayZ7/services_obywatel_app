@@ -17,7 +17,7 @@ import (
 	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/schemas"
 	"github.com/zerodayz7/platform/pkg/shared"
-	"github.com/zerodayz7/platform/pkg/viper"
+	"github.com/zerodayz7/platform/services/auth-service/config"
 	"github.com/zerodayz7/platform/services/auth-service/internal/http"
 	"github.com/zerodayz7/platform/services/auth-service/internal/model"
 	repo "github.com/zerodayz7/platform/services/auth-service/internal/repository"
@@ -54,7 +54,7 @@ type authService struct {
 	refreshRepo    repo.RefreshTokenRepository
 	cache          *redis.Cache
 	eventPublisher rabbitmq.EventPublisher
-	cfg            *viper.Config
+	cfg            *config.Config
 }
 
 func NewAuthService(
@@ -62,7 +62,7 @@ func NewAuthService(
 	refreshRepo repo.RefreshTokenRepository,
 	cache *redis.Cache,
 	eventPublisher rabbitmq.EventPublisher,
-	cfg *viper.Config,
+	cfg *config.Config,
 ) AuthService {
 	return &authService{
 		userRepo:       userRepo,

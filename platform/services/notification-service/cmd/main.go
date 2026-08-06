@@ -7,6 +7,7 @@ import (
 	"github.com/zerodayz7/platform/pkg/server"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/pkg/utils"
+	"github.com/zerodayz7/platform/services/notification-service/app"
 	"github.com/zerodayz7/platform/services/notification-service/config"
 	"github.com/zerodayz7/platform/services/notification-service/internal/di"
 	"github.com/zerodayz7/platform/services/notification-service/internal/router"
@@ -53,7 +54,7 @@ func main() {
 	utils.SafeGo(log, container.Workers.NotificationWorker.Start)
 
 	// Initialize Fiber app and routes
-	app := config.NewNotificationApp(container)
+	app := app.NewNotificationApp(container)
 	router.SetupRoutes(app, container)
 
 	// Start server with unified run handler

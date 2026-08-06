@@ -12,7 +12,7 @@ import (
 	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/schemas"
 	"github.com/zerodayz7/platform/pkg/shared"
-	"github.com/zerodayz7/platform/pkg/viper"
+	"github.com/zerodayz7/platform/services/auth-service/config"
 	"github.com/zerodayz7/platform/services/auth-service/internal/http"
 	service "github.com/zerodayz7/platform/services/auth-service/internal/service"
 )
@@ -20,10 +20,10 @@ import (
 type AuthHandler struct {
 	authService service.AuthService
 	cache       *redis.Cache
-	cfg         *viper.Config
+	cfg         *config.Config
 }
 
-func NewAuthHandler(authService service.AuthService, cache *redis.Cache, cfg *viper.Config) *AuthHandler { // USUNIĘTO *
+func NewAuthHandler(authService service.AuthService, cache *redis.Cache, cfg *config.Config) *AuthHandler {
 	return &AuthHandler{
 		authService: authService,
 		cache:       cache,

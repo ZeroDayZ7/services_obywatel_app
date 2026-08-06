@@ -4,7 +4,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/shared"
-	"github.com/zerodayz7/platform/pkg/viper"
+	"github.com/zerodayz7/platform/services/audit-service/config"
 	"github.com/zerodayz7/platform/services/audit-service/db/dbgen"
 	"github.com/zerodayz7/platform/services/audit-service/internal/audit"
 )
@@ -14,11 +14,11 @@ type Container struct {
 	AuditWorker  *audit.AuditWorker
 	Redis        *redis.Client
 	Logger       *shared.Logger
-	Config       *viper.Config
+	Config       *config.Config
 }
 
 // NewContainer teraz przyjmuje cfg, aby wstrzyknąć go do aplikacji i handlerów.
-func NewContainer(dbPool *pgxpool.Pool, redisClient *redis.Client, logger *shared.Logger, cfg *viper.Config) *Container {
+func NewContainer(dbPool *pgxpool.Pool, redisClient *redis.Client, logger *shared.Logger, cfg *config.Config) *Container {
 	// 1. Inicjalizacja zapytań sqlc
 	queries := dbgen.New(dbPool)
 
