@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/gofiber/fiber/v2/middleware/session"
@@ -21,7 +22,7 @@ type Config struct {
 	Session  viper.SessionConfig `mapstructure:",squash"`
 	OTEL     viper.OTELConfig    `mapstructure:",squash"`
 	Internal SecurityConfig      `mapstructure:",squash"`
-	Shutdown time.Duration       `mapstructure:"SHUTDOWN_TIMEOUT_SEC" validate:"required"`
+	Shutdown time.Duration       `mapstructure:"SHUTDOWN_TIMEOUT" validate:"required"`
 }
 
 var (
@@ -32,8 +33,13 @@ var (
 func LoadConfigGlobal() error {
 	log := shared.GetLogger()
 
+	viper.SetBaseDefaults("citizen-docs")
+	viper.SetDBDefaults()
+	viper.SetRedisDefaults()
+	viper.SetSessionDefaults()
+
 	if err := viper.InitConfig(&AppConfig, "citizen-docs"); err != nil {
-		return err
+		return fmt.Errorf("failed to initialize citizen-docs config: %w", err)
 	}
 
 	log.Info("Citizen-Docs configuration loaded successfully")
