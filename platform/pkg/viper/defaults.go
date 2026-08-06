@@ -82,4 +82,8 @@ func SetSharedDefaults(serviceName string) {
 	viper.SetDefault("RABBITMQ_VHOST", "/")
 
 	viper.SetDefault("SERVICE_WS_URL", "ws://localhost:8084")
+
+	// KMS Defaults
+	viper.SetDefault("KMS_ENDPOINT", "http://127.0.0.1:8080")
+	viper.SetDefault("KMS_INTERNAL_SECRET", "")
 }

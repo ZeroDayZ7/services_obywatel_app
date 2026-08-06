@@ -930,7 +930,7 @@ func (s *authService) CreateAccessToken(userID uuid.UUID, fingerprint string) (s
 		"scope": constants.ScopeAccess.String(),
 	}
 
-	token, err := security.GenerateJWT(claims, s.cfg.JWT.AccessSecret, s.cfg.JWT.AccessTTL)
+	token, err := security.GenerateJWT(claims, s.cfg.JWT.AccessPrivateKey, s.cfg.JWT.AccessTTL)
 	return token, sessionID, err
 }
 
@@ -946,7 +946,7 @@ func (s *authService) CreateSetupToken(userID uuid.UUID, fingerprint string) (st
 
 	token, err := security.GenerateJWT(
 		claims,
-		s.cfg.JWT.AccessSecret,
+		s.cfg.JWT.AccessPrivateKey,
 		15*time.Minute,
 	)
 

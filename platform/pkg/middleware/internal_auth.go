@@ -12,6 +12,7 @@ import (
 	"github.com/zerodayz7/platform/pkg/shared"
 )
 
+// dupa
 func InternalAuthMiddleware(hmacSecret []byte) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		log := shared.GetLogger()
@@ -43,9 +44,7 @@ func InternalAuthMiddleware(hmacSecret []byte) fiber.Handler {
 			return apperr.SendAppError(c, apperr.ErrInternalContextCorruption)
 		}
 
-		// WYSYP CAŁOŚCI
 		log.DebugInfo("Context Dump", ctx)
-		// 5. Wrzuć do Locals, żeby Handler go widział
 		c.Locals(reqctx.FiberRequestContextKey, ctx)
 
 		return c.Next()

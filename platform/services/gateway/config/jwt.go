@@ -9,7 +9,7 @@ import (
 // NewJWTConfig — konfiguracja middleware JWT dla Fiber
 func NewJWTConfig() jwtware.Config {
 	return jwtware.Config{
-		SigningKey:   jwtware.SigningKey{Key: []byte(AppConfig.JWT.AccessSecret)},
+		SigningKey:   jwtware.SigningKey{Key: []byte(AppConfig.JWT.AccessPrivateKey)},
 		ContextKey:   "user",
 		TokenLookup:  "header:Authorization",
 		AuthScheme:   "Bearer",

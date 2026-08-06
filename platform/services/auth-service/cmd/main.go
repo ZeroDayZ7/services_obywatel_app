@@ -1,8 +1,11 @@
 package main
 
 import (
+	"context"
 	"os"
+	"time"
 
+	"github.com/zerodayz7/platform/pkg/kms"
 	"github.com/zerodayz7/platform/pkg/rabbitmq"
 	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/server"
@@ -23,6 +26,23 @@ func main() {
 		bootLog.Error("Config load failed", "error", err)
 		os.Exit(1)
 	}
+
+	// 1.1 Bootstrap Keys from KMS (Rust)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	privKey, err := kms.FetchAuthPrivateKey(ctx, kms.Config{
+		Endpoint:      config.AppConfig.KMS.Endpoint,
+		ServiceName:   config.AppConfig.Server.AppName,
+		ServiceSecret: config.AppConfig.KMS.InternalSecret,
+	})
+	if err != nil {
+		bootLog.Error("KMS Key bootstrap failed", "error", err)
+		os.Exit(1)
+	}
+
+	// Wpisujemy pobrany z RAM KMS klucz prywatny do konfiguracji w RAM auth-service
+	config.AppConfig.JWT.AccessPrivateKey = privKey
 
 	// 2. Logger
 	log := shared.InitLogger(config.AppConfig.Server.Env, false)

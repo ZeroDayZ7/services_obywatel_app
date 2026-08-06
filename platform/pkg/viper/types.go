@@ -1,6 +1,7 @@
 package viper
 
 import (
+	"crypto/ed25519"
 	"fmt"
 	"strings"
 	"time"
@@ -100,11 +101,18 @@ type RedisConfig struct {
 	Timeout      time.Duration `mapstructure:"REDIS_TIMEOUT" validate:"required"`
 }
 
+type KMSConfig struct {
+	Endpoint       string `mapstructure:"KMS_ENDPOINT" validate:"required,url"`
+	InternalSecret string `mapstructure:"KMS_INTERNAL_SECRET" validate:"required,min=32"`
+}
+
 type JWTConfig struct {
-	AccessSecret  string        `mapstructure:"JWT_ACCESS_SECRET" validate:"required,min=16"`
-	RefreshSecret string        `mapstructure:"JWT_REFRESH_SECRET" validate:"required,min=16"`
-	AccessTTL     time.Duration `mapstructure:"JWT_ACCESS_TTL" validate:"required"`
-	RefreshTTL    time.Duration `mapstructure:"JWT_REFRESH_TTL" validate:"required"`
+	AccessSecretRaw  string             `mapstructure:"JWT_ACCESS_SECRET" validate:"omitempty,min=16"`
+	AccessPrivateKey ed25519.PrivateKey `mapstructure:"-"`
+	AccessPublicKey  ed25519.PublicKey  `mapstructure:"-"`
+	RefreshSecret    string             `mapstructure:"JWT_REFRESH_SECRET" validate:"required,min=16"`
+	AccessTTL        time.Duration      `mapstructure:"JWT_ACCESS_TTL" validate:"required"`
+	RefreshTTL       time.Duration      `mapstructure:"JWT_REFRESH_TTL" validate:"required"`
 }
 
 type Config struct {
@@ -120,6 +128,7 @@ type Config struct {
 	Services  ServicesConfig         `mapstructure:",squash"`
 	Database  DBConfig               `mapstructure:",squash"`
 	RabbitMQ  RabbitMQConfig         `mapstructure:",squash"`
+	KMS       KMSConfig              `mapstructure:",squash"`
 }
 
 // GetDSN tworzy string połączenia dla GORM/Postgres

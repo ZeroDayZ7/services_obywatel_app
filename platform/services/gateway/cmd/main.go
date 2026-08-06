@@ -1,8 +1,11 @@
 package main
 
 import (
+	"context"
 	"os"
+	"time"
 
+	"github.com/zerodayz7/platform/pkg/kms"
 	"github.com/zerodayz7/platform/pkg/rabbitmq"
 	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/server"
@@ -23,6 +26,23 @@ func main() {
 		bootLog.Error("Config load failed", "error", err)
 		os.Exit(1)
 	}
+
+	// 1.1 Bootstrap Public Key from KMS (Rust)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	pubKey, err := kms.FetchPublicKey(ctx, kms.Config{
+		Endpoint:      config.AppConfig.KMS.Endpoint,
+		ServiceName:   config.AppConfig.Server.AppName, // "api-gateway"
+		ServiceSecret: config.AppConfig.KMS.InternalSecret,
+	}, "auth-service") // Prosimy KMS o klucz publiczny auth-service
+	if err != nil {
+		bootLog.Error("KMS Public Key bootstrap failed", "error", err)
+		os.Exit(1)
+	}
+
+	// Wpisujemy pobrany klucz publiczny do RAM Gatewaya
+	config.AppConfig.JWT.AccessPublicKey = pubKey
 
 	// 2. Logger
 	log := shared.InitLogger(config.AppConfig.Server.Env, false)
