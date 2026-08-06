@@ -73,12 +73,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	defer func() {
-		if err := redisClient.Close(); err != nil {
-			log.Error("Failed to close Redis client", "error", err)
-		}
-	}()
-
 	// 5. RabbitMQ
 	var eventPublisher rabbitmq.EventPublisher
 
