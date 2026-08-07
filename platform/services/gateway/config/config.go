@@ -18,7 +18,6 @@ type ProxyConfig struct {
 }
 
 type JWTConfig struct {
-	AccessSecret    string            `mapstructure:"JWT_ACCESS_SECRET" validate:"omitempty"`
 	AccessPublicKey ed25519.PublicKey `mapstructure:"-"`
 }
 

@@ -47,9 +47,7 @@ type RedisConfig struct {
 }
 
 type InternalSecurityConfig struct {
-	HMACSecret    string `mapstructure:"INTERNAL_HMAC_SECRET" validate:"required,min=32"`
-	EncryptionKey string `mapstructure:"INTERNAL_ENCRYPTION_KEY" validate:"required,len=32"`
-	HashSalt      string `mapstructure:"INTERNAL_HASH_SALT" validate:"omitempty,min=16"`
+	HMACSecret string `mapstructure:"-"`
 }
 
 type OTELConfig struct {

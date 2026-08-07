@@ -11,7 +11,6 @@ type Services struct {
 	AuthService          service.AuthService
 	UserService          service.UserService
 	PasswordResetService service.PasswordResetService
-	KeyService           service.KeyService
 }
 
 func NewServices(
@@ -37,6 +36,5 @@ func NewServices(
 			repos.RefreshTokenRepo,
 			cache,
 		),
-		KeyService: service.NewKeyService(cfg.JWT.KeyID, cfg.JWT.AccessPublicKey),
 	}
 }

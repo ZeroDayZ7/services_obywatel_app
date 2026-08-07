@@ -11,18 +11,18 @@ import (
 
 type SecurityConfig struct {
 	DocsPeselSalt string `mapstructure:"DOCS_PESEL_SALT" validate:"required,min=16"`
-	HMACSecret    string `mapstructure:"INTERNAL_HMAC_SECRET"`
 }
 
 type Config struct {
-	Server   viper.ServerConfig  `mapstructure:",squash"`
-	Database viper.DBConfig      `mapstructure:",squash"`
-	Redis    viper.RedisConfig   `mapstructure:",squash"`
-	Session  viper.SessionConfig `mapstructure:",squash"`
-	OTEL     viper.OTELConfig    `mapstructure:",squash"`
-	KMS      viper.KMSConfig     `mapstructure:",squash"`
-	Internal SecurityConfig      `mapstructure:",squash"`
-	Shutdown time.Duration       `mapstructure:"SHUTDOWN_TIMEOUT" validate:"required"`
+	Server   viper.ServerConfig           `mapstructure:",squash"`
+	Database viper.DBConfig               `mapstructure:",squash"`
+	Redis    viper.RedisConfig            `mapstructure:",squash"`
+	Session  viper.SessionConfig          `mapstructure:",squash"`
+	OTEL     viper.OTELConfig             `mapstructure:",squash"`
+	KMS      viper.KMSConfig              `mapstructure:",squash"`
+	Internal viper.InternalSecurityConfig `mapstructure:",squash"`
+	Security SecurityConfig               `mapstructure:",squash"`
+	Shutdown time.Duration                `mapstructure:"SHUTDOWN_TIMEOUT" validate:"required"`
 }
 
 var (

@@ -28,7 +28,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	// 2. KMS setup & Public Key fetch
+	// =========================================================================
+	// 2. KMS SETUP & FETCH KEYS (JWT Public Key + Internal HMAC)
+	// =========================================================================
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -38,20 +40,32 @@ func main() {
 		ServiceSecret: config.AppConfig.KMS.InternalSecret,
 	}
 
-	bootLog.Info("🔍 Checking KMS service health...")
+	bootLog.Info("🔍 Sprawdzanie stanu serwisu KMS...")
 	if err := kms.HealthCheck(ctx, kmsCfg); err != nil {
-		bootLog.Error("❌ KMS Health Check failed", "error", err)
+		bootLog.Error("❌ KMS Health Check nie powiódł się", "error", err)
 		os.Exit(1)
 	}
 
+	// 2a. Pobranie klucza publicznego do weryfikacji tokenów JWT użytkowników
+	bootLog.Info("🔑 Pobieranie klucza publicznego JWT z KMS...")
 	pubKey, err := kms.FetchPublicKey(ctx, kmsCfg, "shared-jwt")
 	if err != nil {
 		bootLog.Error("❌ KMS Public Key fetch failed", "error", err)
 		os.Exit(1)
 	}
-
 	config.AppConfig.JWT.AccessPublicKey = pubKey
 	bootLog.Info("✅ KMS Public Key loaded successfully")
+
+	// 2b. Pobranie klucza HMAC do podpisywania komunikacji między-serwisowej
+	bootLog.Info("🔑 Pobieranie klucza 'internal-communication-hmac' z KMS...")
+	internalHMACKey, err := kms.FetchSymmetricKey(ctx, kmsCfg, "internal-communication-hmac", "HmacSha256")
+	if err != nil {
+		bootLog.Error("❌ Nie udało się pobrać klucza HMAC z KMS", "error", err)
+		os.Exit(1)
+	}
+
+	config.AppConfig.Internal.HMACSecret = string(internalHMACKey)
+	bootLog.Info("✅ Klucz HMAC komunikacji wewnętrznej pobrany pomyślnie")
 
 	// 3. Application logger
 	log := shared.InitLogger(config.AppConfig.Server.Env, false)
