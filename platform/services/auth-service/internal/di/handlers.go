@@ -8,10 +8,9 @@ import (
 )
 
 type Handlers struct {
-	AuthHandler      *handler.AuthHandler
-	ResetHandler     *handler.ResetHandler
-	UserHandler      *handler.UserHandler
-	WellKnownHandler *handler.WellKnownHandler
+	AuthHandler  *handler.AuthHandler
+	ResetHandler *handler.ResetHandler
+	UserHandler  *handler.UserHandler
 }
 
 func NewHandlers(services *Services, cache *redis.Cache, cfg *config.Config) *Handlers {

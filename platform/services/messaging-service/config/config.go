@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/gofiber/fiber/v2/middleware/session"
@@ -8,22 +9,13 @@ import (
 	"github.com/zerodayz7/platform/pkg/viper"
 )
 
-type SecurityConfig struct {
-	MessagingEncryptionKey string `mapstructure:"MESSAGING_ENCRYPTION_KEY" validate:"required,len=32"`
-	MessagingHashSalt      string `mapstructure:"MESSAGING_HASH_SALT" validate:"required,min=16"`
-	InternalEncryptionKey  string `mapstructure:"INTERNAL_ENCRYPTION_KEY" validate:"required,len=32"`
-	InternalHashSalt       string `mapstructure:"INTERNAL_HASH_SALT" validate:"required,min=16"`
-	HMACSecret             string `mapstructure:"INTERNAL_HMAC_SECRET" validate:"required,min=32"`
-}
-
 type Config struct {
-	Server   viper.ServerConfig  `mapstructure:",squash"`
-	Database viper.DBConfig      `mapstructure:",squash"`
-	Redis    viper.RedisConfig   `mapstructure:",squash"`
-	Session  viper.SessionConfig `mapstructure:",squash"`
-	OTEL     viper.OTELConfig    `mapstructure:",squash"`
-	Internal SecurityConfig      `mapstructure:",squash"`
-	Shutdown time.Duration       `mapstructure:"SHUTDOWN_TIMEOUT" validate:"required"`
+	Server   viper.ServerConfig           `mapstructure:",squash"`
+	Database viper.DBConfig               `mapstructure:",squash"`
+	OTEL     viper.OTELConfig             `mapstructure:",squash"`
+	KMS      viper.KMSConfig              `mapstructure:",squash"`
+	Internal viper.InternalSecurityConfig `mapstructure:",squash"`
+	Shutdown time.Duration                `mapstructure:"SHUTDOWN_TIMEOUT" validate:"required"`
 }
 
 var (
@@ -34,8 +26,12 @@ var (
 func LoadConfigGlobal() error {
 	log := shared.GetLogger()
 
+	viper.SetDBDefaults()
+	viper.SetRedisDefaults()
+	viper.SetKMSDefaults()
+
 	if err := viper.InitConfig(&AppConfig, "messaging-service"); err != nil {
-		return err
+		return fmt.Errorf("failed to initialize messaging-service config: %w", err)
 	}
 
 	log.Info("messaging-service configuration loaded successfully")
