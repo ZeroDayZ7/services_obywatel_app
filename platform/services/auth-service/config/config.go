@@ -43,6 +43,7 @@ func LoadConfigGlobal() error {
 
 	viper.SetDBDefaults()
 	viper.SetRedisDefaults()
+	viper.SetKMSDefaults()
 
 	if err := viper.InitConfig(&AppConfig, "auth-service"); err != nil {
 		return fmt.Errorf("failed to initialize auth-service config: %w", err)

@@ -45,3 +45,7 @@ func SetRedisDefaults() {
 func SetSessionDefaults() {
 	viper.SetDefault("SESSION_TTL", "24h")
 }
+
+func SetKMSDefaults() {
+	viper.SetDefault("KMS_ENDPOINT", "http://127.0.0.1:8080")
+}

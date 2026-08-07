@@ -23,7 +23,7 @@ type Config struct {
 	Session  viper.SessionConfig `mapstructure:",squash"`
 	OTEL     viper.OTELConfig    `mapstructure:",squash"`
 	Internal SecurityConfig      `mapstructure:",squash"`
-	Shutdown time.Duration       `mapstructure:"SHUTDOWN_TIMEOUT_SEC" validate:"required"`
+	Shutdown time.Duration       `mapstructure:"SHUTDOWN_TIMEOUT" validate:"required"`
 }
 
 var (

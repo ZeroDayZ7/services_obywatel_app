@@ -35,13 +35,6 @@ type DBConfig struct {
 	ConnMaxLifetime time.Duration `mapstructure:"DB_CONN_MAX_LIFETIME"`
 }
 
-func (cfg DBConfig) GetDSN() string {
-	return fmt.Sprintf(
-		"host=%s user=%s password=%s dbname=%s port=%d sslmode=%s",
-		cfg.Host, cfg.User, cfg.Password, cfg.DBName, cfg.Port, cfg.SSLMode,
-	)
-}
-
 type RedisConfig struct {
 	Host         string        `mapstructure:"REDIS_HOST" validate:"required"`
 	Port         string        `mapstructure:"REDIS_PORT" validate:"required,numeric"`
@@ -83,6 +76,14 @@ type SessionConfig struct {
 	TTL time.Duration `mapstructure:"SESSION_TTL" validate:"required"`
 }
 
+type ServicesConfig struct {
+	Auth      string `mapstructure:"SERVICE_AUTH_URL" validate:"required,url"`
+	Documents string `mapstructure:"SERVICE_DOCS_URL" validate:"required,url"`
+	Notify    string `mapstructure:"SERVICE_NOTIFY_URL" validate:"required,url"`
+	Messaging string `mapstructure:"SERVICE_MESSAGING_URL" validate:"required,url"`
+	WS        string `mapstructure:"SERVICE_WS_URL" validate:"required"`
+}
+
 func (r RabbitMQConfig) GetURL() string {
 	vhost := r.VHost
 	if vhost == "" {
@@ -94,10 +95,9 @@ func (r RabbitMQConfig) GetURL() string {
 	return fmt.Sprintf("amqp://%s:%s@%s:%d%s", r.User, r.Password, r.Host, r.Port, vhost)
 }
 
-type ServicesConfig struct {
-	Auth      string `mapstructure:"SERVICE_AUTH_URL" validate:"required,url"`
-	Documents string `mapstructure:"SERVICE_DOCS_URL" validate:"required,url"`
-	Notify    string `mapstructure:"SERVICE_NOTIFY_URL" validate:"required,url"`
-	Messaging string `mapstructure:"SERVICE_MESSAGING_URL" validate:"required,url"`
-	WS        string `mapstructure:"SERVICE_WS_URL" validate:"required"`
+func (cfg DBConfig) GetDSN() string {
+	return fmt.Sprintf(
+		"host=%s user=%s password=%s dbname=%s port=%d sslmode=%s",
+		cfg.Host, cfg.User, cfg.Password, cfg.DBName, cfg.Port, cfg.SSLMode,
+	)
 }

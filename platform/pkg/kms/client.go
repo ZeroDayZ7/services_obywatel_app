@@ -49,6 +49,7 @@ type Config struct {
 	ServiceName   string        `json:"service_name"`
 	ServiceSecret string        `json:"service_secret"`
 	Timeout       time.Duration `json:"timeout"`
+	HTTPClient    *http.Client  `json:"-"`
 }
 
 type getPrivateKeyRequest struct {
@@ -85,6 +86,22 @@ type symmetricKeyResponse struct {
 	KeyBytes  []byte `json:"key_bytes"`
 }
 
+var defaultHTTPClient = &http.Client{
+	Timeout: DefaultTimeout,
+	Transport: &http.Transport{
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 10,
+		IdleConnTimeout:     90 * time.Second,
+	},
+}
+
+func getHTTPClient(cfg Config) *http.Client {
+	if cfg.HTTPClient != nil {
+		return cfg.HTTPClient
+	}
+	return defaultHTTPClient
+}
+
 // #region FetchAuthPrivateKey
 func FetchAuthPrivateKey(ctx context.Context, cfg Config, targetService string) (ed25519.PrivateKey, error) {
 	if cfg.Timeout == 0 {
@@ -118,7 +135,7 @@ func FetchAuthPrivateKey(ctx context.Context, cfg Config, targetService string) 
 
 	signAndSetHeaders(req, http.MethodPost, path, cfg)
 
-	client := &http.Client{}
+	client := getHTTPClient(cfg)
 	res, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("kms: request execution failed: %w", err)
@@ -177,7 +194,7 @@ func FetchPublicKey(ctx context.Context, cfg Config, targetService string) (ed25
 
 	signAndSetHeaders(req, http.MethodGet, path, cfg)
 
-	client := &http.Client{}
+	client := getHTTPClient(cfg)
 	res, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("kms: request execution failed: %w", err)
@@ -272,7 +289,7 @@ func FetchSymmetricKey(ctx context.Context, cfg Config, targetService string, al
 	log.Printf("[KMS-CLIENT] ✍️  X-HMAC-Signature: %s", req.Header.Get(HeaderHMACSignature))
 	log.Printf("[KMS-CLIENT] ---------------------------------")
 
-	client := &http.Client{}
+	client := getHTTPClient(cfg)
 	res, err := client.Do(req)
 	if err != nil {
 		log.Printf("[KMS-CLIENT] ❌ Błąd sieciowy/wykonania requestu: %v", err)
