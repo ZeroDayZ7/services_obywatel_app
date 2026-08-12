@@ -12,10 +12,11 @@ import (
 	"encoding/pem"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/zerodayz7/platform/pkg/shared"
 )
 
 // ============================================================================
@@ -202,7 +203,7 @@ func FetchAuthPrivateKey(ctx context.Context, cfg Config, targetService string) 
 		return nil, fmt.Errorf("kms: invalid private key bytes length: %d (expected 32 or 64)", len(out.PrivateKeyBytes))
 	}
 
-	log.Printf("[KMS-CLIENT] ✅ Pobrano klucz PRYWATNY Ed25519 dla targetu '%s' (wersja %d)", out.ServiceID, out.Version)
+	shared.GetLogger().Info(fmt.Sprintf("[KMS-CLIENT] ✅ Pobrano klucz PRYWATNY Ed25519 dla targetu '%s' (wersja %d)", out.ServiceID, out.Version))
 	return privKey, nil
 }
 
@@ -238,7 +239,7 @@ func FetchPublicKey(ctx context.Context, cfg Config, targetService string) (ed25
 		return nil, fmt.Errorf("kms: parsed key is not of type ed25519.PublicKey (got %T)", parsedKey)
 	}
 
-	log.Printf("[KMS-CLIENT] ✅ Pomyślnie pobrano i przetworzono klucz PUBLICZNY PEM Ed25519 dla '%s' (wersja %d)", out.ServiceID, out.Version)
+	shared.GetLogger().Info(fmt.Sprintf("[KMS-CLIENT] ✅ Pomyślnie pobrano i przetworzono klucz PUBLICZNY PEM Ed25519 dla '%s' (wersja %d)", out.ServiceID, out.Version))
 	return pubKey, nil
 }
 
@@ -273,7 +274,7 @@ func FetchSymmetricKeyWithVersion(ctx context.Context, cfg Config, targetService
 		return nil, 0, fmt.Errorf("kms: key_bytes is empty in KMS response payload")
 	}
 
-	log.Printf("[KMS-CLIENT] ✅ Pomyślnie pobrano klucz SYMETRYCZNY dla targetu '%s' [%s] (wersja %d)", out.ServiceID, out.Algorithm, out.Version)
+	shared.GetLogger().Info(fmt.Sprintf("[KMS-CLIENT] ✅ Pomyślnie pobrano klucz SYMETRYCZNY dla targetu '%s' [%s] (wersja %d)", out.ServiceID, out.Algorithm, out.Version))
 	return out.KeyBytes, uint32(out.Version), nil
 }
 

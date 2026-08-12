@@ -10,6 +10,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/zerodayz7/platform/pkg/constants"
 	apperr "github.com/zerodayz7/platform/pkg/errors"
+	rdy "github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/shared"
 )
 
@@ -55,11 +56,11 @@ func AuthRedisMiddleware(rdb *redis.Client) fiber.Handler {
 		tokenScope, _ := claims["scope"].(string)
 
 		expectedScope := constants.ScopeAccess.String()
-		redisPrefix := "session:"
+		redisPrefix := rdy.SessionPrefix
 
 		if path == "/auth/register-device" || path == "/auth/verify-device" {
 			expectedScope = constants.ScopeDeviceVerify.String()
-			redisPrefix = "setup:session:"
+			redisPrefix = rdy.SetupSessionPrefix
 		}
 
 		if tokenScope != expectedScope {
@@ -72,7 +73,7 @@ func AuthRedisMiddleware(rdb *redis.Client) fiber.Handler {
 		}
 
 		sessionID, _ := claims["sid"].(string)
-		fullRedisKey := redisPrefix + sessionID
+		fullRedisKey := rdy.SessionPrefix + sessionID
 
 		// LOG DIAGNOSTYCZNY - Sprawdzenie dokładnego klucza i scope
 		log.DebugMap("[AuthRedisMiddleware] Fetching session from Redis", map[string]any{
@@ -101,7 +102,7 @@ func AuthRedisMiddleware(rdb *redis.Client) fiber.Handler {
 			return apperr.SendAppError(c, apperr.ErrInternal)
 		}
 
-		var session UserSession
+		var session rdy.UserSession
 		if err := json.Unmarshal([]byte(jsonData), &session); err != nil {
 			log.ErrorMap("[AuthRedisMiddleware] JSON unmarshal failed", map[string]any{
 				"raw_json": jsonData,

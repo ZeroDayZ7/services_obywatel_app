@@ -731,13 +731,11 @@ func (s *authService) AttemptLogin(ctx context.Context, email string, password [
 
 	valid, err := security.VerifyPassword(password, user.Password, nil)
 	if err != nil || !valid {
-		// 1. Zwiększ licznik prób
 		attempts, incErr := s.userRepo.IncrementUserFailedLogin(user.ID)
 		if incErr != nil {
 			log.Error("Failed to increment failed attempts", incErr)
 		}
 
-		// 2. Sprawdź czy przekroczono próg (np. 5 prób)
 		if attempts >= 5 {
 			_ = s.userRepo.PermanentLock(user.ID)
 			return nil, errors.ErrAccountLocked
@@ -869,9 +867,11 @@ func (s *authService) finalizeLogin(ctx context.Context, user *model.User, finge
 		return nil, errors.ErrInternal
 	}
 
+	hashedFpt := shared.HashFingerprint(fingerprint)
+
 	sessionData := redis.UserSession{
 		UserID:      user.ID.String(),
-		Fingerprint: fingerprint,
+		Fingerprint: hashedFpt,
 		Role:        string(user.Role),
 		Permissions: []string(user.Permissions),
 	}
@@ -926,7 +926,7 @@ func (s *authService) CreateAccessToken(userID uuid.UUID, fingerprint string) (s
 	claims := jwt.MapClaims{
 		"uid":   userID,
 		"sid":   sessionID,
-		"fpt":   fingerprint,
+		"fpt":   shared.HashFingerprint(fingerprint),
 		"scope": constants.ScopeAccess.String(),
 	}
 
@@ -940,7 +940,7 @@ func (s *authService) CreateSetupToken(userID uuid.UUID, fingerprint string) (st
 	claims := jwt.MapClaims{
 		"uid":   userID.String(),
 		"sid":   sessionID,
-		"fpt":   fingerprint,
+		"fpt":   shared.HashFingerprint(fingerprint),
 		"scope": constants.ScopeDeviceVerify.String(),
 	}
 
@@ -960,14 +960,11 @@ func (s *authService) CreateRefreshToken(userID uuid.UUID, fingerprint string, d
 		return nil, err
 	}
 
-	hash := sha256.Sum256([]byte(rawToken))
-	hashedTokenHex := hex.EncodeToString(hash[:])
-
 	rt := &model.RefreshToken{
 		UserID:            userID,
 		DeviceID:          deviceID,
-		DeviceFingerprint: fingerprint,
-		Token:             hashedTokenHex,
+		DeviceFingerprint: shared.HashFingerprint(fingerprint),
+		Token:             shared.HashSHA256(rawToken),
 		ExpiresAt:         time.Now().Add(s.cfg.JWT.RefreshTTL),
 		Revoked:           false,
 	}
@@ -976,7 +973,7 @@ func (s *authService) CreateRefreshToken(userID uuid.UUID, fingerprint string, d
 		return nil, err
 	}
 
-	// Zwracamy obiekt z niezhaszowanym tokenem dla klienta
+	// Zwracamy obiekt z surowym tokenem dla klienta
 	rt.Token = rawToken
 	return rt, nil
 }
