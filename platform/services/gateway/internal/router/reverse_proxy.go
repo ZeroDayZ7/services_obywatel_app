@@ -74,7 +74,7 @@ func ReverseProxy(container *di.Container, serviceID string, target string) fibe
 			// PODPISYWANIE I PRZEKAZYWANIE KONTEKSTU DLA KAŻDEGO ŻĄDANIA
 			payload, err := reqctx.Encode(*ctx)
 			if err == nil {
-				sig := reqctx.Sign(payload, hmacSecret)
+				sig := reqctx.SignHMAC(payload, hmacSecret)
 				req.Header.Set(constants.HeaderInternalContext, base64.StdEncoding.EncodeToString(payload))
 				req.Header.Set(constants.HeaderInternalSignature, sig)
 			}
@@ -149,7 +149,7 @@ func ReverseProxySecure(container *di.Container, serviceID string, target string
 			log.ErrorObj("Failed to encode request context", err)
 			return apperr.SendAppError(c, apperr.ErrInternal)
 		}
-		sig := reqctx.Sign(payload, hmacSecret)
+		sig := reqctx.SignHMAC(payload, hmacSecret)
 		req.Header.Set(constants.HeaderInternalContext, base64.StdEncoding.EncodeToString(payload))
 		req.Header.Set(constants.HeaderInternalSignature, sig)
 

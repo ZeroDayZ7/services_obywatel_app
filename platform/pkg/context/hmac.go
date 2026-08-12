@@ -7,25 +7,25 @@ import (
 )
 
 // ComputeMAC generuje surowy hash HMAC-SHA256 bez kodowania.
-func ComputeMAC(payload, secret []byte) []byte {
-	h := hmac.New(sha256.New, secret)
+func ComputeMAC(payload, key []byte) []byte {
+	h := hmac.New(sha256.New, key)
 	h.Write(payload)
 	return h.Sum(nil)
 }
 
-// Sign generuje podpis HMAC zarejestrowany w formacie Base64.
-func Sign(payload, secret []byte) string {
-	return base64.StdEncoding.EncodeToString(ComputeMAC(payload, secret))
+// SignHMAC generuje podpis HMAC zarejestrowany w formacie Base64.
+func SignHMAC(payload, key []byte) string {
+	return base64.StdEncoding.EncodeToString(ComputeMAC(payload, key))
 }
 
-// Verify sprawdza podpis w czasie stałym (constant-time), dekodując tylko podpis przychodzący.
-func Verify(payload []byte, signature string, secret []byte) bool {
+// VerifyHMAC sprawdza podpis w czasie stałym (constant-time), dekodując przychodzący podpis z Base64.
+func VerifyHMAC(payload []byte, signature string, key []byte) bool {
 	providedMAC, err := base64.StdEncoding.DecodeString(signature)
 	if err != nil {
 		return false
 	}
 
-	expectedMAC := ComputeMAC(payload, secret)
+	expectedMAC := ComputeMAC(payload, key)
 
 	return hmac.Equal(expectedMAC, providedMAC)
 }

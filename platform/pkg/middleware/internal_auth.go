@@ -1,5 +1,3 @@
-// cmdr: cmdr: middleware\internal_auth.go
-
 package middleware
 
 import (
@@ -12,10 +10,11 @@ import (
 	"github.com/zerodayz7/platform/pkg/shared"
 )
 
-// dupa
-func InternalAuthMiddleware(hmacSecret []byte) fiber.Handler {
+// InternalAuthMiddleware weryfikuje podpis HMAC-SHA256 nagłówka kontekstu wewnętrznego.
+func InternalAuthMiddleware(hmacKey []byte) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		log := shared.GetLogger()
+
 		encodedCtx := c.Get(constants.HeaderInternalContext)
 		signature := c.Get(constants.HeaderInternalSignature)
 
@@ -23,23 +22,23 @@ func InternalAuthMiddleware(hmacSecret []byte) fiber.Handler {
 			return c.Next()
 		}
 
-		// 2. Dekoduj base64
+		// 1. Dekoduj surowy ładunek z Base64
 		payload, err := base64.StdEncoding.DecodeString(encodedCtx)
 		if err != nil {
 			return apperr.SendAppError(c, apperr.ErrInternalContextEncoding)
 		}
 
-		// 3. Weryfikuj podpis
-		if !reqctx.Verify(payload, signature, hmacSecret) {
+		// 2. Weryfikuj podpis HMAC w czasie stałym (constant-time)
+		if !reqctx.VerifyHMAC(payload, signature, hmacKey) {
 			return apperr.SendAppError(c, apperr.ErrInternalInvalidSignature)
 		}
 
-		// 4. Deserializuj do struktury
+		// 3. Deserializuj ładunek do struktury kontekstu
 		ctx, err := reqctx.Decode(payload)
 		if err != nil {
 			log.Error("Context decoding failed",
 				"error", err,
-				"raw_payload", base64.StdEncoding.EncodeToString(payload),
+				"raw_payload", encodedCtx,
 			)
 			return apperr.SendAppError(c, apperr.ErrInternalContextCorruption)
 		}
