@@ -24,15 +24,6 @@ type JWTConfig struct {
 type GatewayHMACConfig struct {
 	HeaderName string            `mapstructure:"HMAC_HEADER_NAME" validate:"required"`
 	TargetKeys map[string]string `mapstructure:"HMAC_TARGET_KEYS"` // map[service_id]kms_resource_name
-	Secrets    map[string][]byte `mapstructure:"-"`                 // map[service_id]hmac_secret_bytes
-}
-
-func (c *GatewayHMACConfig) GetSecretForService(serviceID string) ([]byte, bool) {
-	if c.Secrets == nil {
-		return nil, false
-	}
-	secret, ok := c.Secrets[serviceID]
-	return secret, ok
 }
 
 type Config struct {

@@ -6,6 +6,7 @@ import (
 	"github.com/zerodayz7/platform/pkg/rabbitmq"
 	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/services/gateway/config"
+	"github.com/zerodayz7/platform/services/gateway/internal/hmac"
 )
 
 type Container struct {
@@ -14,12 +15,14 @@ type Container struct {
 	EventPublisher rabbitmq.EventPublisher
 	HTTPClient     *http.Client
 	Config         *config.Config
+	KeyStore       *hmac.GatewayKeyStore
 }
 
 func NewContainer(
 	redisClient *redis.Client,
 	eventPublisher rabbitmq.EventPublisher,
 	cfg *config.Config,
+	keyStore *hmac.GatewayKeyStore,
 ) *Container {
 	cache := redis.NewCache(redisClient, cfg.Session.TTL)
 
@@ -35,10 +38,14 @@ func NewContainer(
 				IdleConnTimeout:     cfg.Proxy.IdleConnTimeout,
 			},
 		},
-		Config: cfg,
+		Config:   cfg,
+		KeyStore: keyStore,
 	}
 }
 
-func (c *Container) GetHMACSecret(serviceID string) ([]byte, bool) {
-	return c.Config.HMAC.GetSecretForService(serviceID)
+func (c *Container) GetHMACKey(serviceID string) ([]byte, uint32, bool) {
+	if c.KeyStore == nil {
+		return nil, 0, false
+	}
+	return c.KeyStore.GetKey(serviceID)
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/zerodayz7/platform/services/gateway/app"
 	"github.com/zerodayz7/platform/services/gateway/config"
 	"github.com/zerodayz7/platform/services/gateway/internal/di"
+	"github.com/zerodayz7/platform/services/gateway/internal/hmac"
 	"github.com/zerodayz7/platform/services/gateway/internal/router"
 )
 
@@ -27,6 +28,9 @@ func main() {
 		bootLog.Error("Config load failed", "error", err)
 		os.Exit(1)
 	}
+
+	// Instancjonujemy magazyn kluczy HMAC w pamięci RAM
+	keyStore := hmac.NewGatewayKeyStore()
 
 	// =========================================================================
 	// 2. KMS SETUP & FETCH KEYS (JWT Public Key + Per-Service HMACs)
@@ -58,19 +62,20 @@ func main() {
 
 	// 2b. Pobranie dedykowanych kluczy HMAC dla poszczególnych mikrousług
 	bootLog.Info("🔑 Pobieranie dedykowanych kluczy HMAC dla serwisów z KMS...")
-	config.AppConfig.HMAC.Secrets = make(map[string][]byte)
 
 	for serviceID, targetKey := range config.AppConfig.HMAC.TargetKeys {
 		bootLog.Info("🔑 Pobieranie klucza HMAC z KMS...", "service", serviceID, "target_key", targetKey)
 
-		hmacKey, err := kms.FetchSymmetricKey(ctx, kmsCfg, targetKey, "HmacSha256")
+		// Pobieramy klucz oraz wersję (jeśli FetchSymmetricKey zwraca tylko secret, ustawiamy domyślną wersję 1)
+		hmacKey, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, targetKey, "HmacSha256")
 		if err != nil {
 			bootLog.Error("❌ Nie udało się pobrać klucza HMAC z KMS", "service", serviceID, "target_key", targetKey, "error", err)
 			os.Exit(1)
 		}
 
-		config.AppConfig.HMAC.Secrets[serviceID] = hmacKey
-		bootLog.Info("✅ Klucz HMAC pobrany pomyślnie", "service", serviceID)
+		// Zapisujemy klucz do bezpiecznego magazynu w RAM
+		keyStore.SetKey(serviceID, hmacKey, version)
+		bootLog.Info("✅ Klucz HMAC pobrany pomyślnie", "service", serviceID, "version", version)
 	}
 
 	// 3. Application logger
@@ -116,8 +121,8 @@ func main() {
 		}
 	}()
 
-	// 7. DI Container & App initialization
-	container := di.NewContainer(redisClient, eventPublisher, &config.AppConfig)
+	// 7. DI Container & App initialization (przekazujemy keyStore)
+	container := di.NewContainer(redisClient, eventPublisher, &config.AppConfig, keyStore)
 
 	gatewayApp, err := app.NewGatewayApp(container)
 	if err != nil {

@@ -242,9 +242,10 @@ func FetchPublicKey(ctx context.Context, cfg Config, targetService string) (ed25
 	return pubKey, nil
 }
 
-func FetchSymmetricKey(ctx context.Context, cfg Config, targetService string, algorithm string) ([]byte, error) {
+// #region FetchSymmetricKeyWithVersion
+func FetchSymmetricKeyWithVersion(ctx context.Context, cfg Config, targetService string, algorithm string) ([]byte, uint32, error) {
 	if targetService == "" {
-		return nil, fmt.Errorf("kms: targetService cannot be empty for symmetric key request")
+		return nil, 0, fmt.Errorf("kms: targetService cannot be empty for symmetric key request")
 	}
 	if algorithm == "" {
 		algorithm = AlgorithmAES256GCM
@@ -255,23 +256,29 @@ func FetchSymmetricKey(ctx context.Context, cfg Config, targetService string, al
 		Algorithm: algorithm,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("kms: failed to marshal symmetric key request: %w", err)
+		return nil, 0, fmt.Errorf("kms: failed to marshal symmetric key request: %w", err)
 	}
 
 	bodyBytes, err := executeRequest(ctx, cfg, http.MethodPost, SymmetricKeyEndpoint, reqBody, true)
 	if err != nil {
-		return nil, fmt.Errorf("kms: failed fetching symmetric key for %s (alg: %s): %w", targetService, algorithm, err)
+		return nil, 0, fmt.Errorf("kms: failed fetching symmetric key for %s (alg: %s): %w", targetService, algorithm, err)
 	}
 
 	var out symmetricKeyResponse
 	if err := json.Unmarshal(bodyBytes, &out); err != nil {
-		return nil, fmt.Errorf("kms: failed to decode response JSON: %w", err)
+		return nil, 0, fmt.Errorf("kms: failed to decode response JSON: %w", err)
 	}
 
 	if len(out.KeyBytes) == 0 {
-		return nil, fmt.Errorf("kms: key_bytes is empty in KMS response payload")
+		return nil, 0, fmt.Errorf("kms: key_bytes is empty in KMS response payload")
 	}
 
 	log.Printf("[KMS-CLIENT] ✅ Pomyślnie pobrano klucz SYMETRYCZNY dla targetu '%s' [%s] (wersja %d)", out.ServiceID, out.Algorithm, out.Version)
-	return out.KeyBytes, nil
+	return out.KeyBytes, uint32(out.Version), nil
+}
+
+// #region FetchSymmetricKey
+func FetchSymmetricKey(ctx context.Context, cfg Config, targetService string, algorithm string) ([]byte, error) {
+	key, _, err := FetchSymmetricKeyWithVersion(ctx, cfg, targetService, algorithm)
+	return key, err
 }

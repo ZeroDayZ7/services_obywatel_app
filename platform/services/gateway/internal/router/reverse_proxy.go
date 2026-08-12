@@ -65,7 +65,7 @@ func ReverseProxy(container *di.Container, serviceID string, target string) fibe
 			}
 
 			// Pobranie dedykowanego sekretu HMAC dla konkretnego serwisu
-			hmacSecret, ok := container.GetHMACSecret(serviceID)
+			hmacSecret, _, ok := container.GetHMACKey(serviceID)
 			if !ok {
 				log.Error("Missing HMAC secret for target service", "service_id", serviceID)
 				return apperr.SendAppError(c, apperr.ErrInternal)
@@ -137,7 +137,7 @@ func ReverseProxySecure(container *di.Container, serviceID string, target string
 		req.Header.Del(constants.HeaderCookie)
 
 		// Pobranie dedykowanego sekretu HMAC dla konkretnego serwisu
-		hmacSecret, ok := container.GetHMACSecret(serviceID)
+		hmacSecret, _, ok := container.GetHMACKey(serviceID)
 		if !ok {
 			log.Error("Missing HMAC secret for target service", "service_id", serviceID)
 			return apperr.SendAppError(c, apperr.ErrInternal)
