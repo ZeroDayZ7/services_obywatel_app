@@ -21,19 +21,33 @@ type JWTConfig struct {
 	AccessPublicKey ed25519.PublicKey `mapstructure:"-"`
 }
 
+type GatewayHMACConfig struct {
+	HeaderName string            `mapstructure:"HMAC_HEADER_NAME" validate:"required"`
+	TargetKeys map[string]string `mapstructure:"HMAC_TARGET_KEYS"` // map[service_id]kms_resource_name
+	Secrets    map[string][]byte `mapstructure:"-"`                 // map[service_id]hmac_secret_bytes
+}
+
+func (c *GatewayHMACConfig) GetSecretForService(serviceID string) ([]byte, bool) {
+	if c.Secrets == nil {
+		return nil, false
+	}
+	secret, ok := c.Secrets[serviceID]
+	return secret, ok
+}
+
 type Config struct {
-	Server           viper.ServerConfig           `mapstructure:",squash"`
-	Redis            viper.RedisConfig            `mapstructure:",squash"`
-	Session          viper.SessionConfig          `mapstructure:",squash"`
-	Internal         viper.InternalSecurityConfig `mapstructure:",squash"`
-	Services         viper.ServicesConfig         `mapstructure:",squash"`
-	OTEL             viper.OTELConfig             `mapstructure:",squash"`
-	RabbitMQ         viper.RabbitMQConfig         `mapstructure:",squash"`
-	KMS              viper.KMSConfig              `mapstructure:",squash"`
-	Proxy            ProxyConfig                  `mapstructure:",squash"`
-	JWT              JWTConfig                    `mapstructure:",squash"`
-	CORSAllowOrigins string                       `mapstructure:"CORS_ALLOW_ORIGINS" validate:"required"`
-	Shutdown         time.Duration                `mapstructure:"SHUTDOWN_TIMEOUT" validate:"required"`
+	Server           viper.ServerConfig   `mapstructure:",squash"`
+	Redis            viper.RedisConfig    `mapstructure:",squash"`
+	Session          viper.SessionConfig  `mapstructure:",squash"`
+	HMAC             GatewayHMACConfig    `mapstructure:",squash"`
+	Services         viper.ServicesConfig `mapstructure:",squash"`
+	OTEL             viper.OTELConfig     `mapstructure:",squash"`
+	RabbitMQ         viper.RabbitMQConfig `mapstructure:",squash"`
+	KMS              viper.KMSConfig      `mapstructure:",squash"`
+	Proxy            ProxyConfig          `mapstructure:",squash"`
+	JWT              JWTConfig            `mapstructure:",squash"`
+	CORSAllowOrigins string               `mapstructure:"CORS_ALLOW_ORIGINS" validate:"required"`
+	Shutdown         time.Duration        `mapstructure:"SHUTDOWN_TIMEOUT" validate:"required"`
 }
 
 var (
@@ -41,12 +55,17 @@ var (
 	Store     *session.Store
 )
 
-func LoadConfigGlobal() error {
-	log := shared.GetLogger()
-
+func SetGatewayDefaults() {
 	viper.SetBaseDefaults("gateway")
 	viper.SetRedisDefaults()
 	viper.SetSessionDefaults()
+	viper.SetGatewayHMACDefaults()
+}
+
+func LoadConfigGlobal() error {
+	log := shared.GetLogger()
+
+	SetGatewayDefaults()
 
 	if err := viper.InitConfig(&AppConfig, "gateway"); err != nil {
 		return fmt.Errorf("failed to initialize gateway config: %w", err)

@@ -49,3 +49,16 @@ func SetSessionDefaults() {
 func SetKMSDefaults() {
 	viper.SetDefault("KMS_ENDPOINT", "http://127.0.0.1:8080")
 }
+
+func SetHMACDefaults() {
+	viper.SetDefault("HMAC_HEADER_NAME", "X-HMAC-Signature")
+}
+
+func SetGatewayHMACDefaults() {
+	SetHMACDefaults()
+	viper.SetDefault("HMAC_TARGET_KEYS", map[string]string{
+		"auth-service":         "hmac-gateway-auth",
+		"citizen-docs-service": "hmac-gateway-docs",
+		"messaging-service":    "hmac-gateway-messaging",
+	})
+}

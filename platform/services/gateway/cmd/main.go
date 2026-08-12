@@ -29,7 +29,7 @@ func main() {
 	}
 
 	// =========================================================================
-	// 2. KMS SETUP & FETCH KEYS (JWT Public Key + Internal HMAC)
+	// 2. KMS SETUP & FETCH KEYS (JWT Public Key + Per-Service HMACs)
 	// =========================================================================
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -56,16 +56,22 @@ func main() {
 	config.AppConfig.JWT.AccessPublicKey = pubKey
 	bootLog.Info("✅ KMS Public Key loaded successfully")
 
-	// 2b. Pobranie klucza HMAC do podpisywania komunikacji między-serwisowej
-	bootLog.Info("🔑 Pobieranie klucza 'internal-communication-hmac' z KMS...")
-	internalHMACKey, err := kms.FetchSymmetricKey(ctx, kmsCfg, "internal-communication-hmac", "HmacSha256")
-	if err != nil {
-		bootLog.Error("❌ Nie udało się pobrać klucza HMAC z KMS", "error", err)
-		os.Exit(1)
-	}
+	// 2b. Pobranie dedykowanych kluczy HMAC dla poszczególnych mikrousług
+	bootLog.Info("🔑 Pobieranie dedykowanych kluczy HMAC dla serwisów z KMS...")
+	config.AppConfig.HMAC.Secrets = make(map[string][]byte)
 
-	config.AppConfig.Internal.HMACSecret = string(internalHMACKey)
-	bootLog.Info("✅ Klucz HMAC komunikacji wewnętrznej pobrany pomyślnie")
+	for serviceID, targetKey := range config.AppConfig.HMAC.TargetKeys {
+		bootLog.Info("🔑 Pobieranie klucza HMAC z KMS...", "service", serviceID, "target_key", targetKey)
+
+		hmacKey, err := kms.FetchSymmetricKey(ctx, kmsCfg, targetKey, "HmacSha256")
+		if err != nil {
+			bootLog.Error("❌ Nie udało się pobrać klucza HMAC z KMS", "service", serviceID, "target_key", targetKey, "error", err)
+			os.Exit(1)
+		}
+
+		config.AppConfig.HMAC.Secrets[serviceID] = hmacKey
+		bootLog.Info("✅ Klucz HMAC pobrany pomyślnie", "service", serviceID)
+	}
 
 	// 3. Application logger
 	log := shared.InitLogger(config.AppConfig.Server.Env, false)

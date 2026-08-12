@@ -5,9 +5,11 @@ import (
 	"github.com/zerodayz7/platform/services/gateway/internal/di"
 )
 
+const ServiceNotify = "notify-service"
+
 func RegisterNotifyRoutes(app *fiber.App, container *di.Container) {
 	target := container.Config.Services.Notify
 
 	notify := app.Group("/notifications")
-	notify.All("/*", ReverseProxySecure(container, target))
+	notify.All("/*", ReverseProxySecure(container, ServiceNotify, target))
 }

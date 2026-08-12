@@ -13,7 +13,6 @@ type Container struct {
 	Cache          *redis.Cache
 	EventPublisher rabbitmq.EventPublisher
 	HTTPClient     *http.Client
-	InternalSecret []byte
 	Config         *config.Config
 }
 
@@ -36,7 +35,10 @@ func NewContainer(
 				IdleConnTimeout:     cfg.Proxy.IdleConnTimeout,
 			},
 		},
-		InternalSecret: []byte(cfg.Internal.HMACSecret),
-		Config:         cfg,
+		Config: cfg,
 	}
+}
+
+func (c *Container) GetHMACSecret(serviceID string) ([]byte, bool) {
+	return c.Config.HMAC.GetSecretForService(serviceID)
 }
