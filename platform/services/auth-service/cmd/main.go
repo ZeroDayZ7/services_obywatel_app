@@ -57,8 +57,8 @@ func main() {
 	bootLog.Info("✅ Pomyślnie pobrano i zweryfikowano klucz prywatny JWT z KMS")
 
 	// 2b. Pobranie klucza HMAC do weryfikacji/podpisywania komunikacji między-serwisowej
-	bootLog.Info("🔑 Pobieranie klucza 'internal-communication-hmac' z KMS...")
-	internalHMACKey, err := kms.FetchSymmetricKey(ctx, kmsCfg, "internal-communication-hmac", "HmacSha256")
+	bootLog.Info("🔑 Pobieranie klucza 'hmac-gateway-auth' z KMS...")
+	internalHMACKey, err := kms.FetchSymmetricKey(ctx, kmsCfg, "hmac-gateway-auth", "HmacSha256")
 	if err != nil {
 		bootLog.Error("❌ Nie udało się pobrać klucza HMAC z KMS", "error", err)
 		os.Exit(1)

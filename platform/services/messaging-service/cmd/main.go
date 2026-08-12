@@ -43,8 +43,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	bootLog.Info("🔑 Pobieranie klucza 'internal-communication-hmac' z KMS...")
-	internalHMACKey, err := kms.FetchSymmetricKey(ctx, kmsCfg, "internal-communication-hmac", "HmacSha256")
+	bootLog.Info("🔑 Pobieranie klucza 'hmac-gateway-messaging' z KMS...")
+	internalHMACKey, err := kms.FetchSymmetricKey(ctx, kmsCfg, "hmac-gateway-messaging", "HmacSha256")
 	if err != nil {
 		bootLog.Error("❌ Nie udało się pobrać klucza HMAC z KMS", "error", err)
 		os.Exit(1)
