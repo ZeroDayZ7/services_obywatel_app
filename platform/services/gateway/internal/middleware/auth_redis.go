@@ -14,11 +14,6 @@ import (
 	"github.com/zerodayz7/platform/pkg/shared"
 )
 
-type UserSession struct {
-	UserID      string `json:"user_id"`
-	Fingerprint string `json:"fingerprint"`
-}
-
 func AuthRedisMiddleware(rdb *redis.Client) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		log := shared.GetLogger()
@@ -56,11 +51,11 @@ func AuthRedisMiddleware(rdb *redis.Client) fiber.Handler {
 		tokenScope, _ := claims["scope"].(string)
 
 		expectedScope := constants.ScopeAccess.String()
-		redisPrefix := rdy.SessionPrefix
+		redisPrefix := constants.SessionPrefix
 
 		if path == "/auth/register-device" || path == "/auth/verify-device" {
 			expectedScope = constants.ScopeDeviceVerify.String()
-			redisPrefix = rdy.SetupSessionPrefix
+			redisPrefix = constants.SetupSessionPrefix
 		}
 
 		if tokenScope != expectedScope {
@@ -73,7 +68,7 @@ func AuthRedisMiddleware(rdb *redis.Client) fiber.Handler {
 		}
 
 		sessionID, _ := claims["sid"].(string)
-		fullRedisKey := rdy.SessionPrefix + sessionID
+		fullRedisKey := constants.SessionPrefix + sessionID
 
 		// LOG DIAGNOSTYCZNY - Sprawdzenie dokładnego klucza i scope
 		log.DebugMap("[AuthRedisMiddleware] Fetching session from Redis", map[string]any{
