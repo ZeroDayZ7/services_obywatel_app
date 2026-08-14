@@ -1,5 +1,3 @@
-// cmdr: internal\hmac\store.go
-
 package hmac
 
 import "sync"
@@ -9,10 +7,9 @@ type HMACKey struct {
 	Version uint32
 }
 
-// GatewayKeyStore trzyma najnowsze klucze dla wszystkich downstreamowych serwisów
 type GatewayKeyStore struct {
 	mu   sync.RWMutex
-	keys map[string]HMACKey // service_id -> HMACKey (vN)
+	keys map[string]HMACKey
 }
 
 func NewGatewayKeyStore() *GatewayKeyStore {

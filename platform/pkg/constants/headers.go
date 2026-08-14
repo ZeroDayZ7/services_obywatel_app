@@ -14,9 +14,9 @@ const (
 
 // HTTP Headers - User & Device Identification
 const (
-	HeaderUserID            = "X-User-Id"
-	HeaderSessionID         = "X-Session-Id"
-	HeaderDeviceID          = "X-Device-Id"
+	HeaderUserID            = "X-User-ID"
+	HeaderSessionID         = "X-Session-ID"
+	HeaderDeviceID          = "X-Device-ID"
 	HeaderDeviceFingerprint = "X-Device-Fingerprint"
 )
 
