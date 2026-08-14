@@ -17,28 +17,6 @@ const (
 	RoleRoot     UserRole = "root"
 )
 
-// Domyślne uprawnienia systemowe w formacie dot-notation
-const (
-	PermSystemAdmin  = "system.admin"
-	PermSystemManage = "system.manage"
-
-	PermUsersRead   = "users.read"
-	PermUsersWrite  = "users.write"
-	PermUsersDelete = "users.delete"
-
-	PermReportsView   = "reports.view"
-	PermReportsExport = "reports.export"
-
-	// Uprawnienia dla wiadomości i WebSocket
-	PermMessagesRead    = "messages.read"
-	PermMessagesWrite   = "messages.write"
-	PermMessagingAccess = "messaging.access"
-
-	// Uprawnienia dla dokumentów
-	PermDocumentsRead  = "documents.read"
-	PermDocumentsWrite = "documents.write"
-)
-
 type UserStatus string
 
 const (
