@@ -2,8 +2,8 @@
   // (Explorer)
   "files.exclude": {
     "**/go.work.sum": true,
-    "**/go.sum": true,
-    "**/go.mod": true,
+    // "**/go.sum": true,
+    // "**/go.mod": true,
     "**/logs/": true,
     "**/bin/": true,
     "**/.env.dev": true,
