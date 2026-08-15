@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"fmt"
 	"strings"
 	"time"
 
@@ -40,7 +41,7 @@ type AuthService interface {
 	GetProfile(ctx context.Context, userID uuid.UUID) (*http.UserProfileResponse, error)
 	UnpairDevice(ctx context.Context, userID uuid.UUID, deviceFingerprint, sessionID string, req schemas.UnpairDeviceRequest) error
 	// Narzędzia JWT
-	CreateAccessToken(userID uuid.UUID, fingerprint string) (string, string, error)
+	CreateAccessToken(ctx context.Context, userID uuid.UUID, fingerprint string) (string, string, error)
 	CreateRefreshToken(userID uuid.UUID, fingerprint string, deviceID *uuid.UUID) (*model.RefreshToken, error)
 	RevokeRefreshToken(token string) error
 	// Metody specyficzne dla logiki logowania
@@ -189,7 +190,7 @@ func (s *authService) VerifyDeviceSignature(ctx context.Context, userIDStr, sess
 		return nil, err
 	}
 
-	accessToken, newSessionID, err := s.CreateAccessToken(user.ID, fingerprint)
+	accessToken, newSessionID, err := s.CreateAccessToken(ctx, user.ID, fingerprint)
 	if err != nil {
 		return nil, errors.ErrInternal
 	}
@@ -278,7 +279,7 @@ func (s *authService) RefreshToken(ctx context.Context, tokenStr string, fingerp
 	}
 
 	// 7. Generowanie NOWYCH tokenów (przypisujemy zweryfikowany device.ID)
-	accessToken, newSessionID, err := s.CreateAccessToken(user.ID, fingerprint)
+	accessToken, newSessionID, err := s.CreateAccessToken(ctx, user.ID, fingerprint)
 	if err != nil {
 		return nil, errors.ErrInternal
 	}
@@ -483,7 +484,7 @@ func (s *authService) RegisterDevice(ctx context.Context, userID uuid.UUID, sess
 
 	// 5. GENEROWANIE POŚWIADCZEŃ (Z przypisanym DeviceID do RefreshTokena)
 	log.DebugMap("[RegisterDevice] Generating AccessToken", map[string]any{"user_id": userID.String()})
-	accessToken, newSID, err := s.CreateAccessToken(userID, req.DeviceFingerprint)
+	accessToken, newSID, err := s.CreateAccessToken(ctx, userID, req.DeviceFingerprint)
 	if err != nil {
 		log.ErrorObj("[RegisterDevice] Failed to create access token", err)
 		return nil, errors.ErrInternal
@@ -617,7 +618,7 @@ func (s *authService) Verify2FA(ctx context.Context, token string, code []byte, 
 	user.LastIP = ip
 	_ = s.userRepo.Update(ctx, user)
 
-	setupToken, sessionID, err := s.CreateSetupToken(uid, fingerprint)
+	setupToken, sessionID, err := s.CreateSetupToken(ctx, uid, fingerprint)
 	if err != nil {
 		return nil, errors.ErrInternal
 	}
@@ -754,7 +755,7 @@ func (s *authService) AttemptLogin(ctx context.Context, email string, password [
 	if err == nil && device != nil && device.IsVerified && device.IsActive {
 
 		// 1. Najpierw bilet (SetupToken) i unikalne ID sesji (v7)
-		setupToken, sessionID, err := s.CreateSetupToken(user.ID, fingerprint)
+		setupToken, sessionID, err := s.CreateSetupToken(ctx, user.ID, fingerprint)
 		if err != nil {
 			log.ErrorObj("Failed to create setup token", err)
 			return nil, errors.ErrInternal
@@ -862,7 +863,7 @@ func (s *authService) prepare2FASession(ctx context.Context, user *model.User, f
 
 // region finalizeLogin
 func (s *authService) finalizeLogin(ctx context.Context, user *model.User, fingerprint string) (*http.LoginResponse, error) {
-	accessToken, sessionID, err := s.CreateAccessToken(user.ID, fingerprint)
+	accessToken, sessionID, err := s.CreateAccessToken(ctx, user.ID, fingerprint)
 	if err != nil {
 		return nil, errors.ErrInternal
 	}
@@ -921,7 +922,7 @@ func (s *authService) UpdatePassword(ctx context.Context, userID uuid.UUID, newP
 }
 
 // region CreateAccessToken
-func (s *authService) CreateAccessToken(userID uuid.UUID, fingerprint string) (string, string, error) {
+func (s *authService) CreateAccessToken(ctx context.Context, userID uuid.UUID, fingerprint string) (string, string, error) {
 	sessionID := shared.GenerateSessionID()
 	claims := jwt.MapClaims{
 		"uid":   userID,
@@ -930,12 +931,25 @@ func (s *authService) CreateAccessToken(userID uuid.UUID, fingerprint string) (s
 		"scope": constants.ScopeAccess.String(),
 	}
 
-	token, err := security.GenerateJWT(claims, s.cfg.JWT.AccessPrivateKey, s.cfg.JWT.AccessTTL)
-	return token, sessionID, err
+	var token string
+	var err error
+
+	switch s.cfg.JWT.SigningMode {
+	case "kms":
+		token, err = security.GenerateJWTViaKMS(ctx, s.cfg.ToKMSServiceConfig(), "shared-jwt", claims, s.cfg.JWT.AccessTTL)
+	default: // "local"
+		token, err = security.GenerateJWTLocal(claims, s.cfg.JWT.AccessTTL, s.cfg.JWT.AccessPrivateKey)
+	}
+
+	if err != nil {
+		return "", "", fmt.Errorf("auth: failed to generate access token (%s): %w", s.cfg.JWT.SigningMode, err)
+	}
+
+	return token, sessionID, nil
 }
 
 // region CreateSetupToken
-func (s *authService) CreateSetupToken(userID uuid.UUID, fingerprint string) (string, string, error) {
+func (s *authService) CreateSetupToken(ctx context.Context, userID uuid.UUID, fingerprint string) (string, string, error) {
 	sessionID := shared.GenerateSessionID()
 	claims := jwt.MapClaims{
 		"uid":   userID.String(),
@@ -944,13 +958,24 @@ func (s *authService) CreateSetupToken(userID uuid.UUID, fingerprint string) (st
 		"scope": constants.ScopeDeviceVerify.String(),
 	}
 
-	token, err := security.GenerateJWT(
-		claims,
-		s.cfg.JWT.AccessPrivateKey,
-		15*time.Minute,
-	)
+	var token string
+	var err error
 
-	return token, sessionID, err
+	// Używamy tego samego mechanizmu co przy AccessTokenie (z możliwością osobnego TTL w przyszłości)
+	setupTTL := 15 * time.Minute
+
+	switch s.cfg.JWT.SigningMode {
+	case "kms":
+		token, err = security.GenerateJWTViaKMS(ctx, s.cfg.ToKMSServiceConfig(), "shared-jwt", claims, setupTTL)
+	default: // "local"
+		token, err = security.GenerateJWTLocal(claims, setupTTL, s.cfg.JWT.AccessPrivateKey)
+	}
+
+	if err != nil {
+		return "", "", fmt.Errorf("auth: failed to generate setup token (%s): %w", s.cfg.JWT.SigningMode, err)
+	}
+
+	return token, sessionID, nil
 }
 
 // region CreateRefreshToken

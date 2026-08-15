@@ -33,7 +33,7 @@ func main() {
 	kmsCfg := kms.Config{
 		Endpoint:      config.AppConfig.KMS.Endpoint,
 		ServiceName:   config.AppConfig.Server.AppName, // "citizen-docs-service"
-		ServiceSecret: config.AppConfig.KMS.InternalSecret,
+		ServiceSecret: config.AppConfig.KMS.ServiceSecret,
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

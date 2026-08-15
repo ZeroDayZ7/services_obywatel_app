@@ -8,6 +8,7 @@ import (
 	"time"
 )
 
+// #region
 type ServerConfig struct {
 	AppName       string        `mapstructure:"APP_NAME" validate:"required"`
 	Port          string        `mapstructure:"PORT" validate:"required,numeric"`
@@ -23,6 +24,7 @@ type ServerConfig struct {
 	WriteTimeout  time.Duration `mapstructure:"WRITE_TIMEOUT"`
 }
 
+// #region
 type DBConfig struct {
 	Host            string        `mapstructure:"DB_HOST" validate:"required"`
 	Port            int           `mapstructure:"DB_PORT" validate:"required"`
@@ -35,6 +37,7 @@ type DBConfig struct {
 	ConnMaxLifetime time.Duration `mapstructure:"DB_CONN_MAX_LIFETIME"`
 }
 
+// #region
 type RedisConfig struct {
 	Host         string        `mapstructure:"REDIS_HOST" validate:"required"`
 	Port         string        `mapstructure:"REDIS_PORT" validate:"required,numeric"`
@@ -46,16 +49,19 @@ type RedisConfig struct {
 	Timeout      time.Duration `mapstructure:"REDIS_TIMEOUT" validate:"required"`
 }
 
+// #region
 type InternalSecurityConfig struct {
 	HMACSecret string `mapstructure:"-"`
 }
 
+// #region
 type OTELConfig struct {
 	Enabled     bool   `mapstructure:"OTEL_ENABLED"`
 	Endpoint    string `mapstructure:"OTEL_ENDPOINT" validate:"required_if=Enabled true"`
 	ServiceName string `mapstructure:"OTEL_SERVICE_NAME" validate:"required_if=Enabled true"`
 }
 
+// #region
 type RabbitMQConfig struct {
 	Enabled  bool   `mapstructure:"RABBITMQ_ENABLED"`
 	Host     string `mapstructure:"RABBITMQ_HOST" validate:"required_if=Enabled true"`
@@ -65,15 +71,18 @@ type RabbitMQConfig struct {
 	VHost    string `mapstructure:"RABBITMQ_VHOST"`
 }
 
+// #region
 type KMSConfig struct {
-	Endpoint       string `mapstructure:"KMS_ENDPOINT" validate:"required,url"`
-	InternalSecret string `mapstructure:"KMS_INTERNAL_SECRET" validate:"required,min=32"`
+	Endpoint      string `mapstructure:"KMS_ENDPOINT" validate:"required,url"`
+	ServiceSecret string `mapstructure:"KMS_SERVICE_SECRET" validate:"required,min=32"`
 }
 
+// #region
 type SessionConfig struct {
 	TTL time.Duration `mapstructure:"SESSION_TTL" validate:"required"`
 }
 
+// #region
 type ServicesConfig struct {
 	Auth      string `mapstructure:"SERVICE_AUTH_URL" validate:"required,url"`
 	Documents string `mapstructure:"SERVICE_DOCS_URL" validate:"required,url"`
@@ -82,6 +91,7 @@ type ServicesConfig struct {
 	WS        string `mapstructure:"SERVICE_WS_URL" validate:"required"`
 }
 
+// #region GetURL
 func (r RabbitMQConfig) GetURL() string {
 	vhost := r.VHost
 	if vhost == "" {
@@ -93,6 +103,7 @@ func (r RabbitMQConfig) GetURL() string {
 	return fmt.Sprintf("amqp://%s:%s@%s:%d%s", r.User, r.Password, r.Host, r.Port, vhost)
 }
 
+// #region GetDSN
 func (cfg DBConfig) GetDSN() string {
 	return fmt.Sprintf(
 		"host=%s user=%s password=%s dbname=%s port=%d sslmode=%s",

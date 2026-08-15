@@ -6,11 +6,13 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2/middleware/session"
+	"github.com/zerodayz7/platform/pkg/kms"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/pkg/viper"
 )
 
 type JWTConfig struct {
+	SigningMode      string             `mapstructure:"JWT_SIGNING_MODE"`
 	KeyID            string             `mapstructure:"JWT_KEY_ID"`
 	AccessTTL        time.Duration      `mapstructure:"JWT_ACCESS_TTL" validate:"required"`
 	RefreshTTL       time.Duration      `mapstructure:"JWT_REFRESH_TTL" validate:"required"`
@@ -28,6 +30,15 @@ type Config struct {
 	KMS      viper.KMSConfig              `mapstructure:",squash"`
 	JWT      JWTConfig                    `mapstructure:",squash"`
 	Shutdown time.Duration                `mapstructure:"SHUTDOWN_TIMEOUT" validate:"required"`
+}
+
+// ToSDKConfig zwraca konfigurację KMS dla komunikacji miedzy-serwisowej
+func (c *Config) ToKMSServiceConfig() kms.Config {
+	return kms.Config{
+		Endpoint:      c.KMS.Endpoint,
+		ServiceName:   c.Server.AppName,
+		ServiceSecret: c.KMS.ServiceSecret,
+	}
 }
 
 var (

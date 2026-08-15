@@ -48,6 +48,8 @@ func SetSessionDefaults() {
 
 func SetKMSDefaults() {
 	viper.SetDefault("KMS_ENDPOINT", "http://127.0.0.1:8080")
+	viper.SetDefault("KMS_SERVICE_NAME", "auth-service")
+	viper.SetDefault("KMS_TIMEOUT", "2s")
 }
 
 func SetHMACDefaults() {

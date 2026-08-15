@@ -28,46 +28,46 @@ func main() {
 		os.Exit(1)
 	}
 
+	log := shared.InitLogger(config.AppConfig.Server.Env, false)
+
 	// =========================================================================
 	// 2. KMS SETUP & BOOTSTRAP KEYS (JWT Private Key + Internal HMAC)
 	// =========================================================================
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	kmsCfg := kms.Config{
-		Endpoint:      config.AppConfig.KMS.Endpoint,
-		ServiceName:   config.AppConfig.Server.AppName, // "auth-service"
-		ServiceSecret: config.AppConfig.KMS.InternalSecret,
-	}
+	// Dedykowane konfiguracje KMS
+	kmsServiceCfg := config.AppConfig.ToKMSServiceConfig()
 
-	bootLog.Info("🔍 Sprawdzanie stanu serwisu KMS...")
-	if err := kms.HealthCheck(ctx, kmsCfg); err != nil {
-		bootLog.Error("❌ KMS Health Check nie powiódł się", "error", err)
+	log.Info("🔍 Sprawdzanie stanu serwisu KMS...")
+	if err := kms.HealthCheck(ctx, kmsServiceCfg); err != nil {
+		log.Error("❌ KMS Health Check nie powiódł się", "error", err)
 		os.Exit(1)
 	}
 
 	// 2a. Pobranie klucza prywatnego Ed25519 do podpisywania Access Tokenów
-	bootLog.Info("🔑 Pobieranie klucza prywatnego JWT z KMS...")
-	privKey, err := kms.FetchAuthPrivateKey(ctx, kmsCfg, "shared-jwt")
-	if err != nil {
-		bootLog.Error("❌ Krytyczny błąd pobierania klucza prywatnego JWT z KMS", "error", err)
-		os.Exit(1)
+	if config.AppConfig.JWT.SigningMode == "local" {
+		log.Info("🔑 [MODE: LOCAL] Pobieranie klucza prywatnego JWT z KMS do pamięci serwisu...")
+		privKey, err := kms.FetchAuthPrivateKey(ctx, kmsServiceCfg, "shared-jwt")
+		if err != nil {
+			log.Error("❌ Krytyczny błąd pobierania klucza prywatnego JWT z KMS", "error", err)
+			os.Exit(1)
+		}
+		config.AppConfig.JWT.AccessPrivateKey = privKey
+		log.Info("✅ Pomyślnie pobrano i załadowano klucz prywatny JWT do pamięci")
+	} else {
+		log.Info("🛡️ [MODE: KMS] Tokeny będą podpisywane zdalnie przez API KMS")
 	}
-	config.AppConfig.JWT.AccessPrivateKey = privKey
-	bootLog.Info("✅ Pomyślnie pobrano i zweryfikowano klucz prywatny JWT z KMS")
 
 	// 2b. Pobranie klucza HMAC do weryfikacji/podpisywania komunikacji między-serwisowej
-	bootLog.Info("🔑 Pobieranie klucza 'hmac-gateway-auth' z KMS...")
-	internalHMACKey, err := kms.FetchSymmetricKey(ctx, kmsCfg, "hmac-gateway-auth", "HmacSha256")
+	log.Info("🔑 Pobieranie klucza 'hmac-gateway-auth' z KMS...")
+	internalHMACKey, err := kms.FetchSymmetricKey(ctx, kmsServiceCfg, "hmac-gateway-auth", "HmacSha256")
 	if err != nil {
-		bootLog.Error("❌ Nie udało się pobrać klucza HMAC z KMS", "error", err)
+		log.Error("❌ Nie udało się pobrać klucza HMAC z KMS", "error", err)
 		os.Exit(1)
 	}
 	config.AppConfig.Internal.HMACSecret = string(internalHMACKey)
-	bootLog.Info("✅ Klucz HMAC komunikacji wewnętrznej pobrany pomyślnie")
-
-	// 3. Application Logger
-	log := shared.InitLogger(config.AppConfig.Server.Env, false)
+	log.Info("✅ Klucz HMAC komunikacji wewnętrznej pobrany pomyślnie")
 
 	// 4. Telemetry (Tracer)
 	if config.AppConfig.OTEL.Enabled {

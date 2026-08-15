@@ -34,7 +34,7 @@ func main() {
 	kmsCfg := kms.Config{
 		Endpoint:      config.AppConfig.KMS.Endpoint,
 		ServiceName:   config.AppConfig.Server.AppName, // "messaging-service"
-		ServiceSecret: config.AppConfig.KMS.InternalSecret,
+		ServiceSecret: config.AppConfig.KMS.ServiceSecret,
 	}
 
 	bootLog.Info("🔍 Sprawdzanie stanu serwisu KMS...")
