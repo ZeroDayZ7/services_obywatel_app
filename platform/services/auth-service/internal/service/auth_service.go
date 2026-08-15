@@ -25,10 +25,8 @@ import (
 	repo "github.com/zerodayz7/platform/services/auth-service/internal/repository"
 )
 
-// AuthService definiuje pełny kontrakt biznesowy modułu autoryzacji.
 // region interface
 type AuthService interface {
-	// Główne procesy BIZNESOWE (zostawiamy tylko to, co ma logikę)
 	AttemptLogin(ctx context.Context, email string, password []byte, fingerprint string) (*http.LoginResponse, error)
 	Register(username, email, rawPassword string) (*model.User, error)
 	UpdatePassword(ctx context.Context, userID uuid.UUID, newPassword string) error
@@ -40,12 +38,6 @@ type AuthService interface {
 	VerifyDeviceSignature(ctx context.Context, userID, challenge, signature, fingerprint string) (*http.LoginResponse, error)
 	GetProfile(ctx context.Context, userID uuid.UUID) (*http.UserProfileResponse, error)
 	UnpairDevice(ctx context.Context, userID uuid.UUID, deviceFingerprint, sessionID string, req schemas.UnpairDeviceRequest) error
-	// Narzędzia JWT
-	CreateAccessToken(ctx context.Context, userID uuid.UUID, fingerprint string) (string, string, error)
-	CreateRefreshToken(userID uuid.UUID, fingerprint string, deviceID *uuid.UUID) (*model.RefreshToken, error)
-	RevokeRefreshToken(token string) error
-	// Metody specyficzne dla logiki logowania
-	CanUserLogin(user *model.User) error
 }
 
 // region struct
@@ -868,7 +860,7 @@ func (s *authService) finalizeLogin(ctx context.Context, user *model.User, finge
 		return nil, errors.ErrInternal
 	}
 
-	hashedFpt := shared.HashFingerprint(fingerprint)
+	hashedFpt := shared.HashSHA256(fingerprint)
 
 	sessionData := redis.UserSession{
 		UserID:      user.ID.String(),
@@ -927,7 +919,7 @@ func (s *authService) CreateAccessToken(ctx context.Context, userID uuid.UUID, f
 	claims := jwt.MapClaims{
 		"uid":   userID,
 		"sid":   sessionID,
-		"fpt":   shared.HashFingerprint(fingerprint),
+		"fpt":   shared.HashSHA256(fingerprint),
 		"scope": constants.ScopeAccess.String(),
 	}
 
@@ -954,7 +946,7 @@ func (s *authService) CreateSetupToken(ctx context.Context, userID uuid.UUID, fi
 	claims := jwt.MapClaims{
 		"uid":   userID.String(),
 		"sid":   sessionID,
-		"fpt":   shared.HashFingerprint(fingerprint),
+		"fpt":   shared.HashSHA256(fingerprint),
 		"scope": constants.ScopeDeviceVerify.String(),
 	}
 
@@ -988,7 +980,7 @@ func (s *authService) CreateRefreshToken(userID uuid.UUID, fingerprint string, d
 	rt := &model.RefreshToken{
 		UserID:            userID,
 		DeviceID:          deviceID,
-		DeviceFingerprint: shared.HashFingerprint(fingerprint),
+		DeviceFingerprint: shared.HashSHA256(fingerprint),
 		Token:             shared.HashSHA256(rawToken),
 		ExpiresAt:         time.Now().Add(s.cfg.JWT.RefreshTTL),
 		Revoked:           false,
@@ -998,7 +990,6 @@ func (s *authService) CreateRefreshToken(userID uuid.UUID, fingerprint string, d
 		return nil, err
 	}
 
-	// Zwracamy obiekt z surowym tokenem dla klienta
 	rt.Token = rawToken
 	return rt, nil
 }

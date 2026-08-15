@@ -96,6 +96,7 @@ var defaultHTTPClient = &http.Client{
 	},
 }
 
+// #region getHTTPClient
 func getHTTPClient(cfg Config) *http.Client {
 	if cfg.HTTPClient != nil {
 		return cfg.HTTPClient
@@ -103,6 +104,7 @@ func getHTTPClient(cfg Config) *http.Client {
 	return defaultHTTPClient
 }
 
+// #region getHTTPClient
 func executeRequest(ctx context.Context, cfg Config, method, path string, body []byte, sign bool) ([]byte, error) {
 	timeout := cfg.Timeout
 	if timeout == 0 {
@@ -151,6 +153,7 @@ func executeRequest(ctx context.Context, cfg Config, method, path string, body [
 	return bodyBytes, nil
 }
 
+// #region signAndSetHeaders
 func signAndSetHeaders(req *http.Request, method, path string, cfg Config) {
 	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
 	payloadToSign := fmt.Sprintf("%s:%s:%s", method, path, timestamp)
@@ -166,6 +169,7 @@ func signAndSetHeaders(req *http.Request, method, path string, cfg Config) {
 	req.Header.Set(HeaderContentType, MIMEApplicationJSON)
 }
 
+// #region FetchAuthPrivateKey
 func FetchAuthPrivateKey(ctx context.Context, cfg Config, targetService string) (ed25519.PrivateKey, error) {
 	if targetService == "" {
 		targetService = cfg.ServiceName
@@ -207,6 +211,7 @@ func FetchAuthPrivateKey(ctx context.Context, cfg Config, targetService string) 
 	return privKey, nil
 }
 
+// #region FetchPublicKey
 func FetchPublicKey(ctx context.Context, cfg Config, targetService string) (ed25519.PublicKey, error) {
 	path := fmt.Sprintf(PublicKeyEndpoint, targetService, DefaultAlgorithm)
 

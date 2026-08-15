@@ -62,8 +62,3 @@ func HashSHA256(data string) string {
 	h := sha256.Sum256([]byte(data))
 	return hex.EncodeToString(h[:])
 }
-
-// #region HashFingerprint
-func HashFingerprint(fingerprint string) string {
-	return HashSHA256(fingerprint)
-}
