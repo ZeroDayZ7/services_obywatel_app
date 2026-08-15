@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/zerodayz7/platform/pkg/constants"
 )
 
 type TwoFASession struct {
@@ -19,15 +21,15 @@ type TwoFASession struct {
 }
 
 func (c *Cache) Set2FASession(ctx context.Context, token string, sess TwoFASession, ttl time.Duration) error {
-	return SetJSON(c, ctx, Login2FAPrefix+token, sess, ttl)
+	return SetJSON(c, ctx, constants.Login2FAPrefix+token, sess, ttl)
 }
 
 func (c *Cache) Get2FASession(ctx context.Context, token string) (*TwoFASession, error) {
-	return GetJSON[TwoFASession](c, ctx, Login2FAPrefix+token)
+	return GetJSON[TwoFASession](c, ctx, constants.Login2FAPrefix+token)
 }
 
 func (c *Cache) Delete2FASession(ctx context.Context, token string) error {
-	return c.Del(ctx, Login2FAPrefix+token)
+	return c.Del(ctx, constants.Login2FAPrefix+token)
 }
 
 func (c *Cache) Verify2FAAttempt(
@@ -36,7 +38,7 @@ func (c *Cache) Verify2FAAttempt(
 	maxAttempts int,
 	ttl time.Duration,
 ) (string, error) {
-	fullKey := Login2FAPrefix + token
+	fullKey := constants.Login2FAPrefix + token
 
 	res, err := c.client.Eval(
 		ctx,

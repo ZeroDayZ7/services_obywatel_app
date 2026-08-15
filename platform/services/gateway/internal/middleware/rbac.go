@@ -5,50 +5,60 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
+	"github.com/zerodayz7/platform/pkg/constants" // <--- Importujesz własne stałe
 	appcontext "github.com/zerodayz7/platform/pkg/context"
 	apperr "github.com/zerodayz7/platform/pkg/errors"
 	"github.com/zerodayz7/platform/pkg/shared"
 )
 
-// RBACRequired weryfikuje czy rola lub uprawnienia w RequestContext są wystarczające
-func RBACRequired(requiredPermissionOrRole string) fiber.Handler {
+// RequirePermissions weryfikuje, czy użytkownik posiada wszystkie wymagane uprawnienia.
+func RequirePermissions(requiredPermissions ...string) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		log := shared.GetLogger()
 		path := c.Path()
+		method := c.Method()
 
 		ctx, ok := c.Locals("requestContext").(*appcontext.RequestContext)
 		if !ok || ctx == nil || ctx.UserID == nil {
 			log.Warn("RBAC Failure: Request context missing or corrupt",
 				"path", path,
-				"method", c.Method(),
+				"method", method,
 			)
 
 			return apperr.SendAppError(c, apperr.ErrUnauthorized)
 		}
 
-		// Superuser "root" omija sprawdzanie uprawnień
+		// Superuser "root" omija sprawdzanie granulacji uprawnień (dev / god mode)
 		if ctx.Role == "root" {
-			c.Request().Header.Set("X-User-ID", ctx.UserID.String())
+			c.Request().Header.Set(constants.HeaderUserID, ctx.UserID.String())
 			return c.Next()
 		}
 
-		hasAccess := ctx.Role == requiredPermissionOrRole ||
-			slices.Contains(ctx.Permissions, requiredPermissionOrRole)
-
-		if !hasAccess {
-			log.Warn("Forbidden access attempt: insufficient permissions", map[string]any{
-				"user_id":     ctx.UserID.String(),
-				"required":    requiredPermissionOrRole,
-				"currentRole": ctx.Role,
-				"permissions": ctx.Permissions,
-				"path":        path,
-			})
+		if !hasAllPermissions(ctx.Permissions, requiredPermissions) {
+			log.Warn("Forbidden access attempt: insufficient permissions",
+				"user_id", ctx.UserID.String(),
+				"required", requiredPermissions,
+				"current_role", ctx.Role,
+				"user_permissions", ctx.Permissions,
+				"path", path,
+				"method", method,
+			)
 
 			return apperr.SendAppError(c, apperr.ErrForbidden)
 		}
 
-		c.Request().Header.Set("X-User-ID", ctx.UserID.String())
+		c.Request().Header.Set(constants.HeaderUserID, ctx.UserID.String())
 
 		return c.Next()
 	}
+}
+
+// hasAllPermissions sprawdza czy userPerms zawiera KAŻDE z requiredPerms
+func hasAllPermissions(userPerms []string, requiredPerms []string) bool {
+	for _, req := range requiredPerms {
+		if !slices.Contains(userPerms, req) {
+			return false
+		}
+	}
+	return true
 }

@@ -6,9 +6,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lib/pq"
+	"github.com/zerodayz7/platform/pkg/permissions"
+	"github.com/zerodayz7/platform/pkg/security"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/auth-service/internal/model"
-	"github.com/zerodayz7/platform/services/auth-service/internal/shared/security"
 	"gorm.io/gorm"
 )
 
@@ -54,12 +55,12 @@ func SeedUsers(db *gorm.DB) error {
 
 	// Standardowy zestaw uprawnień obywatelskich
 	userStandardPermissions := pq.StringArray{
-		model.PermReportsView,
-		model.PermMessagesRead,
-		model.PermMessagesWrite,
-		model.PermMessagingAccess,
-		model.PermDocumentsRead,
-		model.PermDocumentsWrite,
+		permissions.ReportsView,
+		permissions.MessagesRead,
+		permissions.MessagesWrite,
+		permissions.MessagingAccess,
+		permissions.DocumentsRead,
+		permissions.DocumentsWrite,
 	}
 
 	usersData := []struct {
@@ -70,12 +71,23 @@ func SeedUsers(db *gorm.DB) error {
 		// 1. Jan Kowalski (Root)
 		{
 			User: model.User{
-				ID:               testUserID1,
-				Username:         "root@plus.pl",
-				Email:            "root@plus.pl",
-				Password:         hashedPassword,
-				Role:             model.RoleRoot,
-				Permissions:      pq.StringArray{model.PermSystemAdmin, model.PermSystemManage, model.PermUsersRead, model.PermUsersWrite, model.PermUsersDelete, model.PermMessagesRead, model.PermMessagesWrite, model.PermMessagingAccess, model.PermDocumentsRead, model.PermDocumentsWrite},
+				ID:       testUserID1,
+				Username: "root@plus.pl",
+				Email:    "root@plus.pl",
+				Password: hashedPassword,
+				Role:     model.RoleRoot,
+				Permissions: pq.StringArray{
+					permissions.SystemAdmin,
+					permissions.SystemManage,
+					permissions.UsersRead,
+					permissions.UsersWrite,
+					permissions.UsersDelete,
+					permissions.MessagesRead,
+					permissions.MessagesWrite,
+					permissions.MessagingAccess,
+					permissions.DocumentsRead,
+					permissions.DocumentsWrite,
+				},
 				TwoFactorEnabled: true,
 			},
 			Agreement: model.UserAgreement{
@@ -95,12 +107,20 @@ func SeedUsers(db *gorm.DB) error {
 		// 2. Admin Systemowy
 		{
 			User: model.User{
-				ID:               adminUserID,
-				Username:         "admin@plus.pl",
-				Email:            "admin@plus.pl",
-				Password:         hashedPassword,
-				Role:             model.RoleAdmin,
-				Permissions:      pq.StringArray{model.PermUsersRead, model.PermUsersWrite, model.PermReportsView, model.PermReportsExport, model.PermMessagesRead, model.PermMessagesWrite, model.PermMessagingAccess},
+				ID:       adminUserID,
+				Username: "admin@plus.pl",
+				Email:    "admin@plus.pl",
+				Password: hashedPassword,
+				Role:     model.RoleAdmin,
+				Permissions: pq.StringArray{
+					permissions.UsersRead,
+					permissions.UsersWrite,
+					permissions.ReportsView,
+					permissions.ReportsExport,
+					permissions.MessagesRead,
+					permissions.MessagesWrite,
+					permissions.MessagingAccess,
+				},
 				TwoFactorEnabled: true,
 			},
 			Agreement: model.UserAgreement{

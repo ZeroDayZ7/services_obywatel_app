@@ -8,17 +8,15 @@ import (
 )
 
 type Handlers struct {
-	AuthHandler      *handler.AuthHandler
-	ResetHandler     *handler.ResetHandler
-	UserHandler      *handler.UserHandler
-	WellKnownHandler *handler.WellKnownHandler
+	AuthHandler  *handler.AuthHandler
+	ResetHandler *handler.ResetHandler
+	UserHandler  *handler.UserHandler
 }
 
 func NewHandlers(services *Services, cache *redis.Cache, cfg *config.Config) *Handlers {
 	return &Handlers{
-		AuthHandler:      handler.NewAuthHandler(services.AuthService, cache, cfg),
-		ResetHandler:     handler.NewResetHandler(services.PasswordResetService, cache),
-		UserHandler:      handler.NewUserHandler(services.UserService),
-		WellKnownHandler: handler.NewWellKnownHandler(services.KeyService),
+		AuthHandler:  handler.NewAuthHandler(services.AuthService, cache, cfg),
+		ResetHandler: handler.NewResetHandler(services.PasswordResetService, cache),
+		UserHandler:  handler.NewUserHandler(services.UserService),
 	}
 }

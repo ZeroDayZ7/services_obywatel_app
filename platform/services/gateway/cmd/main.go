@@ -14,6 +14,7 @@ import (
 	"github.com/zerodayz7/platform/services/gateway/app"
 	"github.com/zerodayz7/platform/services/gateway/config"
 	"github.com/zerodayz7/platform/services/gateway/internal/di"
+	"github.com/zerodayz7/platform/services/gateway/internal/hmac"
 	"github.com/zerodayz7/platform/services/gateway/internal/router"
 )
 
@@ -28,33 +29,56 @@ func main() {
 		os.Exit(1)
 	}
 
-	// 2. KMS setup & Public Key fetch
+	log := shared.InitLogger(config.AppConfig.Server.Env, false)
+
+	// Instancjonujemy magazyn kluczy HMAC w pamięci RAM
+	keyStore := hmac.NewGatewayKeyStore()
+
+	// =========================================================================
+	// 2. KMS SETUP & FETCH KEYS (JWT Public Key + Per-Service HMACs)
+	// =========================================================================
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	kmsCfg := kms.Config{
 		Endpoint:      config.AppConfig.KMS.Endpoint,
 		ServiceName:   config.AppConfig.Server.AppName,
-		ServiceSecret: config.AppConfig.KMS.InternalSecret,
+		ServiceSecret: config.AppConfig.KMS.ServiceSecret,
 	}
 
-	bootLog.Info("🔍 Checking KMS service health...")
+	log.Info("🔍 Sprawdzanie stanu serwisu KMS...")
 	if err := kms.HealthCheck(ctx, kmsCfg); err != nil {
-		bootLog.Error("❌ KMS Health Check failed", "error", err)
+		log.Error("❌ KMS Health Check nie powiódł się", "error", err)
 		os.Exit(1)
 	}
 
+	// 2a. Pobranie klucza publicznego do weryfikacji tokenów JWT użytkowników
+	log.Info("🔑 Pobieranie klucza publicznego JWT z KMS...")
 	pubKey, err := kms.FetchPublicKey(ctx, kmsCfg, "shared-jwt")
 	if err != nil {
-		bootLog.Error("❌ KMS Public Key fetch failed", "error", err)
+		log.Error("❌ KMS Public Key fetch failed", "error", err)
 		os.Exit(1)
 	}
-
 	config.AppConfig.JWT.AccessPublicKey = pubKey
-	bootLog.Info("✅ KMS Public Key loaded successfully")
+	log.Info("✅ KMS Public Key loaded successfully")
 
-	// 3. Application logger
-	log := shared.InitLogger(config.AppConfig.Server.Env, false)
+	// 2b. Pobranie dedykowanych kluczy HMAC dla poszczególnych mikrousług
+	log.Info("🔑 Pobieranie dedykowanych kluczy HMAC dla serwisów z KMS...")
+
+	for serviceID, targetKey := range config.AppConfig.HMAC.TargetKeys {
+		log.Info("🔑 Pobieranie klucza HMAC z KMS...", "service", serviceID, "target_key", targetKey)
+
+		// Pobieramy klucz oraz wersję (jeśli FetchSymmetricKey zwraca tylko secret, ustawiamy domyślną wersję 1)
+		hmacKey, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, targetKey, "HmacSha256")
+		if err != nil {
+			log.Error("❌ Nie udało się pobrać klucza HMAC z KMS", "service", serviceID, "target_key", targetKey, "error", err)
+			os.Exit(1)
+		}
+
+		// Zapisujemy klucz do bezpiecznego magazynu w RAM
+		keyStore.SetKey(serviceID, hmacKey, version)
+		log.Info("✅ Klucz HMAC pobrany pomyślnie", "service", serviceID, "version", version)
+	}
 
 	// 4. Telemetry setup
 	if config.AppConfig.OTEL.Enabled {
@@ -96,8 +120,8 @@ func main() {
 		}
 	}()
 
-	// 7. DI Container & App initialization
-	container := di.NewContainer(redisClient, eventPublisher, &config.AppConfig)
+	// 7. DI Container & App initialization (przekazujemy keyStore)
+	container := di.NewContainer(redisClient, eventPublisher, &config.AppConfig, keyStore)
 
 	gatewayApp, err := app.NewGatewayApp(container)
 	if err != nil {

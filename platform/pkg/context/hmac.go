@@ -1,5 +1,3 @@
-// cmdr: cmdr: context\hmac.go
-
 package context
 
 import (
@@ -8,27 +6,26 @@ import (
 	"encoding/base64"
 )
 
-func Sign(payload []byte, secret []byte) string {
-	h := hmac.New(sha256.New, secret)
+// ComputeMAC generuje surowy hash HMAC-SHA256 bez kodowania.
+func ComputeMAC(payload, key []byte) []byte {
+	h := hmac.New(sha256.New, key)
 	h.Write(payload)
-	return base64.StdEncoding.EncodeToString(h.Sum(nil))
+	return h.Sum(nil)
 }
 
-// func Verify(payload []byte, signature string, secret []byte) bool {
-// 	expected := Sign(payload, secret)
-// 	return hmac.Equal([]byte(expected), []byte(signature))
-// }
+// SignHMAC generuje podpis HMAC zarejestrowany w formacie Base64.
+func SignHMAC(payload, key []byte) string {
+	return base64.StdEncoding.EncodeToString(ComputeMAC(payload, key))
+}
 
-func Verify(payload []byte, signature string, secret []byte) bool {
-	expectedMAC, err := base64.StdEncoding.DecodeString(Sign(payload, secret))
-	if err != nil {
-		return false
-	}
-
+// VerifyHMAC sprawdza podpis w czasie stałym (constant-time), dekodując przychodzący podpis z Base64.
+func VerifyHMAC(payload []byte, signature string, key []byte) bool {
 	providedMAC, err := base64.StdEncoding.DecodeString(signature)
 	if err != nil {
 		return false
 	}
+
+	expectedMAC := ComputeMAC(payload, key)
 
 	return hmac.Equal(expectedMAC, providedMAC)
 }

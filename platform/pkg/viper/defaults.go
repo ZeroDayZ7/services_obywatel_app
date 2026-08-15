@@ -45,3 +45,22 @@ func SetRedisDefaults() {
 func SetSessionDefaults() {
 	viper.SetDefault("SESSION_TTL", "24h")
 }
+
+func SetKMSDefaults() {
+	viper.SetDefault("KMS_ENDPOINT", "http://127.0.0.1:8080")
+	viper.SetDefault("KMS_SERVICE_NAME", "auth-service")
+	viper.SetDefault("KMS_TIMEOUT", "2s")
+}
+
+func SetHMACDefaults() {
+	viper.SetDefault("HMAC_HEADER_NAME", "X-HMAC-Signature")
+}
+
+func SetGatewayHMACDefaults() {
+	SetHMACDefaults()
+	viper.SetDefault("HMAC_TARGET_KEYS", map[string]string{
+		"auth-service":         "hmac-gateway-auth",
+		"citizen-docs-service": "hmac-gateway-docs",
+		"messaging-service":    "hmac-gateway-messaging",
+	})
+}

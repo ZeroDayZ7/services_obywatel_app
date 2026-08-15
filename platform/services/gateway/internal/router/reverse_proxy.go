@@ -33,7 +33,7 @@ func ReverseProxyFiber(container *di.Container, target string) fiber.Handler {
 }
 
 // region ReverseProxy
-func ReverseProxy(container *di.Container, target string) fiber.Handler {
+func ReverseProxy(container *di.Container, serviceID string, target string) fiber.Handler {
 	log := shared.GetLogger()
 	return func(c *fiber.Ctx) error {
 		ctx, _ := c.Locals("requestContext").(*reqctx.RequestContext)
@@ -64,10 +64,17 @@ func ReverseProxy(container *di.Container, target string) fiber.Handler {
 				req.Header.Set(constants.HeaderDeviceFingerprint, ctx.DeviceID)
 			}
 
+			// Pobranie dedykowanego sekretu HMAC dla konkretnego serwisu
+			hmacSecret, _, ok := container.GetHMACKey(serviceID)
+			if !ok {
+				log.Error("Missing HMAC secret for target service", "service_id", serviceID)
+				return apperr.SendAppError(c, apperr.ErrInternal)
+			}
+
 			// PODPISYWANIE I PRZEKAZYWANIE KONTEKSTU DLA KAŻDEGO ŻĄDANIA
 			payload, err := reqctx.Encode(*ctx)
 			if err == nil {
-				sig := reqctx.Sign(payload, container.InternalSecret)
+				sig := reqctx.SignHMAC(payload, hmacSecret)
 				req.Header.Set(constants.HeaderInternalContext, base64.StdEncoding.EncodeToString(payload))
 				req.Header.Set(constants.HeaderInternalSignature, sig)
 			}
@@ -77,7 +84,7 @@ func ReverseProxy(container *di.Container, target string) fiber.Handler {
 	}
 }
 
-func ReverseProxySecure(container *di.Container, target string) fiber.Handler {
+func ReverseProxySecure(container *di.Container, serviceID string, target string) fiber.Handler {
 	log := shared.GetLogger()
 
 	return func(c *fiber.Ctx) error {
@@ -129,13 +136,20 @@ func ReverseProxySecure(container *di.Container, target string) fiber.Handler {
 		req.Header.Del(constants.HeaderAuth)
 		req.Header.Del(constants.HeaderCookie)
 
+		// Pobranie dedykowanego sekretu HMAC dla konkretnego serwisu
+		hmacSecret, _, ok := container.GetHMACKey(serviceID)
+		if !ok {
+			log.Error("Missing HMAC secret for target service", "service_id", serviceID)
+			return apperr.SendAppError(c, apperr.ErrInternal)
+		}
+
 		// --- Podpisany kontekst ---
 		payload, err := reqctx.Encode(*ctx)
 		if err != nil {
 			log.ErrorObj("Failed to encode request context", err)
 			return apperr.SendAppError(c, apperr.ErrInternal)
 		}
-		sig := reqctx.Sign(payload, container.InternalSecret)
+		sig := reqctx.SignHMAC(payload, hmacSecret)
 		req.Header.Set(constants.HeaderInternalContext, base64.StdEncoding.EncodeToString(payload))
 		req.Header.Set(constants.HeaderInternalSignature, sig)
 

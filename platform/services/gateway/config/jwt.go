@@ -6,24 +6,13 @@ import (
 	"github.com/zerodayz7/platform/pkg/shared"
 )
 
-// NewJWTConfig — konfiguracja middleware JWT dla Fiber
+// NewJWTConfig — konfiguracja middleware JWT dla Fiber z użyciem Ed25519 (EdDSA)
 func NewJWTConfig() jwtware.Config {
-	var signingKey jwtware.SigningKey
-
-	if len(AppConfig.JWT.AccessPublicKey) > 0 {
-		signingKey = jwtware.SigningKey{
+	return jwtware.Config{
+		SigningKey: jwtware.SigningKey{
 			JWTAlg: "EdDSA",
 			Key:    AppConfig.JWT.AccessPublicKey,
-		}
-	} else {
-		signingKey = jwtware.SigningKey{
-			JWTAlg: jwtware.HS256,
-			Key:    []byte(AppConfig.JWT.AccessSecret),
-		}
-	}
-
-	return jwtware.Config{
-		SigningKey:   signingKey,
+		},
 		ContextKey:   "user",
 		TokenLookup:  "header:Authorization",
 		AuthScheme:   "Bearer",

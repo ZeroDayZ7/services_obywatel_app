@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"fmt"
 	"strings"
 	"time"
 
@@ -16,18 +17,16 @@ import (
 	"github.com/zerodayz7/platform/pkg/rabbitmq"
 	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/schemas"
+	"github.com/zerodayz7/platform/pkg/security"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/auth-service/config"
 	"github.com/zerodayz7/platform/services/auth-service/internal/http"
 	"github.com/zerodayz7/platform/services/auth-service/internal/model"
 	repo "github.com/zerodayz7/platform/services/auth-service/internal/repository"
-	"github.com/zerodayz7/platform/services/auth-service/internal/shared/security"
 )
 
-// AuthService definiuje pełny kontrakt biznesowy modułu autoryzacji.
 // region interface
 type AuthService interface {
-	// Główne procesy BIZNESOWE (zostawiamy tylko to, co ma logikę)
 	AttemptLogin(ctx context.Context, email string, password []byte, fingerprint string) (*http.LoginResponse, error)
 	Register(username, email, rawPassword string) (*model.User, error)
 	UpdatePassword(ctx context.Context, userID uuid.UUID, newPassword string) error
@@ -39,12 +38,6 @@ type AuthService interface {
 	VerifyDeviceSignature(ctx context.Context, userID, challenge, signature, fingerprint string) (*http.LoginResponse, error)
 	GetProfile(ctx context.Context, userID uuid.UUID) (*http.UserProfileResponse, error)
 	UnpairDevice(ctx context.Context, userID uuid.UUID, deviceFingerprint, sessionID string, req schemas.UnpairDeviceRequest) error
-	// Narzędzia JWT
-	CreateAccessToken(userID uuid.UUID, fingerprint string) (string, string, error)
-	CreateRefreshToken(userID uuid.UUID, fingerprint string, deviceID *uuid.UUID) (*model.RefreshToken, error)
-	RevokeRefreshToken(token string) error
-	// Metody specyficzne dla logiki logowania
-	CanUserLogin(user *model.User) error
 }
 
 // region struct
@@ -189,7 +182,7 @@ func (s *authService) VerifyDeviceSignature(ctx context.Context, userIDStr, sess
 		return nil, err
 	}
 
-	accessToken, newSessionID, err := s.CreateAccessToken(user.ID, fingerprint)
+	accessToken, newSessionID, err := s.CreateAccessToken(ctx, user.ID, fingerprint)
 	if err != nil {
 		return nil, errors.ErrInternal
 	}
@@ -278,7 +271,7 @@ func (s *authService) RefreshToken(ctx context.Context, tokenStr string, fingerp
 	}
 
 	// 7. Generowanie NOWYCH tokenów (przypisujemy zweryfikowany device.ID)
-	accessToken, newSessionID, err := s.CreateAccessToken(user.ID, fingerprint)
+	accessToken, newSessionID, err := s.CreateAccessToken(ctx, user.ID, fingerprint)
 	if err != nil {
 		return nil, errors.ErrInternal
 	}
@@ -483,7 +476,7 @@ func (s *authService) RegisterDevice(ctx context.Context, userID uuid.UUID, sess
 
 	// 5. GENEROWANIE POŚWIADCZEŃ (Z przypisanym DeviceID do RefreshTokena)
 	log.DebugMap("[RegisterDevice] Generating AccessToken", map[string]any{"user_id": userID.String()})
-	accessToken, newSID, err := s.CreateAccessToken(userID, req.DeviceFingerprint)
+	accessToken, newSID, err := s.CreateAccessToken(ctx, userID, req.DeviceFingerprint)
 	if err != nil {
 		log.ErrorObj("[RegisterDevice] Failed to create access token", err)
 		return nil, errors.ErrInternal
@@ -617,7 +610,7 @@ func (s *authService) Verify2FA(ctx context.Context, token string, code []byte, 
 	user.LastIP = ip
 	_ = s.userRepo.Update(ctx, user)
 
-	setupToken, sessionID, err := s.CreateSetupToken(uid, fingerprint)
+	setupToken, sessionID, err := s.CreateSetupToken(ctx, uid, fingerprint)
 	if err != nil {
 		return nil, errors.ErrInternal
 	}
@@ -631,7 +624,7 @@ func (s *authService) Verify2FA(ctx context.Context, token string, code []byte, 
 	}
 
 	// 6. Generowanie Challenge (Ed25519)
-	challenge, err := shared.GenerateRandomChallenge(32)
+	challenge, err := security.GenerateRandomString(32)
 	if err != nil {
 		log.ErrorObj("Failed to generate secure challenge", err)
 		return nil, errors.ErrInternal
@@ -676,7 +669,7 @@ func (s *authService) Resend2FACode(ctx context.Context, email string, token str
 	}
 
 	// 3. Generujemy nowy bezpieczny kod OTP
-	code, err := shared.GenerateSecureOTP()
+	code, err := security.GenerateOTP(6)
 	if err != nil {
 		log.ErrorObj("Resend2FA: failed to generate OTP", err)
 		return errors.ErrInternal
@@ -731,13 +724,11 @@ func (s *authService) AttemptLogin(ctx context.Context, email string, password [
 
 	valid, err := security.VerifyPassword(password, user.Password, nil)
 	if err != nil || !valid {
-		// 1. Zwiększ licznik prób
 		attempts, incErr := s.userRepo.IncrementUserFailedLogin(user.ID)
 		if incErr != nil {
 			log.Error("Failed to increment failed attempts", incErr)
 		}
 
-		// 2. Sprawdź czy przekroczono próg (np. 5 prób)
 		if attempts >= 5 {
 			_ = s.userRepo.PermanentLock(user.ID)
 			return nil, errors.ErrAccountLocked
@@ -756,14 +747,14 @@ func (s *authService) AttemptLogin(ctx context.Context, email string, password [
 	if err == nil && device != nil && device.IsVerified && device.IsActive {
 
 		// 1. Najpierw bilet (SetupToken) i unikalne ID sesji (v7)
-		setupToken, sessionID, err := s.CreateSetupToken(user.ID, fingerprint)
+		setupToken, sessionID, err := s.CreateSetupToken(ctx, user.ID, fingerprint)
 		if err != nil {
 			log.ErrorObj("Failed to create setup token", err)
 			return nil, errors.ErrInternal
 		}
 
 		// 2. Generujemy challenge
-		challenge, err := shared.GenerateRandomChallenge(32)
+		challenge, err := security.GenerateRandomString(32)
 		if err != nil {
 			log.ErrorObj("Failed to generate challenge", err)
 			return nil, errors.ErrInternal
@@ -815,7 +806,7 @@ func (s *authService) AttemptLogin(ctx context.Context, email string, password [
 func (s *authService) prepare2FASession(ctx context.Context, user *model.User, fingerprint string) (*http.LoginResponse, error) {
 	log := shared.GetLogger()
 	// 1. Generujemy 6-cyfrowy kod (bezpiecznie)
-	code, err := shared.GenerateSecureOTP()
+	code, err := security.GenerateOTP(6)
 	if err != nil {
 		return nil, errors.ErrInternal
 	}
@@ -864,14 +855,16 @@ func (s *authService) prepare2FASession(ctx context.Context, user *model.User, f
 
 // region finalizeLogin
 func (s *authService) finalizeLogin(ctx context.Context, user *model.User, fingerprint string) (*http.LoginResponse, error) {
-	accessToken, sessionID, err := s.CreateAccessToken(user.ID, fingerprint)
+	accessToken, sessionID, err := s.CreateAccessToken(ctx, user.ID, fingerprint)
 	if err != nil {
 		return nil, errors.ErrInternal
 	}
 
+	hashedFpt := shared.HashSHA256(fingerprint)
+
 	sessionData := redis.UserSession{
 		UserID:      user.ID.String(),
-		Fingerprint: fingerprint,
+		Fingerprint: hashedFpt,
 		Role:        string(user.Role),
 		Permissions: []string(user.Permissions),
 	}
@@ -921,36 +914,60 @@ func (s *authService) UpdatePassword(ctx context.Context, userID uuid.UUID, newP
 }
 
 // region CreateAccessToken
-func (s *authService) CreateAccessToken(userID uuid.UUID, fingerprint string) (string, string, error) {
+func (s *authService) CreateAccessToken(ctx context.Context, userID uuid.UUID, fingerprint string) (string, string, error) {
 	sessionID := shared.GenerateSessionID()
 	claims := jwt.MapClaims{
 		"uid":   userID,
 		"sid":   sessionID,
-		"fpt":   fingerprint,
+		"fpt":   shared.HashSHA256(fingerprint),
 		"scope": constants.ScopeAccess.String(),
 	}
 
-	token, err := security.GenerateJWT(claims, s.cfg.JWT.AccessPrivateKey, s.cfg.JWT.AccessTTL)
-	return token, sessionID, err
+	var token string
+	var err error
+
+	switch s.cfg.JWT.SigningMode {
+	case "kms":
+		token, err = security.GenerateJWTViaKMS(ctx, s.cfg.ToKMSServiceConfig(), "shared-jwt", claims, s.cfg.JWT.AccessTTL)
+	default: // "local"
+		token, err = security.GenerateJWTLocal(claims, s.cfg.JWT.AccessTTL, s.cfg.JWT.AccessPrivateKey)
+	}
+
+	if err != nil {
+		return "", "", fmt.Errorf("auth: failed to generate access token (%s): %w", s.cfg.JWT.SigningMode, err)
+	}
+
+	return token, sessionID, nil
 }
 
 // region CreateSetupToken
-func (s *authService) CreateSetupToken(userID uuid.UUID, fingerprint string) (string, string, error) {
+func (s *authService) CreateSetupToken(ctx context.Context, userID uuid.UUID, fingerprint string) (string, string, error) {
 	sessionID := shared.GenerateSessionID()
 	claims := jwt.MapClaims{
 		"uid":   userID.String(),
 		"sid":   sessionID,
-		"fpt":   fingerprint,
+		"fpt":   shared.HashSHA256(fingerprint),
 		"scope": constants.ScopeDeviceVerify.String(),
 	}
 
-	token, err := security.GenerateJWT(
-		claims,
-		s.cfg.JWT.AccessPrivateKey,
-		15*time.Minute,
-	)
+	var token string
+	var err error
 
-	return token, sessionID, err
+	// Używamy tego samego mechanizmu co przy AccessTokenie (z możliwością osobnego TTL w przyszłości)
+	setupTTL := 15 * time.Minute
+
+	switch s.cfg.JWT.SigningMode {
+	case "kms":
+		token, err = security.GenerateJWTViaKMS(ctx, s.cfg.ToKMSServiceConfig(), "shared-jwt", claims, setupTTL)
+	default: // "local"
+		token, err = security.GenerateJWTLocal(claims, setupTTL, s.cfg.JWT.AccessPrivateKey)
+	}
+
+	if err != nil {
+		return "", "", fmt.Errorf("auth: failed to generate setup token (%s): %w", s.cfg.JWT.SigningMode, err)
+	}
+
+	return token, sessionID, nil
 }
 
 // region CreateRefreshToken
@@ -960,14 +977,11 @@ func (s *authService) CreateRefreshToken(userID uuid.UUID, fingerprint string, d
 		return nil, err
 	}
 
-	hash := sha256.Sum256([]byte(rawToken))
-	hashedTokenHex := hex.EncodeToString(hash[:])
-
 	rt := &model.RefreshToken{
 		UserID:            userID,
 		DeviceID:          deviceID,
-		DeviceFingerprint: fingerprint,
-		Token:             hashedTokenHex,
+		DeviceFingerprint: shared.HashSHA256(fingerprint),
+		Token:             shared.HashSHA256(rawToken),
 		ExpiresAt:         time.Now().Add(s.cfg.JWT.RefreshTTL),
 		Revoked:           false,
 	}
@@ -976,7 +990,6 @@ func (s *authService) CreateRefreshToken(userID uuid.UUID, fingerprint string, d
 		return nil, err
 	}
 
-	// Zwracamy obiekt z niezhaszowanym tokenem dla klienta
 	rt.Token = rawToken
 	return rt, nil
 }

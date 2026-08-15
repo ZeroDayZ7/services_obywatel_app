@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 
+	"github.com/zerodayz7/platform/pkg/permissions"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/auth-service/internal/model"
 	"gorm.io/gorm"
@@ -25,13 +26,13 @@ func SeedPermissions(db *gorm.DB) error {
 	permissions := []model.AvailablePermission{
 		// Moduł Systemowy
 		{
-			Key:         model.PermSystemAdmin,
+			Key:         permissions.DocumentsRead,
 			Department:  "SYSTEM",
 			Description: "Pełne uprawnienia administracyjne do całego systemu",
 			IsSpecial:   true,
 		},
 		{
-			Key:         model.PermSystemManage,
+			Key:         permissions.DocumentsRead,
 			Department:  "SYSTEM",
 			Description: "Zarządzanie konfiguracją i parametrami systemowymi",
 			IsSpecial:   true,
@@ -39,19 +40,19 @@ func SeedPermissions(db *gorm.DB) error {
 
 		// Moduł Użytkowników
 		{
-			Key:         model.PermUsersRead,
+			Key:         permissions.DocumentsRead,
 			Department:  "USERS",
 			Description: "Odczyt listy i szczegółów użytkowników",
 			IsSpecial:   false,
 		},
 		{
-			Key:         model.PermUsersWrite,
+			Key:         permissions.DocumentsRead,
 			Department:  "USERS",
 			Description: "Tworzenie oraz edycja kont użytkowników",
 			IsSpecial:   false,
 		},
 		{
-			Key:         model.PermUsersDelete,
+			Key:         permissions.DocumentsRead,
 			Department:  "USERS",
 			Description: "Trwałe usuwanie lub deaktywacja użytkowników",
 			IsSpecial:   true,
@@ -59,13 +60,13 @@ func SeedPermissions(db *gorm.DB) error {
 
 		// Moduł Raportów
 		{
-			Key:         model.PermReportsView,
+			Key:         permissions.DocumentsRead,
 			Department:  "REPORTS",
 			Description: "Przeglądanie raportów i statystyk systemowych",
 			IsSpecial:   false,
 		},
 		{
-			Key:         model.PermReportsExport,
+			Key:         permissions.DocumentsRead,
 			Department:  "REPORTS",
 			Description: "Eksport danych raportowych do plików zewnętrznych",
 			IsSpecial:   false,

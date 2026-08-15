@@ -49,7 +49,7 @@ func (s *citizenService) CreateProfile(ctx context.Context, userID uuid.UUID, da
 	}
 
 	hash := sha256.New()
-	hash.Write([]byte(data.PESEL + s.cfg.Internal.DocsPeselSalt))
+	hash.Write([]byte(data.PESEL + s.cfg.Security.DocsPeselSalt))
 	peselHash := hex.EncodeToString(hash.Sum(nil))
 
 	profile := &model.CitizenProfile{
@@ -61,4 +61,5 @@ func (s *citizenService) CreateProfile(ctx context.Context, userID uuid.UUID, da
 
 	return s.repo.Create(ctx, profile)
 }
+
 // #endregion

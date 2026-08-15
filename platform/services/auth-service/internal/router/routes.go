@@ -17,8 +17,6 @@ func SetupRoutes(app *fiber.App, container *di.Container) {
 
 	health.RegisterRoutes(app, checker)
 
-	SetupWellKnownRoutes(app, container.Handlers.WellKnownHandler)
-
 	SetupAuthRoutes(app, container.Handlers.AuthHandler, container.Handlers.ResetHandler)
 	SetupUserRoutes(app, container.Handlers.UserHandler)
 

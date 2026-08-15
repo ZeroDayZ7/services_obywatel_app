@@ -6,18 +6,17 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2/middleware/session"
+	"github.com/zerodayz7/platform/pkg/kms"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/pkg/viper"
 )
 
 type JWTConfig struct {
+	SigningMode      string             `mapstructure:"JWT_SIGNING_MODE"`
 	KeyID            string             `mapstructure:"JWT_KEY_ID"`
-	AccessSecret     string             `mapstructure:"JWT_ACCESS_SECRET" validate:"omitempty,min=16"`
-	RefreshSecret    string             `mapstructure:"JWT_REFRESH_SECRET" validate:"required,min=16"`
 	AccessTTL        time.Duration      `mapstructure:"JWT_ACCESS_TTL" validate:"required"`
 	RefreshTTL       time.Duration      `mapstructure:"JWT_REFRESH_TTL" validate:"required"`
 	AccessPrivateKey ed25519.PrivateKey `mapstructure:"-"`
-	AccessPublicKey  ed25519.PublicKey  `mapstructure:"-"`
 }
 
 type Config struct {
@@ -33,6 +32,15 @@ type Config struct {
 	Shutdown time.Duration                `mapstructure:"SHUTDOWN_TIMEOUT" validate:"required"`
 }
 
+// ToSDKConfig zwraca konfigurację KMS dla komunikacji miedzy-serwisowej
+func (c *Config) ToKMSServiceConfig() kms.Config {
+	return kms.Config{
+		Endpoint:      c.KMS.Endpoint,
+		ServiceName:   c.Server.AppName,
+		ServiceSecret: c.KMS.ServiceSecret,
+	}
+}
+
 var (
 	AppConfig Config
 	Store     *session.Store
@@ -43,6 +51,7 @@ func LoadConfigGlobal() error {
 
 	viper.SetDBDefaults()
 	viper.SetRedisDefaults()
+	viper.SetKMSDefaults()
 
 	if err := viper.InitConfig(&AppConfig, "auth-service"); err != nil {
 		return fmt.Errorf("failed to initialize auth-service config: %w", err)

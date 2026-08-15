@@ -1,6 +1,6 @@
 // cmdr: redis/constants.go
 
-package redis
+package constants
 
 const (
 	SessionPrefix      = "session:"       // Dla aktywnych sesji użytkowników

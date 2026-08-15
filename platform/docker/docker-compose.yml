@@ -99,7 +99,7 @@ services:
     container_name: db-audit
     environment:
       POSTGRES_USER: ${AUDIT_DB_USER:-audit_user}
-      POSTGRES_DB: ${AUDIT_DB_NAME:-audit_db}
+      POSTGRES_DB: ${AUDIT_DB_NAME:-audit_database}
       POSTGRES_PASSWORD_FILE: /run/secrets/audit_db_pass
     secrets:
       - audit_db_pass
@@ -121,7 +121,7 @@ services:
     container_name: db-messaging
     environment:
       POSTGRES_USER: ${MESSAGING_DB_USER:-messaging_user}
-      POSTGRES_DB: ${MESSAGING_DB_NAME:-messaging_db}
+      POSTGRES_DB: ${MESSAGING_DB_NAME:-messaging_database}
       POSTGRES_PASSWORD_FILE: /run/secrets/messaging_db_pass
     secrets:
       - messaging_db_pass

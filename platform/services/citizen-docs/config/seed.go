@@ -46,7 +46,7 @@ func SeedData(db *gorm.DB) error {
 	log.Info("[SEED] Rozpoczynam rozbudowane zasiewanie bazy citizen-docs...")
 
 	now := time.Now()
-	seedSecret := []byte(AppConfig.Internal.DocsPeselSalt)
+	seedSecret := []byte(AppConfig.Security.DocsPeselSalt)
 
 	// ==========================================
 	// PROFIL 1: Główny użytkownik testowy (Jan Kowalski)
