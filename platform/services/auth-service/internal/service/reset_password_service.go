@@ -11,9 +11,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/pkg/errors"
 	"github.com/zerodayz7/platform/pkg/redis"
-	"github.com/zerodayz7/platform/pkg/shared"
+	"github.com/zerodayz7/platform/pkg/security"
 	"github.com/zerodayz7/platform/services/auth-service/internal/repository"
-	"github.com/zerodayz7/platform/services/auth-service/internal/shared/security"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -68,8 +67,13 @@ func (s *passwordResetService) StartResetProcess(ctx context.Context, agreementN
 		return "", errors.ErrEmailIsSendIfExists
 	}
 
-	token := shared.GenerateUuidV7()
-	code, err := shared.GenerateSecureOTP()
+	// Token sesji resetu jako cryptographically secure random string (nie UUID v7)
+	token, err := security.GenerateRandomString(32)
+	if err != nil {
+		return "", errors.ErrInternal
+	}
+
+	code, err := security.GenerateOTP(6)
 	if err != nil {
 		return "", errors.ErrInternal
 	}
@@ -112,8 +116,14 @@ func (s *passwordResetService) VerifyCode(ctx context.Context, token, code strin
 		return nil, errors.ErrInvalidResetCode
 	}
 
+	// Challenge po zweryfikowaniu kodu OTP również jako bezpieczny losowy string
+	challenge, err := security.GenerateRandomString(32)
+	if err != nil {
+		return nil, errors.ErrInternal
+	}
+
 	session.Verified = true
-	session.Challenge = shared.GenerateUuidV7()
+	session.Challenge = challenge
 	if err := s.saveSession(ctx, token, session); err != nil {
 		return nil, errors.ErrInternal
 	}

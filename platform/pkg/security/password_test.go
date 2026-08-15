@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/zerodayz7/platform/services/auth-service/internal/shared/security"
+	"github.com/zerodayz7/platform/pkg/security"
 )
 
 func TestHashAndVerifyPassword(t *testing.T) {

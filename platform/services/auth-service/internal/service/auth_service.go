@@ -16,12 +16,12 @@ import (
 	"github.com/zerodayz7/platform/pkg/rabbitmq"
 	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/schemas"
+	"github.com/zerodayz7/platform/pkg/security"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/auth-service/config"
 	"github.com/zerodayz7/platform/services/auth-service/internal/http"
 	"github.com/zerodayz7/platform/services/auth-service/internal/model"
 	repo "github.com/zerodayz7/platform/services/auth-service/internal/repository"
-	"github.com/zerodayz7/platform/services/auth-service/internal/shared/security"
 )
 
 // AuthService definiuje pełny kontrakt biznesowy modułu autoryzacji.
@@ -631,7 +631,7 @@ func (s *authService) Verify2FA(ctx context.Context, token string, code []byte, 
 	}
 
 	// 6. Generowanie Challenge (Ed25519)
-	challenge, err := shared.GenerateRandomChallenge(32)
+	challenge, err := security.GenerateRandomString(32)
 	if err != nil {
 		log.ErrorObj("Failed to generate secure challenge", err)
 		return nil, errors.ErrInternal
@@ -676,7 +676,7 @@ func (s *authService) Resend2FACode(ctx context.Context, email string, token str
 	}
 
 	// 3. Generujemy nowy bezpieczny kod OTP
-	code, err := shared.GenerateSecureOTP()
+	code, err := security.GenerateOTP(6)
 	if err != nil {
 		log.ErrorObj("Resend2FA: failed to generate OTP", err)
 		return errors.ErrInternal
@@ -761,7 +761,7 @@ func (s *authService) AttemptLogin(ctx context.Context, email string, password [
 		}
 
 		// 2. Generujemy challenge
-		challenge, err := shared.GenerateRandomChallenge(32)
+		challenge, err := security.GenerateRandomString(32)
 		if err != nil {
 			log.ErrorObj("Failed to generate challenge", err)
 			return nil, errors.ErrInternal
@@ -813,7 +813,7 @@ func (s *authService) AttemptLogin(ctx context.Context, email string, password [
 func (s *authService) prepare2FASession(ctx context.Context, user *model.User, fingerprint string) (*http.LoginResponse, error) {
 	log := shared.GetLogger()
 	// 1. Generujemy 6-cyfrowy kod (bezpiecznie)
-	code, err := shared.GenerateSecureOTP()
+	code, err := security.GenerateOTP(6)
 	if err != nil {
 		return nil, errors.ErrInternal
 	}

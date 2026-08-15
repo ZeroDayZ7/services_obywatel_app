@@ -7,9 +7,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/lib/pq"
 	"github.com/zerodayz7/platform/pkg/permissions"
+	"github.com/zerodayz7/platform/pkg/security"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/auth-service/internal/model"
-	"github.com/zerodayz7/platform/services/auth-service/internal/shared/security"
 	"gorm.io/gorm"
 )
 
