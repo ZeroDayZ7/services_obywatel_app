@@ -36,7 +36,7 @@ func (h *CitizenHandler) Register(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *CitizenHandler) GetByID(w http.ResponseWriter, r *http.Request) {
-	idStr := r.PathValue("user_id") // Natywne dopasowanie ścieżek Go 1.22+
+	idStr := r.PathValue("user_id")
 	userID, err := uuid.Parse(idStr)
 	if err != nil {
 		http.Error(w, "Invalid user_id UUID", http.StatusBadRequest)
