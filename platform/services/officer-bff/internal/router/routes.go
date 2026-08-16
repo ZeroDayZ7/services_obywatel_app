@@ -11,29 +11,40 @@ import (
 func NewRouter(c *di.Container) http.Handler {
 	mux := http.NewServeMux()
 
+	// 1. Endpointy publiczne (nie wymagają HMAC)
 	mux.HandleFunc("GET /health", httpserver.NewHealthHandler())
 
-	// 1. LOGIN: Proxy do auth-service + konwersja tokenów JSON na ciasteczka
+	// 2. Proxies / Trasy z Gatewaya
 	loginProxy, err := NewAuthLoginProxy(c.Config.AuthServiceURL)
 	if err != nil {
 		panic(err)
 	}
 	mux.HandleFunc("POST /api/v1/auth/login", loginProxy)
 
-	// 2. LOGOUT: Zwykłe proxy przekazujące żądanie wprost do auth-service
 	logoutProxy, err := NewSingleHostProxy(c.Config.AuthServiceURL)
 	if err != nil {
 		panic(err)
 	}
 	mux.HandleFunc("POST /api/v1/auth/logout", logoutProxy)
 
-	// 3. REJESTRACJA: Dedykowana logika BFF (wywołuje auth-service i identity-service)
+	// 3. Dedykowane handlery
 	mux.HandleFunc("POST /api/v1/official/citizens/register", c.OfficialHandler.RegisterCitizen)
 
-	// --- LOGGING MIDDLEWARE ---
-	// Pobieramy instancję loggera z shared (lub c.Logger jeśli przekazujesz go w DI)
+	// --- SETUP MIDDLEWARE ---
 	log := shared.GetLogger()
 
-	// Owijamy całe 'mux' naszym middleware i zwracamy powiązaną strukturę http.Handler
-	return httpserver.LoggerMiddleware(log)(mux)
+	// Pobieramy surowy klucz bajtowy z pobranej wcześniej konfiguracji KMS
+	hmacKey := []byte(c.Config.Internal.HMACSecret)
+
+	// Tworzymy middleware HMAC
+	hmacMiddleware := httpserver.InternalAuthMiddleware(hmacKey)
+	loggerMiddleware := httpserver.LoggerMiddleware(log)
+
+	// Owijamy router: najpierw Logger, potem HMAC Auth
+	// Przeływ: Request -> Logger -> HMAC Auth -> Mux (Endpoint)
+	var handler http.Handler = mux
+	handler = hmacMiddleware(handler)
+	handler = loggerMiddleware(handler)
+
+	return handler
 }

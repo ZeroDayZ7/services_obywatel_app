@@ -63,8 +63,6 @@ func main() {
 	log.Info("✅ KMS Public Key loaded successfully")
 
 	// 2b. Pobranie dedykowanych kluczy HMAC dla poszczególnych mikrousług
-	log.Info("🔑 Pobieranie dedykowanych kluczy HMAC dla serwisów z KMS...")
-
 	for serviceID, targetKey := range config.AppConfig.HMAC.TargetKeys {
 		log.Info("🔑 Pobieranie klucza HMAC z KMS...", "service", serviceID, "target_key", targetKey)
 
@@ -77,7 +75,6 @@ func main() {
 
 		// Zapisujemy klucz do bezpiecznego magazynu w RAM
 		keyStore.SetKey(serviceID, hmacKey, version)
-		log.Info("✅ Klucz HMAC pobrany pomyślnie", "service", serviceID, "version", version)
 	}
 
 	// 4. Telemetry setup

@@ -58,10 +58,5 @@ func SetHMACDefaults() {
 
 func SetGatewayHMACDefaults() {
 	SetHMACDefaults()
-	viper.SetDefault("HMAC_TARGET_KEYS", map[string]string{
-		"auth-service":         "hmac-gateway-auth",
-		"identity-service":     "hmac-gateway-identity",
-		"citizen-docs-service": "hmac-gateway-docs",
-		"messaging-service":    "hmac-gateway-messaging",
-	})
+	viper.SetDefault("HMAC_TARGET_KEYS", map[string]string{})
 }

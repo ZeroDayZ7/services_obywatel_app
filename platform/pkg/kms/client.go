@@ -279,7 +279,6 @@ func FetchSymmetricKeyWithVersion(ctx context.Context, cfg Config, targetService
 		return nil, 0, fmt.Errorf("kms: key_bytes is empty in KMS response payload")
 	}
 
-	shared.GetLogger().Info(fmt.Sprintf("[KMS-CLIENT] ✅ Pomyślnie pobrano klucz SYMETRYCZNY dla targetu '%s' [%s] (wersja %d)", out.ServiceID, out.Algorithm, out.Version))
 	return out.KeyBytes, uint32(out.Version), nil
 }
 
