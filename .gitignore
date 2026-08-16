@@ -13,3 +13,5 @@ bin/*
 **/combined.txt
 **/temp.md
 **/pgadmin_data/
+*.drawio.bkp
+.$*.bkp
