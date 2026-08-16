@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2/middleware/session"
+	spfViper "github.com/spf13/viper"
 	"github.com/zerodayz7/platform/pkg/kms"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/pkg/viper"
@@ -19,20 +20,25 @@ type JWTConfig struct {
 	AccessPrivateKey ed25519.PrivateKey `mapstructure:"-"`
 }
 
-type Config struct {
-	Server   viper.ServerConfig           `mapstructure:",squash"`
-	Database viper.DBConfig               `mapstructure:",squash"`
-	Redis    viper.RedisConfig            `mapstructure:",squash"`
-	Session  viper.SessionConfig          `mapstructure:",squash"`
-	Internal viper.InternalSecurityConfig `mapstructure:",squash"`
-	OTEL     viper.OTELConfig             `mapstructure:",squash"`
-	RabbitMQ viper.RabbitMQConfig         `mapstructure:",squash"`
-	KMS      viper.KMSConfig              `mapstructure:",squash"`
-	JWT      JWTConfig                    `mapstructure:",squash"`
-	Shutdown time.Duration                `mapstructure:"SHUTDOWN_TIMEOUT" validate:"required"`
+type AuthHMACConfig struct {
+	HeaderName string            `mapstructure:"HMAC_HEADER_NAME"`
+	TargetKeys map[string]string `mapstructure:"HMAC_TARGET_KEYS"`
 }
 
-// ToSDKConfig zwraca konfigurację KMS dla komunikacji miedzy-serwisowej
+type Config struct {
+	Server   viper.ServerConfig   `mapstructure:",squash"`
+	Database viper.DBConfig       `mapstructure:",squash"`
+	Redis    viper.RedisConfig    `mapstructure:",squash"`
+	Session  viper.SessionConfig  `mapstructure:",squash"`
+	HMAC     AuthHMACConfig       `mapstructure:",squash"`
+	OTEL     viper.OTELConfig     `mapstructure:",squash"`
+	RabbitMQ viper.RabbitMQConfig `mapstructure:",squash"`
+	KMS      viper.KMSConfig      `mapstructure:",squash"`
+	JWT      JWTConfig            `mapstructure:",squash"`
+	Shutdown time.Duration        `mapstructure:"SHUTDOWN_TIMEOUT" validate:"required"`
+}
+
+// ToKMSServiceConfig zwraca konfigurację KMS dla komunikacji między-serwisowej
 func (c *Config) ToKMSServiceConfig() kms.Config {
 	return kms.Config{
 		Endpoint:      c.KMS.Endpoint,
@@ -52,6 +58,12 @@ func LoadConfigGlobal() error {
 	viper.SetDBDefaults()
 	viper.SetRedisDefaults()
 	viper.SetKMSDefaults()
+
+	// Domyślne mapowanie nadawców ruchu na nazwy kluczy w KMS
+	spfViper.SetDefault("HMAC_TARGET_KEYS", map[string]string{
+		"gateway":     "hmac-gateway-auth",
+		"officer-bff": "hmac-bff-auth",
+	})
 
 	if err := viper.InitConfig(&AppConfig, "auth-service"); err != nil {
 		return fmt.Errorf("failed to initialize auth-service config: %w", err)

@@ -2,12 +2,19 @@ package router
 
 import (
 	"bytes"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"time"
+
+	"github.com/zerodayz7/platform/pkg/constants"
+	"github.com/zerodayz7/platform/pkg/httpserver"
 )
 
 type tokenResponse struct {
@@ -15,7 +22,31 @@ type tokenResponse struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
-func NewSingleHostProxy(targetURL string) (http.HandlerFunc, error) {
+func signInternalContext(req *http.Request, keyStore *httpserver.KeyStore, targetServiceID string) {
+	internalCtx := req.Header.Get(constants.HeaderInternalContext)
+	if internalCtx == "" {
+		return
+	}
+
+	secret, _, ok := keyStore.GetKey(targetServiceID)
+	if !ok {
+		return
+	}
+
+	payload, err := base64.StdEncoding.DecodeString(internalCtx)
+	if err != nil {
+		return
+	}
+
+	mac := hmac.New(sha256.New, secret)
+	mac.Write(payload)
+	signature := hex.EncodeToString(mac.Sum(nil))
+
+	req.Header.Set(constants.HeaderInternalSignature, signature)
+	req.Header.Set("X-Internal-Service", "officer-bff")
+}
+
+func NewSingleHostProxy(targetURL, targetPath, targetServiceID string, keyStore *httpserver.KeyStore) (http.HandlerFunc, error) {
 	target, err := url.Parse(targetURL)
 	if err != nil {
 		return nil, err
@@ -23,16 +54,24 @@ func NewSingleHostProxy(targetURL string) (http.HandlerFunc, error) {
 
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	originalDirector := proxy.Director
+
 	proxy.Director = func(req *http.Request) {
 		originalDirector(req)
 		req.Header.Set("X-Forwarded-Host", req.Header.Get("Host"))
 		req.Host = target.Host
+
+		if targetPath != "" {
+			req.URL.Path = targetPath
+			req.URL.RawPath = targetPath
+		}
+
+		signInternalContext(req, keyStore, targetServiceID)
 	}
 
 	return proxy.ServeHTTP, nil
 }
 
-func NewAuthLoginProxy(authServiceURL string) (http.HandlerFunc, error) {
+func NewAuthLoginProxy(authServiceURL, targetPath string, keyStore *httpserver.KeyStore) (http.HandlerFunc, error) {
 	target, err := url.Parse(authServiceURL)
 	if err != nil {
 		return nil, err
@@ -40,10 +79,17 @@ func NewAuthLoginProxy(authServiceURL string) (http.HandlerFunc, error) {
 
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	originalDirector := proxy.Director
+
 	proxy.Director = func(req *http.Request) {
 		originalDirector(req)
+
 		req.Header.Set("X-Forwarded-Host", req.Header.Get("Host"))
 		req.Host = target.Host
+
+		req.URL.Path = targetPath
+		req.URL.RawPath = targetPath
+
+		signInternalContext(req, keyStore, "auth-service")
 	}
 
 	proxy.ModifyResponse = func(resp *http.Response) error {

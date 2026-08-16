@@ -5,6 +5,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/zerodayz7/platform/pkg/httpserver"
 	"github.com/zerodayz7/platform/pkg/kms"
 	"github.com/zerodayz7/platform/pkg/rabbitmq"
 	"github.com/zerodayz7/platform/pkg/redis"
@@ -30,13 +31,15 @@ func main() {
 
 	log := shared.InitLogger(config.AppConfig.Server.Env, false)
 
+	// Instancja RAM KeyStore do przechowywania kluczy dla akceptowanych nadawców
+	keyStore := httpserver.NewKeyStore()
+
 	// =========================================================================
-	// 2. KMS SETUP & BOOTSTRAP KEYS (JWT Private Key + Internal HMAC)
+	// 2. KMS SETUP & BOOTSTRAP KEYS (JWT Private Key + Internal HMAC Keys)
 	// =========================================================================
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Dedykowane konfiguracje KMS
 	kmsServiceCfg := config.AppConfig.ToKMSServiceConfig()
 
 	log.Info("🔍 Sprawdzanie stanu serwisu KMS...")
@@ -59,15 +62,18 @@ func main() {
 		log.Info("🛡️ [MODE: KMS] Tokeny będą podpisywane zdalnie przez API KMS")
 	}
 
-	// 2b. Pobranie klucza HMAC do weryfikacji/podpisywania komunikacji między-serwisowej
-	log.Info("🔑 Pobieranie klucza 'hmac-gateway-auth' z KMS...")
-	internalHMACKey, err := kms.FetchSymmetricKey(ctx, kmsServiceCfg, "hmac-gateway-auth", "HmacSha256")
-	if err != nil {
-		log.Error("❌ Nie udało się pobrać klucza HMAC z KMS", "error", err)
-		os.Exit(1)
+	// 2b. Pobieranie kluczy HMAC dla dopuszczonych nadawców (Gateway, BFF itp.)
+	for senderID, targetKey := range config.AppConfig.HMAC.TargetKeys {
+		log.Info("🔑 Pobieranie klucza HMAC z KMS...", "sender", senderID, "target_key", targetKey)
+
+		hmacKey, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsServiceCfg, targetKey, "HmacSha256")
+		if err != nil {
+			log.Error("❌ Nie udało się pobrać klucza HMAC z KMS", "sender", senderID, "target_key", targetKey, "error", err)
+			os.Exit(1)
+		}
+
+		keyStore.SetKey(senderID, hmacKey, version)
 	}
-	config.AppConfig.Internal.HMACSecret = string(internalHMACKey)
-	log.Info("✅ Klucz HMAC komunikacji wewnętrznej pobrany pomyślnie")
 
 	// 4. Telemetry (Tracer)
 	if config.AppConfig.OTEL.Enabled {
@@ -113,8 +119,8 @@ func main() {
 		}
 	}()
 
-	// 8. DI Container & App Setup
-	container := di.NewContainer(db, redisClient, eventPublisher, &config.AppConfig)
+	// 8. DI Container & App Setup (Przekazujemy keyStore)
+	container := di.NewContainer(db, redisClient, eventPublisher, &config.AppConfig, keyStore)
 	authApp := app.NewAuthApp(container)
 
 	router.SetupRoutes(authApp, container)

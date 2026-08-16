@@ -11,17 +11,17 @@ import (
 func NewRouter(c *di.Container) http.Handler {
 	mux := http.NewServeMux()
 
-	// 1. Endpointy publiczne (nie wymagają HMAC)
+	// 1. Endpointy publiczne
 	mux.HandleFunc("GET /health", httpserver.NewHealthHandler())
 
-	// 2. Proxies / Trasy z Gatewaya
-	loginProxy, err := NewAuthLoginProxy(c.Config.AuthServiceURL)
+	// 2. Proxies do AuthService (przekazujemy targetServiceID oraz keyStore)
+	loginProxy, err := NewAuthLoginProxy(c.Config.AuthServiceURL, "/auth/login", c.KeyStore)
 	if err != nil {
 		panic(err)
 	}
-	mux.HandleFunc("POST /api/v1/auth/login", loginProxy)
+	mux.HandleFunc("POST /api/v1/official/auth/login", loginProxy)
 
-	logoutProxy, err := NewSingleHostProxy(c.Config.AuthServiceURL)
+	logoutProxy, err := NewSingleHostProxy(c.Config.AuthServiceURL, "/auth/logout", "auth-service", c.KeyStore)
 	if err != nil {
 		panic(err)
 	}
@@ -33,15 +33,17 @@ func NewRouter(c *di.Container) http.Handler {
 	// --- SETUP MIDDLEWARE ---
 	log := shared.GetLogger()
 
-	// Pobieramy surowy klucz bajtowy z pobranej wcześniej konfiguracji KMS
-	hmacKey := []byte(c.Config.Internal.HMACSecret)
+	// Pobieramy klucz weryfikacji przychodzącego ruchu z Gatewaya (hmac-gateway-officer-bff)
+	gwSecret, _, ok := c.KeyStore.GetKey("gateway-service")
+	if !ok {
+		log.Warn("⚠️ Brak klucza HMAC dla gateway-service w KeyStore!")
+	}
 
-	// Tworzymy middleware HMAC
-	hmacMiddleware := httpserver.InternalAuthMiddleware(hmacKey)
+	// Tworzymy middleware HMAC dla ruchu wchodzącego
+	hmacMiddleware := httpserver.InternalAuthMiddleware(gwSecret)
 	loggerMiddleware := httpserver.LoggerMiddleware(log)
 
-	// Owijamy router: najpierw Logger, potem HMAC Auth
-	// Przeływ: Request -> Logger -> HMAC Auth -> Mux (Endpoint)
+	// Przeływ: Request -> Logger -> HMAC Auth -> Mux
 	var handler http.Handler = mux
 	handler = hmacMiddleware(handler)
 	handler = loggerMiddleware(handler)

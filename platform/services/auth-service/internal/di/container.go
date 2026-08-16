@@ -1,6 +1,7 @@
 package di
 
 import (
+	"github.com/zerodayz7/platform/pkg/httpserver"
 	"github.com/zerodayz7/platform/pkg/rabbitmq"
 	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/services/auth-service/config"
@@ -14,7 +15,7 @@ type Container struct {
 	Redis          *redis.Client
 	Cache          *redis.Cache
 	EventPublisher rabbitmq.EventPublisher
-	InternalSecret []byte
+	KeyStore       *httpserver.KeyStore
 	Config         *config.Config
 }
 
@@ -23,6 +24,7 @@ func NewContainer(
 	redisClient *redis.Client,
 	eventPublisher rabbitmq.EventPublisher,
 	cfg *config.Config,
+	keyStore *httpserver.KeyStore,
 ) *Container {
 	cache := redis.NewCache(
 		redisClient,
@@ -40,7 +42,7 @@ func NewContainer(
 		Redis:          redisClient,
 		Cache:          cache,
 		EventPublisher: eventPublisher,
-		InternalSecret: []byte(cfg.Internal.HMACSecret),
+		KeyStore:       keyStore,
 		Config:         cfg,
 	}
 }
