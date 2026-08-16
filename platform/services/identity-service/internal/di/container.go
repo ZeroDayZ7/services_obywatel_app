@@ -11,27 +11,22 @@ import (
 type Container struct {
 	Config         *config.Config
 	DB             *pgxpool.Pool
-	HealthHandler  *handler.HealthHandler
 	CitizenHandler *handler.CitizenHandler
 }
 
 func BuildContainer(app *config.App) *Container {
 	// 1. Repositories
-	healthRepo := repository.NewHealthRepository(app.DB)
 	citizenRepo := repository.NewCitizenRepository(app.DB)
 
 	// 2. Services
-	healthSvc := service.NewHealthService(healthRepo)
 	citizenSvc := service.NewCitizenService(citizenRepo)
 
 	// 3. Handlers
-	healthHdl := handler.NewHealthHandler(healthSvc)
 	citizenHdl := handler.NewCitizenHandler(citizenSvc)
 
 	return &Container{
 		Config:         app.Config,
 		DB:             app.DB,
-		HealthHandler:  healthHdl,
 		CitizenHandler: citizenHdl,
 	}
 }
