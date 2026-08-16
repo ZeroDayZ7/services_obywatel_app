@@ -9,4 +9,5 @@ use (
 	./services/notification-service
 	./services/version-service
 	./services/messaging-service
+	./services/identity-service
 )

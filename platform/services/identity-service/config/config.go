@@ -1,31 +1,36 @@
 package config
 
 import (
-	"os"
+	"fmt"
+	"time"
 
-	"github.com/joho/godotenv"
+	"github.com/zerodayz7/platform/pkg/shared"
+	"github.com/zerodayz7/platform/pkg/viper"
 )
 
 type Config struct {
-	AppName string
-	Port    string
-	Env     string
+	Server   viper.ServerConfig           `mapstructure:",squash"`
+	Database viper.DBConfig               `mapstructure:",squash"`
+	Redis    viper.RedisConfig            `mapstructure:",squash"`
+	RabbitMQ viper.RabbitMQConfig         `mapstructure:",squash"`
+	Internal viper.InternalSecurityConfig `mapstructure:",squash"`
+	OTEL     viper.OTELConfig             `mapstructure:",squash"`
+	Shutdown time.Duration                `mapstructure:"SHUTDOWN_TIMEOUT" validate:"required"`
 }
 
-func Load() *Config {
-	_ = godotenv.Load()
+var AppConfig Config
 
-	return &Config{
-		AppName: getEnv("APP_NAME", "service-template"),
-		Port:    getEnv("PORT", "8080"),
-		Env:     getEnv("ENV", "development"),
-	}
-}
+func LoadConfigGlobal() error {
+	log := shared.GetLogger()
 
-func getEnv(key string, fallback string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
+	viper.SetBaseDefaults("citizen-service")
+	viper.SetDBDefaults()
+	viper.SetRedisDefaults()
+
+	if err := viper.InitConfig(&AppConfig, "citizen-service"); err != nil {
+		return fmt.Errorf("failed to initialize citizen-service config: %w", err)
 	}
 
-	return fallback
+	log.Info("Citizen-Service configuration loaded successfully")
+	return nil
 }

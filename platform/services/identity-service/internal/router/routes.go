@@ -3,13 +3,18 @@ package router
 import (
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
+	"github.com/zerodayz7/services/identity-service/internal/di"
 )
 
-func NewRouter() http.Handler {
-	r := chi.NewRouter()
+func NewRouter(c *di.Container) http.Handler {
+	mux := http.NewServeMux()
 
-	r.Get("/health", health)
+	// Health check
+	mux.HandleFunc("GET /health", c.HealthHandler.Check)
 
-	return r
+	// Citizen API (Go 1.22+ Verb + Path Matching)
+	mux.HandleFunc("POST /api/v1/citizens", c.CitizenHandler.Register)
+	mux.HandleFunc("GET /api/v1/citizens/{user_id}", c.CitizenHandler.GetByID)
+
+	return mux
 }
