@@ -47,7 +47,7 @@ func main() {
 	// 3. Budowanie kontenera DI
 	container := di.BuildContainer(app)
 
-	// 4. Budowanie routera HTTP
+	// 4. Budowanie routera HTTP (sam kontener DI)
 	r := router.NewRouter(container)
 
 	// 5. Konfiguracja serwera HTTP

@@ -6,7 +6,7 @@
 !*.example       # e.g. .env.example, .env.dev.example
 
 # Ignore binary outputs
-bin/*
+**/bin/*
 
 # Ignore logs
 **/logs/

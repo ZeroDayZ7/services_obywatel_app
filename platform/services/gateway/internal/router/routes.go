@@ -16,10 +16,12 @@ func SetupRoutes(app *fiber.App, container *di.Container) {
 		Service: "gateway",
 		Version: container.Config.Server.AppVersion,
 		Upstreams: map[string]string{
-			"auth":      services.Auth + "/health",
-			"documents": services.Documents + "/health",
-			"notify":    services.Notify + "/health",
-			"messaging": services.Messaging + "/health",
+			"auth":       services.Auth + "/health",
+			"documents":  services.Documents + "/health",
+			"notify":     services.Notify + "/health",
+			"messaging":  services.Messaging + "/health",
+			"identity":   services.Identity + "/health",
+			"officerBFF": services.OfficerBFF + "/health",
 		},
 	}
 	health.RegisterRoutes(app, checker)
@@ -29,6 +31,7 @@ func SetupRoutes(app *fiber.App, container *di.Container) {
 	RegisterDocumentRoutes(app, container)
 	RegisterNotifyRoutes(app, container)
 	RegisterMessagingRoutes(app, container)
+	RegisterOfficerRoutes(app, container)
 
 	RegisterWsRoutes(app, container)
 
