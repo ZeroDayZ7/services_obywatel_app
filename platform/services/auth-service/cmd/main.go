@@ -64,8 +64,6 @@ func main() {
 
 	// 2b. Pobieranie kluczy HMAC dla dopuszczonych nadawców (Gateway, BFF itp.)
 	for senderID, targetKey := range config.AppConfig.HMAC.TargetKeys {
-		log.Info("🔑 Pobieranie klucza HMAC z KMS...", "sender", senderID, "target_key", targetKey)
-
 		hmacKey, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsServiceCfg, targetKey, "HmacSha256")
 		if err != nil {
 			log.Error("❌ Nie udało się pobrać klucza HMAC z KMS", "sender", senderID, "target_key", targetKey, "error", err)
@@ -73,6 +71,7 @@ func main() {
 		}
 
 		keyStore.SetKey(senderID, hmacKey, version)
+		log.Info("✅ Klucz HMAC załadowany", "service", senderID, "version", version)
 	}
 
 	// 4. Telemetry (Tracer)

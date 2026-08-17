@@ -42,8 +42,6 @@ func main() {
 
 	// 2a. Pobieranie kluczy HMAC w pętli dla wszystkich wymaganych relacji
 	for serviceID, targetKey := range config.AppConfig.HMAC.TargetKeys {
-		log.Info("🔑 Pobieranie klucza HMAC z KMS...", "service", serviceID, "target_key", targetKey)
-
 		hmacKey, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, targetKey, "HmacSha256")
 		if err != nil {
 			log.Error("❌ Nie udało się pobrać klucza HMAC z KMS", "service", serviceID, "target_key", targetKey, "error", err)
