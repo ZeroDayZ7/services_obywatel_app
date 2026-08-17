@@ -29,6 +29,9 @@ func AuthRedisMiddleware(rdb *redis.Client) fiber.Handler {
 			return apperr.SendAppError(c, apperr.ErrInvalidDeviceFingerprint)
 		}
 
+		// Haszujemy nagłówek przesłany przez klienta, aby porównywać hashe SHA-256
+		hashedClientFingerprint := shared.HashSHA256(clientFingerprint)
+
 		jwtPayload := c.Locals("user")
 		if jwtPayload == nil {
 			log.WarnMap("JWT payload missing in c.Locals('user')", map[string]any{"path": path})
@@ -68,7 +71,7 @@ func AuthRedisMiddleware(rdb *redis.Client) fiber.Handler {
 		}
 
 		sessionID, _ := claims["sid"].(string)
-		fullRedisKey := constants.SessionPrefix + sessionID
+		fullRedisKey := redisPrefix + sessionID
 
 		// LOG DIAGNOSTYCZNY - Sprawdzenie dokładnego klucza i scope
 		log.DebugMap("[AuthRedisMiddleware] Fetching session from Redis", map[string]any{
@@ -106,17 +109,17 @@ func AuthRedisMiddleware(rdb *redis.Client) fiber.Handler {
 			return apperr.SendAppError(c, apperr.ErrInternal)
 		}
 
-		if session.Fingerprint != clientFingerprint {
+		if session.Fingerprint != hashedClientFingerprint {
 			log.WarnMap("[AuthRedisMiddleware] Fingerprint mismatch", map[string]any{
 				"expected": session.Fingerprint,
-				"received": clientFingerprint,
+				"received": hashedClientFingerprint,
 			})
 			return apperr.SendAppError(c, apperr.ErrUntrustedDevice)
 		}
 
 		c.Locals("userID", session.UserID)
 		c.Locals("sessionID", sessionID)
-		c.Locals("deviceID", session.Fingerprint)
+		c.Locals("deviceID", hashedClientFingerprint)
 
 		return c.Next()
 	}

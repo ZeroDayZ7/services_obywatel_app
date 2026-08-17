@@ -16,6 +16,7 @@ func RegisterOfficerRoutes(app *fiber.App, container *di.Container) {
 	// 1. Auth urzędnika (przekierowanie do officer-bff w celu obsługi ciasteczek)
 	official.Post("/auth/login", ReverseProxy(container, ServiceOfficerBFF, target))
 	official.Get("/auth/me", ReverseProxy(container, ServiceOfficerBFF, target))
+	official.Post("/auth/refresh", ReverseProxy(container, ServiceOfficerBFF, target))
 	official.Post("/auth/logout", ReverseProxy(container, ServiceOfficerBFF, target))
 
 	// 2. Rejestracja obywatela (orkiestrowana w officer-bff)
