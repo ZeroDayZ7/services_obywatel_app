@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/zerodayz7/platform/pkg/constants"
@@ -17,11 +18,7 @@ import (
 	"github.com/zerodayz7/platform/pkg/shared"
 )
 
-type tokenResponse struct {
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
-}
-
+// signInternalContext podpisuje kontekst wewnętrzny HMAC dla komunikacji między mikroserwisami
 func signInternalContext(req *http.Request, keyStore *httpserver.KeyStore, targetServiceID string) {
 	log := shared.GetLogger()
 
@@ -51,6 +48,7 @@ func signInternalContext(req *http.Request, keyStore *httpserver.KeyStore, targe
 	req.Header.Set("X-Internal-Service", "officer-bff")
 }
 
+// NewSingleHostProxy tworzy standardowe proxy do dowolnego mikroserwisu
 func NewSingleHostProxy(targetURL, targetPath, targetServiceID string, keyStore *httpserver.KeyStore) (http.HandlerFunc, error) {
 	log := shared.GetLogger()
 
@@ -77,6 +75,8 @@ func NewSingleHostProxy(targetURL, targetPath, targetServiceID string, keyStore 
 	return proxy.ServeHTTP, nil
 }
 
+// NewAuthLoginProxy przechwytuje odpowiedź z auth-service, zapisuje tokeny w ciasteczkach HttpOnly
+// oraz wycina je z ciala odpowiedzi JSON zwracanej do przeglądarki.
 func NewAuthLoginProxy(authServiceURL, targetPath string, keyStore *httpserver.KeyStore) (http.HandlerFunc, error) {
 	log := shared.GetLogger()
 
@@ -108,17 +108,39 @@ func NewAuthLoginProxy(authServiceURL, targetPath string, keyStore *httpserver.K
 			}
 			_ = resp.Body.Close()
 
-			var tokens tokenResponse
-			if err := json.Unmarshal(body, &tokens); err == nil && tokens.AccessToken != "" {
-				setAuthCookie(resp, "access_token", tokens.AccessToken, 15*time.Minute)
-				if tokens.RefreshToken != "" {
-					setAuthCookie(resp, "refresh_token", tokens.RefreshToken, 7*24*time.Hour)
-				}
-			} else if err != nil {
-				log.Error("Błąd unmarshalingu tokenów w proxy", "error", err)
+			var responseData map[string]any
+			if err := json.Unmarshal(body, &responseData); err != nil {
+				log.Error("Błąd unmarshalingu odpowiedzi w proxy", "error", err)
+				resp.Body = io.NopCloser(bytes.NewReader(body))
+				return nil
 			}
 
-			resp.Body = io.NopCloser(bytes.NewReader(body))
+			// 1. Pobieramy tokeny
+			if accessToken, ok := responseData["access_token"].(string); ok && accessToken != "" {
+				setAuthCookie(resp, "access_token", accessToken, 15*time.Minute, "/")
+			}
+
+			if refreshToken, ok := responseData["refresh_token"].(string); ok && refreshToken != "" {
+				setAuthCookie(resp, "refresh_token", refreshToken, 7*24*time.Hour, "/api/v1/official/auth/refresh")
+			}
+
+			// 2. Wycinamy tokeny z ciała odpowiedzi JSON dla klienta (Angular)
+			delete(responseData, "access_token")
+			delete(responseData, "refresh_token")
+
+			// 3. Serializujemy oczyszczoną odpowiedź
+			cleanedBody, err := json.Marshal(responseData)
+			if err != nil {
+				log.Error("Błąd marshalingu oczyszczonej odpowiedzi w proxy", "error", err)
+				resp.Body = io.NopCloser(bytes.NewReader(body))
+				return nil
+			}
+
+			// 4. Podmieniamy ciało odpowiedzi oraz aktualizujemy nagłówek Content-Length
+			resp.Body = io.NopCloser(bytes.NewReader(cleanedBody))
+			resp.ContentLength = int64(len(cleanedBody))
+			resp.Header.Set("Content-Length", strconv.Itoa(len(cleanedBody)))
+
 			return nil
 		},
 	}
@@ -126,12 +148,60 @@ func NewAuthLoginProxy(authServiceURL, targetPath string, keyStore *httpserver.K
 	return proxy.ServeHTTP, nil
 }
 
-func setAuthCookie(resp *http.Response, name, value string, duration time.Duration) {
+// NewAuthLogoutProxy przekazuje żądanie wylogowania i czyści ciasteczka po stronie przeglądarki
+func NewAuthLogoutProxy(authServiceURL, targetPath string, keyStore *httpserver.KeyStore) (http.HandlerFunc, error) {
+	log := shared.GetLogger()
+
+	target, err := url.Parse(authServiceURL)
+	if err != nil {
+		log.Error("Błąd parsowania authServiceURL w NewAuthLogoutProxy", "url", authServiceURL, "error", err)
+		return nil, err
+	}
+
+	proxy := &httputil.ReverseProxy{
+		Rewrite: func(pr *httputil.ProxyRequest) {
+			pr.SetURL(target)
+			pr.SetXForwarded()
+
+			pr.Out.URL.Path = targetPath
+			pr.Out.URL.RawPath = targetPath
+
+			signInternalContext(pr.Out, keyStore, "auth-service")
+		},
+		ModifyResponse: func(resp *http.Response) error {
+			if resp.StatusCode == http.StatusOK {
+				clearAuthCookie(resp, "access_token")
+				clearAuthCookie(resp, "refresh_token")
+			}
+			return nil
+		},
+	}
+
+	return proxy.ServeHTTP, nil
+}
+
+// setAuthCookie ustawia bezpieczne ciasteczko HttpOnly
+func setAuthCookie(resp *http.Response, name, value string, duration time.Duration, path string) {
 	cookie := &http.Cookie{
 		Name:     name,
 		Value:    value,
-		Path:     "/",
+		Path:     path,
 		Expires:  time.Now().Add(duration),
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteStrictMode,
+	}
+	resp.Header.Add("Set-Cookie", cookie.String())
+}
+
+// clearAuthCookie unieważnia ciasteczko w przeglądarce
+func clearAuthCookie(resp *http.Response, name string) {
+	cookie := &http.Cookie{
+		Name:     name,
+		Value:    "",
+		Path:     "/",
+		Expires:  time.Unix(0, 0),
+		MaxAge:   -1,
 		HttpOnly: true,
 		Secure:   true,
 		SameSite: http.SameSiteStrictMode,
