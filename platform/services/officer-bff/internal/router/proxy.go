@@ -75,8 +75,13 @@ func NewSingleHostProxy(targetURL, targetPath, targetServiceID string, keyStore 
 	return proxy.ServeHTTP, nil
 }
 
+// NewReverseProxy tworzy zwykłe proxy przelotowe (np. dla GET /auth/me)
+func NewReverseProxy(authServiceURL, targetPath string, keyStore *httpserver.KeyStore) (http.HandlerFunc, error) {
+	return NewSingleHostProxy(authServiceURL, targetPath, "auth-service", keyStore)
+}
+
 // NewAuthLoginProxy przechwytuje odpowiedź z auth-service, zapisuje tokeny w ciasteczkach HttpOnly
-// oraz wycina je z ciala odpowiedzi JSON zwracanej do przeglądarki.
+// oraz wycina je z ciała odpowiedzi JSON zwracanej do przeglądarki.
 func NewAuthLoginProxy(authServiceURL, targetPath string, keyStore *httpserver.KeyStore) (http.HandlerFunc, error) {
 	log := shared.GetLogger()
 
