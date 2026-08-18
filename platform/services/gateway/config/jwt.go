@@ -14,7 +14,7 @@ func NewJWTConfig() jwtware.Config {
 			Key:    AppConfig.JWT.AccessPublicKey,
 		},
 		ContextKey:   "user",
-		TokenLookup:  "header:Authorization",
+		TokenLookup:  "header:Authorization,cookie:access_token",
 		AuthScheme:   "Bearer",
 		ErrorHandler: jwtErrorHandler,
 	}

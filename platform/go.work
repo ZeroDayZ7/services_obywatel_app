@@ -6,7 +6,9 @@ use (
 	./services/auth-service
 	./services/citizen-docs
 	./services/gateway
+	./services/officer-bff
 	./services/notification-service
 	./services/version-service
 	./services/messaging-service
+	./services/identity-service
 )

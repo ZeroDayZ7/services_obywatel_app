@@ -6,10 +6,12 @@
 !*.example       # e.g. .env.example, .env.dev.example
 
 # Ignore binary outputs
-bin/*
+**/bin/*
 
 # Ignore logs
 **/logs/
 **/combined.txt
 **/temp.md
 **/pgadmin_data/
+*.drawio.bkp
+.$*.bkp

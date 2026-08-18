@@ -82,14 +82,18 @@ type SessionConfig struct {
 	TTL time.Duration `mapstructure:"SESSION_TTL" validate:"required"`
 }
 
-// #region
+// #region UPSTREAM SERVICES
 type ServicesConfig struct {
-	Auth      string `mapstructure:"SERVICE_AUTH_URL" validate:"required,url"`
-	Documents string `mapstructure:"SERVICE_DOCS_URL" validate:"required,url"`
-	Notify    string `mapstructure:"SERVICE_NOTIFY_URL" validate:"required,url"`
-	Messaging string `mapstructure:"SERVICE_MESSAGING_URL" validate:"required,url"`
-	WS        string `mapstructure:"SERVICE_WS_URL" validate:"required"`
+	Auth       string `mapstructure:"SERVICE_AUTH_URL" validate:"required,url"`
+	Documents  string `mapstructure:"SERVICE_DOCS_URL" validate:"required,url"`
+	Identity   string `mapstructure:"SERVICE_IDENTITY_URL" validate:"required,url"`
+	Notify     string `mapstructure:"SERVICE_NOTIFY_URL" validate:"required,url"`
+	Messaging  string `mapstructure:"SERVICE_MESSAGING_URL" validate:"required,url"`
+	WS         string `mapstructure:"SERVICE_WS_URL" validate:"required"`
+	OfficerBFF string `mapstructure:"SERVICE_OFFICER_BFF_URL" validate:"required,url"`
 }
+
+// #endregion
 
 // #region GetURL
 func (r RabbitMQConfig) GetURL() string {

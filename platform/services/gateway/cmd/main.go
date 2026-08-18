@@ -63,21 +63,15 @@ func main() {
 	log.Info("✅ KMS Public Key loaded successfully")
 
 	// 2b. Pobranie dedykowanych kluczy HMAC dla poszczególnych mikrousług
-	log.Info("🔑 Pobieranie dedykowanych kluczy HMAC dla serwisów z KMS...")
-
 	for serviceID, targetKey := range config.AppConfig.HMAC.TargetKeys {
-		log.Info("🔑 Pobieranie klucza HMAC z KMS...", "service", serviceID, "target_key", targetKey)
-
-		// Pobieramy klucz oraz wersję (jeśli FetchSymmetricKey zwraca tylko secret, ustawiamy domyślną wersję 1)
 		hmacKey, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, targetKey, "HmacSha256")
 		if err != nil {
 			log.Error("❌ Nie udało się pobrać klucza HMAC z KMS", "service", serviceID, "target_key", targetKey, "error", err)
 			os.Exit(1)
 		}
 
-		// Zapisujemy klucz do bezpiecznego magazynu w RAM
 		keyStore.SetKey(serviceID, hmacKey, version)
-		log.Info("✅ Klucz HMAC pobrany pomyślnie", "service", serviceID, "version", version)
+		log.Info("✅ Klucz HMAC załadowany", "service", serviceID, "version", version)
 	}
 
 	// 4. Telemetry setup

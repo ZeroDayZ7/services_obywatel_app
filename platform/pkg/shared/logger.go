@@ -457,8 +457,12 @@ func toFields(m map[string]any) []zap.Field {
 
 // region parseArgs
 func (l *Logger) parseArgs(args ...any) []zap.Field {
-	fields := []zap.Field{}
-	for _, arg := range args {
+	var fields []zap.Field
+	n := len(args)
+
+	for i := 0; i < n; i++ {
+		arg := args[i]
+
 		switch v := arg.(type) {
 		case error:
 			fields = append(fields, zap.Error(v))
@@ -466,9 +470,23 @@ func (l *Logger) parseArgs(args ...any) []zap.Field {
 			fields = append(fields, v)
 		case map[string]any:
 			fields = append(fields, toFields(v)...)
+		case string:
+			if i+1 < n {
+				val := args[i+1]
+				i++
+
+				if isSensitive(v) {
+					fields = append(fields, zap.String(v, "********"))
+				} else {
+					fields = append(fields, zap.Any(v, val))
+				}
+			} else {
+				fields = append(fields, zap.String("extra", v))
+			}
 		default:
 			fields = append(fields, convertStructToFields(v)...)
 		}
 	}
+
 	return fields
 }

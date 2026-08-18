@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2/middleware/session"
+	spfViper "github.com/spf13/viper" // import standardowego vipera do nadpisania mapy
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/pkg/viper"
 )
@@ -23,7 +24,7 @@ type JWTConfig struct {
 
 type GatewayHMACConfig struct {
 	HeaderName string            `mapstructure:"HMAC_HEADER_NAME" validate:"required"`
-	TargetKeys map[string]string `mapstructure:"HMAC_TARGET_KEYS"` // map[service_id]kms_resource_name
+	TargetKeys map[string]string `mapstructure:"HMAC_TARGET_KEYS"`
 }
 
 type Config struct {
@@ -51,6 +52,15 @@ func SetGatewayDefaults() {
 	viper.SetRedisDefaults()
 	viper.SetSessionDefaults()
 	viper.SetGatewayHMACDefaults()
+
+	// Nadpisujemy HMAC_TARGET_KEYS pełną, lokalną mapą dla Gatewaya
+	spfViper.SetDefault("HMAC_TARGET_KEYS", map[string]string{
+		"auth-service":         "hmac-gateway-auth",
+		"identity-service":     "hmac-gateway-identity",
+		"citizen-docs-service": "hmac-gateway-docs",
+		"messaging-service":    "hmac-gateway-messaging",
+		"officer-bff":          "hmac-gateway-officer-bff",
+	})
 }
 
 func LoadConfigGlobal() error {

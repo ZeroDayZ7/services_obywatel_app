@@ -10,4 +10,5 @@ var PublicPaths = []string{
 	"/auth/reset/verify",
 	"/auth/reset/final",
 	"/health",
+	"/api/v1/official/auth/login",
 }

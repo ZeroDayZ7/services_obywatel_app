@@ -112,6 +112,38 @@
       "cwd": "${workspaceFolder}/platform/services/messaging-service",
       "showLog": false,
       "output": "${workspaceFolder}/platform/services/messaging-service/bin/messaging_debug.exe"
+    },
+    {
+      "name": "Identity Service",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/platform/services/identity-service/cmd/main.go",
+      "args": [],
+      "env": {
+        "ENV": "development",
+        "APP_ENV": "dev"
+      },
+      "buildFlags": "-tags=dev",
+      "cwd": "${workspaceFolder}/platform/services/identity-service",
+      "showLog": false,
+      "output": "${workspaceFolder}/platform/services/identity-service/bin/identity_debug.exe"
+    },
+    {
+      "name": "Officer BFF Service",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/platform/services/officer-bff/cmd/main.go",
+      "args": [],
+      "env": {
+        "ENV": "development",
+        "APP_ENV": "dev"
+      },
+      "buildFlags": "-tags=dev",
+      "cwd": "${workspaceFolder}/platform/services/officer-bff",
+      "showLog": false,
+      "output": "${workspaceFolder}/platform/services/officer-bff/bin/officer-bff_debug.exe"
     }
   ]
 }

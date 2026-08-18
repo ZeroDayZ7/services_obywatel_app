@@ -69,6 +69,28 @@ services:
       timeout: 5s
       retries: 5
 
+  # region db-identity
+  # --- IDENTITY DATABASE ---
+  db-identity:
+    <<: *common-settings
+    image: postgres:18.3-alpine
+    container_name: db-identity
+    environment:
+      POSTGRES_USER: ${IDENTITY_DB_USER:-identity_user}
+      POSTGRES_DB: ${IDENTITY_DB_NAME:-identity_database}
+      POSTGRES_PASSWORD_FILE: /run/secrets/identity_db_pass
+    secrets:
+      - identity_db_pass
+    ports:
+      - "5437:5432"
+    volumes:
+      - pg_identity_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # region db-citizen-docs
   # # --- CITIZEN DOCUMENTS DATABASE ---
   db-citizen-docs:
@@ -227,6 +249,8 @@ secrets:
     file: ./secrets/.pgadmin_admin_password
   messaging_db_pass:
     file: ./secrets/.messaging_db_password
+  identity_db_pass:
+    file: ./secrets/.identity_db_password
 
   # region volumes
 volumes:
@@ -235,6 +259,7 @@ volumes:
   pg_notification_data:
   pg_audit_data:
   pg_messaging_data:
+  pg_identity_data:
   redis_data:
   go-modules:
   rabbitmq_data:

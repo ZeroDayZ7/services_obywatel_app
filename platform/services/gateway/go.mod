@@ -10,6 +10,7 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
 	github.com/redis/go-redis/v9 v9.21.0
+	github.com/spf13/viper v1.21.0
 	github.com/valyala/fasthttp v1.73.0
 	github.com/zerodayz7/platform/pkg v0.0.0-00010101000000-000000000000
 )
@@ -43,7 +44,6 @@ require (
 	github.com/spf13/afero v1.15.0 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
-	github.com/spf13/viper v1.21.0 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/tinylib/msgp v1.6.4 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
