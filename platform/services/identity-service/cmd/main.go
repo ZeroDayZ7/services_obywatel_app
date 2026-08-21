@@ -8,6 +8,7 @@ import (
 
 	"github.com/zerodayz7/platform/pkg/httpserver"
 	"github.com/zerodayz7/platform/pkg/kms"
+	"github.com/zerodayz7/platform/pkg/rabbitmq"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/services/identity-service/config"
 	"github.com/zerodayz7/services/identity-service/internal/di"
@@ -22,7 +23,30 @@ func main() {
 	defer closeDB()
 
 	// =========================================================================
-	// 2. KMS SETUP & FETCH HMAC KEY
+	// 2. RABBITMQ SETUP
+	// =========================================================================
+	rabbitCfg := rabbitmq.Config{
+		Enabled:  app.Config.RabbitMQ.Enabled,
+		Host:     app.Config.RabbitMQ.Host,
+		Port:     app.Config.RabbitMQ.Port,
+		User:     app.Config.RabbitMQ.User,
+		Password: app.Config.RabbitMQ.Password,
+		VHost:    app.Config.RabbitMQ.VHost,
+	}
+
+	eventPublisher, err := rabbitmq.NewPublisher(rabbitCfg)
+	if err != nil {
+		log.Error("❌ Nie udało się połączyć z RabbitMQ", "error", err)
+		os.Exit(1)
+	}
+	defer func() {
+		if err := eventPublisher.Close(); err != nil {
+			log.Error("Błąd podczas zamykania połączenia z RabbitMQ", "error", err)
+		}
+	}()
+
+	// =========================================================================
+	// 3. KMS SETUP & FETCH KEYS
 	// =========================================================================
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -35,24 +59,35 @@ func main() {
 		os.Exit(1)
 	}
 
-	log.Info("🔑 Pobieranie klucza HMAC z KMS dla identity-service...")
-	hmacKey, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, "hmac-gateway-identity", "HmacSha256")
+	// 3a. Pobranie klucza HMAC do komunikacji z Gatewayem
+	log.Info("🔑 Pobieranie klucza HMAC dla Gateway z KMS...")
+	gatewayHmacKey, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, "hmac-gateway-identity", "HmacSha256")
 	if err != nil {
-		log.Error("❌ Nie udało się pobrać klucza HMAC z KMS", "error", err)
+		log.Error("❌ Nie udało się pobrać klucza HMAC Gateway z KMS", "error", err)
 		os.Exit(1)
 	}
+	app.Config.Internal.HMACSecret = string(gatewayHmacKey)
+	log.Info("✅ Klucz HMAC Gateway pobrany pomyślnie z KMS", "version", version)
 
-	// Przypisujemy pobrany klucz z KMS do konfiguracji bezpieczeństwa wewnętrznego
-	app.Config.Internal.HMACSecret = string(hmacKey)
-	log.Info("✅ Klucz HMAC pobrany pomyślnie z KMS", "version", version)
+	// 3b. Pobranie klucza HMAC do Blind Indexu PESEL!
+	log.Info("🔑 Pobieranie klucza HMAC do PESEL Blind Index z KMS...")
+	peselHmacKey, peselKeyVersion, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, "identity-pesel-blind-index", "HmacSha256")
+	if err != nil {
+		log.Error("❌ Nie udało się pobrać klucza HMAC dla PESEL z KMS", "error", err)
+		os.Exit(1)
+	}
+	log.Info("✅ Klucz HMAC dla PESEL pobrany pomyślnie z KMS", "version", peselKeyVersion)
 
-	// 3. Budowanie kontenera zależności (DI)
-	container := di.BuildContainer(app)
+	// =========================================================================
+	// 4. DI CONTAINER & ROUTER
+	// =========================================================================
+	// Przekazujesz eventPublisher do DI Container (musisz dopisać pole/argument w di.BuildContainer)
+	container := di.BuildContainer(app, eventPublisher, peselHmacKey, kmsCfg)
 
-	// 4. Budowanie routera na natywnym http.ServeMux
+	// 5. Budowanie routera na natywnym http.ServeMux
 	r := router.NewRouter(container)
 
-	// 5. Konfiguracja instancji serwera HTTP
+	// 6. Konfiguracja instancji serwera HTTP
 	srv := &http.Server{
 		Addr:         ":" + app.Config.Server.Port,
 		Handler:      r,
@@ -61,7 +96,7 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	// 6. Uruchomienie z Graceful Shutdown przez pkg/httpserver
+	// 7. Uruchomienie z Graceful Shutdown przez pkg/httpserver
 	if err := httpserver.Run(srv, app.Config.Shutdown); err != nil {
 		log.Error("Server forced shutdown with error", "error", err)
 	}

@@ -2,6 +2,9 @@ package di
 
 import (
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/zerodayz7/platform/pkg/envelope"
+	"github.com/zerodayz7/platform/pkg/kms"
+	"github.com/zerodayz7/platform/pkg/rabbitmq"
 	"github.com/zerodayz7/services/identity-service/config"
 	"github.com/zerodayz7/services/identity-service/internal/handler"
 	"github.com/zerodayz7/services/identity-service/internal/repository"
@@ -11,22 +14,29 @@ import (
 type Container struct {
 	Config         *config.Config
 	DB             *pgxpool.Pool
+	EventPublisher rabbitmq.EventPublisher
 	CitizenHandler *handler.CitizenHandler
 }
 
-func BuildContainer(app *config.App) *Container {
-	// 1. Repositories
+func BuildContainer(app *config.App, eventPublisher rabbitmq.EventPublisher, peselHmacKey []byte, kmsCfg kms.Config) *Container {
 	citizenRepo := repository.NewCitizenRepository(app.DB)
 
-	// 2. Services
-	citizenSvc := service.NewCitizenService(citizenRepo)
+	cryptor := envelope.NewEnvelopeCryptor(kmsCfg)
 
-	// 3. Handlers
+	citizenSvc := service.NewCitizenService(
+		citizenRepo,
+		eventPublisher,
+		cryptor,
+		peselHmacKey,
+		"identity-citizen-data",
+	)
+
 	citizenHdl := handler.NewCitizenHandler(citizenSvc)
 
 	return &Container{
 		Config:         app.Config,
 		DB:             app.DB,
+		EventPublisher: eventPublisher,
 		CitizenHandler: citizenHdl,
 	}
 }

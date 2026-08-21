@@ -17,18 +17,26 @@ const (
 
 // CitizenPayload reprezentuje strukturę PII po odszyfrowaniu zawartości pola encrypted_data.
 type CitizenPayload struct {
-	PESEL     string `json:"pesel"`
-	FirstName string `json:"first_name"`
-	LastName  string `json:"last_name"`
-	City      string `json:"city,omitempty"`
-	Street    string `json:"street,omitempty"`
+	FirstName   string  `json:"first_name"`
+	SecondName  *string `json:"second_name,omitempty"`
+	LastName    string  `json:"last_name"`
+	PESEL       string  `json:"pesel"`
+	Email       string  `json:"email"`
+	PhoneNumber string  `json:"phone_number"`
+
+	// Adres
+	City        string  `json:"city"`
+	Street      string  `json:"street"`
+	HouseNumber string  `json:"house_number"`
+	FlatNumber  *string `json:"flat_number,omitempty"`
+	PostalCode  string  `json:"postal_code"`
 }
 
 // Citizen odwzorowuje tabelę "citizens" z kopertowym szyfrowaniem PII i blind indeksem.
 type Citizen struct {
 	UserID        uuid.UUID `db:"user_id" json:"user_id"`
 	PESELHash     string    `db:"pesel_hash" json:"pesel_hash"`
-	EncryptedData []byte    `db:"encrypted_data" json:"-"` // Ukryte przed JSON ze względów bezpieczeństwa
+	EncryptedData []byte    `db:"encrypted_data" json:"-"`
 	EncryptedDEK  []byte    `db:"encrypted_dek" json:"-"`
 	Nonce         []byte    `db:"nonce" json:"-"`
 	KeyVersion    int       `db:"key_version" json:"key_version"`

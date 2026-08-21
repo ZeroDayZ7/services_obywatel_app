@@ -16,7 +16,11 @@ type Config struct {
 }
 
 func (c Config) URL() string {
-	return fmt.Sprintf("amqp://%s:%s@%s:%d%s", c.User, c.Password, c.Host, c.Port, c.VHost)
+	vhost := c.VHost
+	if vhost != "" && vhost[0] != '/' {
+		vhost = "/" + vhost
+	}
+	return fmt.Sprintf("amqp://%s:%s@%s:%d%s", c.User, c.Password, c.Host, c.Port, vhost)
 }
 
 func NewPublisher(cfg Config) (EventPublisher, error) {
