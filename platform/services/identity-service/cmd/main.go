@@ -37,7 +37,6 @@ func main() {
 	}
 
 	// 2a. Pobranie klucza HMAC do komunikacji z Gatewayem
-	log.Info("🔑 Pobieranie klucza HMAC dla Gateway z KMS...")
 	gatewayHmacKey, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, "hmac-gateway-identity", "HmacSha256")
 	if err != nil {
 		log.Error("❌ Nie udało się pobrać klucza HMAC Gateway z KMS", "error", err)
@@ -47,7 +46,6 @@ func main() {
 	log.Info("✅ Klucz HMAC Gateway pobrany pomyślnie z KMS", "version", version)
 
 	// 2b. Pobranie klucza HMAC do Blind Indexu PESEL
-	log.Info("🔑 Pobieranie klucza HMAC do PESEL Blind Index z KMS...")
 	peselHmacKey, peselKeyVersion, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, "identity-pesel-blind-index", "HmacSha256")
 	if err != nil {
 		log.Error("❌ Nie udało się pobrać klucza HMAC dla PESEL z KMS", "error", err)
@@ -56,7 +54,6 @@ func main() {
 	log.Info("✅ Klucz HMAC dla PESEL pobrany pomyślnie z KMS", "version", peselKeyVersion)
 
 	// 2c. Pobranie klucza HMAC dla RabbitMQ Publishera
-	log.Info("🔑 Pobieranie klucza HMAC dla RabbitMQ z KMS...")
 	rabbitHMACKey, rabbitKeyVersion, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, "hmac-identity-rabbitmq", "HmacSha256")
 	if err != nil {
 		log.Error("❌ Nie udało się pobrać klucza HMAC RabbitMQ z KMS", "error", err)

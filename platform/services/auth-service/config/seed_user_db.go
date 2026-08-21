@@ -8,6 +8,7 @@ import (
 	"github.com/zerodayz7/platform/pkg/security"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/auth-service/internal/model"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -42,8 +43,8 @@ func SeedUsers(db *gorm.DB) error {
 		return fmt.Errorf("failed to hash seed password: %w", err)
 	}
 
-	// Standardowy zestaw uprawnień jako zwykły slice stringów
-	userStandardPermissions := []string{
+	// Standardowy zestaw uprawnień jako JSONSlice
+	userStandardPermissions := datatypes.JSONSlice[string]{
 		permissions.ReportsView,
 		permissions.MessagesRead,
 		permissions.MessagesWrite,
@@ -60,7 +61,7 @@ func SeedUsers(db *gorm.DB) error {
 			Email:    "root@plus.pl",
 			Password: hashedPassword,
 			Role:     model.RoleRoot,
-			Permissions: []string{
+			Permissions: datatypes.JSONSlice[string]{
 				permissions.SystemAdmin,
 				permissions.SystemManage,
 				permissions.UsersRead,
@@ -81,7 +82,7 @@ func SeedUsers(db *gorm.DB) error {
 			Email:    "admin@plus.pl",
 			Password: hashedPassword,
 			Role:     model.RoleAdmin,
-			Permissions: []string{
+			Permissions: datatypes.JSONSlice[string]{
 				permissions.UsersRead,
 				permissions.UsersWrite,
 				permissions.ReportsView,
