@@ -34,11 +34,13 @@ type EmployeeCredential struct {
 
 type EmployeeProfile struct {
 	UserID         uuid.UUID                   `gorm:"type:uuid;primaryKey"`
-	EmployeeNumber string                      `gorm:"size:64;uniqueIndex;not null"` // Nr służbowy
-	InstitutionID  uuid.UUID                   `gorm:"type:uuid;index;not null"`     // ID Urzędu/Gminy
-	DepartmentID   uuid.UUID                   `gorm:"type:uuid;index;not null"`     // ID Wydziału
-	Permissions    datatypes.JSONSlice[string] `gorm:"type:jsonb"`                   // Dedykowane scope'y
+	EmployeeNumber string                      `gorm:"size:64;uniqueIndex;not null"`
+	InstitutionID  uuid.UUID                   `gorm:"type:uuid;index;not null"`
+	DepartmentID   uuid.UUID                   `gorm:"type:uuid;index;not null"`
+	Permissions    datatypes.JSONSlice[string] `gorm:"type:jsonb"`
 	Active         bool                        `gorm:"default:true"`
+
+	User User `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE"`
 }
 
 // endregion

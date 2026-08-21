@@ -10,13 +10,16 @@ import (
 )
 
 type UserSession struct {
-	UserID      string   `json:"user_id"`
-	Fingerprint string   `json:"fingerprint"`
-	Role        string   `json:"role,omitempty"`
-	Permissions []string `json:"permissions,omitempty"`
-	PublicKey   string   `json:"public_key"`
-	Challenge   string   `json:"challenge,omitempty"`
-	IP          string   `json:"ip,omitempty"`
+	UserID      string `json:"user_id"`
+	Fingerprint string `json:"fingerprint"`
+	Role        string `json:"role,omitempty"`
+	PublicKey   string `json:"public_key"`
+	Challenge   string `json:"challenge,omitempty"`
+	IP          string `json:"ip,omitempty"`
+
+	InstitutionID string   `json:"institution_id,omitempty"`
+	DepartmentID  string   `json:"department_id,omitempty"`
+	Permissions   []string `json:"permissions,omitempty"`
 }
 
 // --- Metody dla Sesji Głównej ---

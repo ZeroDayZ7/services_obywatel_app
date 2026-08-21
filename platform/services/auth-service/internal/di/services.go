@@ -22,6 +22,7 @@ func NewServices(
 	return &Services{
 		AuthService: service.NewAuthService(
 			repos.UserRepo,
+			repos.EmployeeRepo,
 			repos.RefreshTokenRepo,
 			cache,
 			eventPublisher,

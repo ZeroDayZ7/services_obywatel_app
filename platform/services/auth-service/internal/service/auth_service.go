@@ -44,6 +44,7 @@ type AuthService interface {
 type authService struct {
 	// Zmiana: używaj interfejsu z repozytorium
 	userRepo       repo.UserRepository
+	employeeRepo   repo.EmployeeRepository
 	refreshRepo    repo.RefreshTokenRepository
 	cache          *redis.Cache
 	eventPublisher rabbitmq.EventPublisher
@@ -52,6 +53,7 @@ type authService struct {
 
 func NewAuthService(
 	userRepo repo.UserRepository,
+	employeeRepo repo.EmployeeRepository,
 	refreshRepo repo.RefreshTokenRepository,
 	cache *redis.Cache,
 	eventPublisher rabbitmq.EventPublisher,
@@ -59,6 +61,7 @@ func NewAuthService(
 ) AuthService {
 	return &authService{
 		userRepo:       userRepo,
+		employeeRepo:   employeeRepo,
 		refreshRepo:    refreshRepo,
 		cache:          cache,
 		eventPublisher: eventPublisher,
@@ -86,7 +89,6 @@ func (s *authService) GetProfile(ctx context.Context, userID uuid.UUID) (*http.U
 		DisplayName: user.Username,
 		Status:      string(user.Status),
 		Role:        string(user.Role),
-		Permissions: []string(user.Permissions),
 		LastLogin:   user.LastLogin.Format(time.RFC3339),
 	}, nil
 }
@@ -197,7 +199,6 @@ func (s *authService) VerifyDeviceSignature(ctx context.Context, userIDStr, sess
 		UserID:      user.ID.String(),
 		Fingerprint: fingerprint,
 		Role:        string(user.Role),
-		Permissions: []string(user.Permissions),
 	}
 
 	if err := s.cache.SetSession(ctx, newSessionID, sessionData, s.cfg.Session.TTL); err != nil {
@@ -287,7 +288,6 @@ func (s *authService) RefreshToken(ctx context.Context, tokenStr string, fingerp
 		Fingerprint: fingerprint,
 		PublicKey:   device.PublicKey,
 		Role:        string(user.Role),
-		Permissions: []string(user.Permissions),
 	}
 
 	if err := s.cache.SetSession(ctx, newSessionID, sessionData, s.cfg.Session.TTL); err != nil {
@@ -494,7 +494,6 @@ func (s *authService) RegisterDevice(ctx context.Context, userID uuid.UUID, sess
 		UserID:      user.ID.String(),
 		Fingerprint: req.DeviceFingerprint,
 		Role:        string(user.Role),
-		Permissions: []string(user.Permissions),
 	}
 
 	log.DebugMap("[RegisterDevice] Persisting new full session to Redis", map[string]any{
@@ -712,7 +711,9 @@ func (s *authService) AttemptLogin(ctx context.Context, email string, password [
 			}
 		}
 	}()
+
 	log := shared.GetLogger()
+
 	user, err := s.userRepo.GetUserByEmail(ctx, email)
 	if err != nil {
 		return nil, errors.ErrInvalidCredentials
@@ -724,82 +725,107 @@ func (s *authService) AttemptLogin(ctx context.Context, email string, password [
 
 	valid, err := security.VerifyPassword(password, user.Password, nil)
 	if err != nil || !valid {
-		attempts, incErr := s.userRepo.IncrementUserFailedLogin(user.ID)
-		if incErr != nil {
-			log.Error("Failed to increment failed attempts", incErr)
-		}
-
-		if attempts >= 5 {
-			_ = s.userRepo.PermanentLock(user.ID)
-			return nil, errors.ErrAccountLocked
-		}
-		return nil, errors.ErrInvalidCredentials
+		return nil, s.handleFailedLogin(ctx, user.ID)
 	}
 
 	if user.FailedLoginAttempts > 0 {
 		_ = s.userRepo.ResetFailedLoginAttempts(user.ID)
 	}
 
+	// 1. Odgałęzienie dla Urzędnika
+	if user.Role != model.RoleCitizen && user.Role != model.RoleUser {
+		log.Info("Procesowanie logowania urzędnika", map[string]any{"uid": user.ID, "role": user.Role})
+		return s.prepareEmployeeLogin(ctx, user, fingerprint)
+	}
+
+	// 2. Odgałęzienie dla Zaufanego Urządzenia (Obywatel)
 	device, err := s.userRepo.GetDeviceByFingerprint(ctx, user.ID, fingerprint)
 	log.DebugDB("SCENARIUSZ A", device)
 
-	// SCENARIUSZ A: Urządzenie jest znane i zweryfikowane
 	if err == nil && device != nil && device.IsVerified && device.IsActive {
-
-		// 1. Najpierw bilet (SetupToken) i unikalne ID sesji (v7)
-		setupToken, sessionID, err := s.CreateSetupToken(ctx, user.ID, fingerprint)
-		if err != nil {
-			log.ErrorObj("Failed to create setup token", err)
-			return nil, errors.ErrInternal
-		}
-
-		// 2. Generujemy challenge
-		challenge, err := security.GenerateRandomString(32)
-		if err != nil {
-			log.ErrorObj("Failed to generate challenge", err)
-			return nil, errors.ErrInternal
-		}
-
-		// 3. Zapisujemy w Redis pod kluczem SESJI
-		if err := s.cache.SetChallenge(ctx, sessionID, challenge, 5*time.Minute); err != nil {
-			log.ErrorObj("Failed to save challenge in Redis", err)
-			return nil, errors.ErrInternal
-		}
-
-		// 4. BRAKUJĄCY KROK: Zapisujemy tymczasową sesję pod "setup:session:" dla Gatewaya!
-		sessionData := redis.UserSession{
-			UserID:      user.ID.String(),
-			Fingerprint: fingerprint,
-			PublicKey:   device.PublicKey,
-			Role:        string(user.Role),
-			Permissions: []string(user.Permissions),
-		}
-
-		// Zapis do Redis z prefiksem "setup:session:" i krótkim TTL (np. 5–15 minut)
-		if err := s.cache.SetSetupSession(ctx, sessionID, sessionData, 15*time.Minute); err != nil {
-			log.ErrorObj("Failed to save setup session in Redis", err)
-			return nil, errors.ErrInternal
-		}
-
-		log.DebugInfo("Pre-trust session prepared", map[string]any{
-			"uid": user.ID,
-			"sid": sessionID,
-		})
-
-		// 4. ZWRACAMY dane
-		return &http.LoginResponse{
-			Type:       "preTrust",
-			Challenge:  challenge,
-			SetupToken: setupToken,
-			IsTrusted:  true,
-		}, nil
+		return s.preparePreTrustSession(ctx, user, device.PublicKey, fingerprint)
 	}
 
+	// 3. Pozostałe scenariusze
 	if user.TwoFactorEnabled {
 		return s.prepare2FASession(ctx, user, fingerprint)
 	}
 
 	return s.finalizeLogin(ctx, user, fingerprint)
+}
+
+// endregion
+
+// region prepareEmployeeLogin
+func (s *authService) prepareEmployeeLogin(ctx context.Context, user *model.User, fingerprint string) (*http.LoginResponse, error) {
+	log := shared.GetLogger()
+
+	// 1. Pobieramy profil pracownika
+	empProfile, err := s.employeeRepo.GetProfileByUserID(ctx, user.ID)
+	if err != nil || !empProfile.Active {
+		log.Error("Użytkownik ma rolę urzędniczą, ale brak aktywnego profilu", err)
+		return nil, errors.ErrUnauthorized
+	}
+
+	// 2. Pobieramy aktywną kartę / poświadczenie fizyczne
+	credential, err := s.employeeRepo.GetActiveCredentialByUserID(ctx, user.ID)
+	if err != nil || credential.Status != model.EmployeeCredentialActive {
+		log.Warn("Brak aktywnej karty urzędniczej dla użytkownika", map[string]any{"uid": user.ID})
+		return nil, errors.ErrInvalidCredentials
+	}
+
+	// 3. Budujemy bilet i sesję w Redis
+	setupToken, sessionID, challenge, err := s.createChallengeSession(ctx, user.ID, fingerprint)
+	if err != nil {
+		return nil, err
+	}
+
+	// 4. Konstruujemy dane sesji z kontekstem urzędnika i kluczem z KARTY
+	sessionData := redis.UserSession{
+		UserID:        user.ID.String(),
+		Fingerprint:   fingerprint,
+		PublicKey:     credential.PublicKey, // Klucz publiczny z czipu karty
+		Role:          string(user.Role),
+		InstitutionID: empProfile.InstitutionID.String(),
+		DepartmentID:  empProfile.DepartmentID.String(),
+		Permissions:   empProfile.Permissions,
+	}
+
+	if err := s.cache.SetSetupSession(ctx, sessionID, sessionData, 15*time.Minute); err != nil {
+		log.ErrorObj("Failed to save employee setup session in Redis", err)
+		return nil, errors.ErrInternal
+	}
+
+	return &http.LoginResponse{
+		Type:       "employeeTrust", // Możemy wyróżnić typ odpowiedzi dla klienta
+		Challenge:  challenge,
+		SetupToken: setupToken,
+		IsTrusted:  true,
+	}, nil
+}
+
+// region createChallengeSession
+func (s *authService) createChallengeSession(ctx context.Context, userID uuid.UUID, fingerprint string) (setupToken string, sessionID string, challenge string, err error) {
+	log := shared.GetLogger()
+
+	setupToken, sessionID, err = s.CreateSetupToken(ctx, userID, fingerprint)
+	if err != nil {
+		log.ErrorObj("Failed to create setup token", err)
+		return "", "", "", errors.ErrInternal
+	}
+
+	challenge, err = security.GenerateRandomString(32)
+	if err != nil {
+		log.ErrorObj("Failed to generate challenge", err)
+		return "", "", "", errors.ErrInternal
+	}
+
+	if err := s.cache.SetChallenge(ctx, sessionID, challenge, 5*time.Minute); err != nil {
+		log.ErrorObj("Failed to save challenge in Redis", err)
+		return "", "", "", errors.ErrInternal
+	}
+
+	return setupToken, sessionID, challenge, nil
 }
 
 // region prepare2FASession
@@ -866,7 +892,6 @@ func (s *authService) finalizeLogin(ctx context.Context, user *model.User, finge
 		UserID:      user.ID.String(),
 		Fingerprint: hashedFpt,
 		Role:        string(user.Role),
-		Permissions: []string(user.Permissions),
 	}
 
 	if err := s.cache.SetSession(ctx, sessionID, sessionData, s.cfg.Session.TTL); err != nil {
@@ -1074,4 +1099,58 @@ func (s *authService) CanUserLogin(user *model.User) error {
 
 	// 4. Fallback dla nieznanych statusów
 	return errors.ErrInternal
+}
+
+// region handleFailedLogin
+func (s *authService) handleFailedLogin(ctx context.Context, userID uuid.UUID) error {
+	log := shared.GetLogger()
+
+	attempts, incErr := s.userRepo.IncrementUserFailedLogin(userID)
+	if incErr != nil {
+		log.Error("Failed to increment failed attempts", incErr)
+	}
+
+	if attempts >= 5 {
+		_ = s.userRepo.PermanentLock(userID)
+		return errors.ErrAccountLocked
+	}
+
+	return errors.ErrInvalidCredentials
+}
+
+// region preparePreTrustSession
+func (s *authService) preparePreTrustSession(ctx context.Context, user *model.User, publicKey string, fingerprint string) (*http.LoginResponse, error) {
+	log := shared.GetLogger()
+
+	// 1. Tworzymy bilet (SetupToken) i ID sesji
+	setupToken, sessionID, challenge, err := s.createChallengeSession(ctx, user.ID, fingerprint)
+	if err != nil {
+		return nil, err
+	}
+
+	// 2. Dane sesji dla zwykłego urządzenia
+	sessionData := redis.UserSession{
+		UserID:      user.ID.String(),
+		Fingerprint: fingerprint,
+		PublicKey:   publicKey,
+		Role:        string(user.Role),
+	}
+
+	// 3. Zapis w Redis
+	if err := s.cache.SetSetupSession(ctx, sessionID, sessionData, 15*time.Minute); err != nil {
+		log.ErrorObj("Failed to save setup session in Redis", err)
+		return nil, errors.ErrInternal
+	}
+
+	log.DebugInfo("Pre-trust session prepared", map[string]any{
+		"uid": user.ID,
+		"sid": sessionID,
+	})
+
+	return &http.LoginResponse{
+		Type:       "preTrust",
+		Challenge:  challenge,
+		SetupToken: setupToken,
+		IsTrusted:  true,
+	}, nil
 }
