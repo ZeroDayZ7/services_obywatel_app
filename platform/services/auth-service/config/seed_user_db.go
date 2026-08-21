@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"github.com/lib/pq"
 	"github.com/zerodayz7/platform/pkg/permissions"
 	"github.com/zerodayz7/platform/pkg/security"
 	"github.com/zerodayz7/platform/pkg/shared"
@@ -43,8 +42,8 @@ func SeedUsers(db *gorm.DB) error {
 		return fmt.Errorf("failed to hash seed password: %w", err)
 	}
 
-	// Standardowy zestaw uprawnień obywatelskich
-	userStandardPermissions := pq.StringArray{
+	// Standardowy zestaw uprawnień jako zwykły slice stringów
+	userStandardPermissions := []string{
 		permissions.ReportsView,
 		permissions.MessagesRead,
 		permissions.MessagesWrite,
@@ -61,7 +60,7 @@ func SeedUsers(db *gorm.DB) error {
 			Email:    "root@plus.pl",
 			Password: hashedPassword,
 			Role:     model.RoleRoot,
-			Permissions: pq.StringArray{
+			Permissions: []string{
 				permissions.SystemAdmin,
 				permissions.SystemManage,
 				permissions.UsersRead,
@@ -82,7 +81,7 @@ func SeedUsers(db *gorm.DB) error {
 			Email:    "admin@plus.pl",
 			Password: hashedPassword,
 			Role:     model.RoleAdmin,
-			Permissions: pq.StringArray{
+			Permissions: []string{
 				permissions.UsersRead,
 				permissions.UsersWrite,
 				permissions.ReportsView,

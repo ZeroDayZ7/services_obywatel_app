@@ -68,7 +68,14 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 		KeyVersion:    1,
 	}
 
-	if err := s.repo.Create(ctx, citizen); err != nil {
+	auditLog := &model.CitizenAuditLog{
+		ID:      shared.NewUUIDv7(),
+		UserID:  userID,
+		Action:  model.ActionCitizenRegistered,
+		ActorID: userID,
+	}
+
+	if err := s.repo.CreateWithAudit(ctx, citizen, auditLog); err != nil {
 		return nil, fmt.Errorf("failed to save citizen to repository: %w", err)
 	}
 

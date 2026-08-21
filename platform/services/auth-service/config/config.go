@@ -1,3 +1,4 @@
+// platform/services/auth-service/config/config.go
 package config
 
 import (

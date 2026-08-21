@@ -15,6 +15,7 @@ type Querier interface {
 	CreateCitizenWithAudit(ctx context.Context, arg CreateCitizenWithAuditParams) (CreateCitizenWithAuditRow, error)
 	GetCitizenByPeselHash(ctx context.Context, peselHash string) (GetCitizenByPeselHashRow, error)
 	GetCitizenByUserID(ctx context.Context, userID pgtype.UUID) (GetCitizenByUserIDRow, error)
+	GetLastAuditLog(ctx context.Context) (GetLastAuditLogRow, error)
 	GetUnsyncedAuditLogs(ctx context.Context, limit int32) ([]GetUnsyncedAuditLogsRow, error)
 	MarkAuditLogsAsSynced(ctx context.Context, dollar_1 []pgtype.UUID) error
 }

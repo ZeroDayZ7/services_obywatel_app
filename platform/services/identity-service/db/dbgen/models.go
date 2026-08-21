@@ -26,6 +26,8 @@ type CitizenAuditLog struct {
 	ActorID             pgtype.UUID        `json:"actor_id"`
 	IpAddress           pgtype.Text        `json:"ip_address"`
 	PayloadHash         pgtype.Text        `json:"payload_hash"`
+	PrevHash            string             `json:"prev_hash"`
+	Hash                string             `json:"hash"`
 	SyncedToGlobalAudit bool               `json:"synced_to_global_audit"`
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
 }

@@ -13,9 +13,9 @@ import (
 
 const createAuditLog = `-- name: CreateAuditLog :exec
 INSERT INTO citizen_audit_logs (
-    id, user_id, action, actor_id, ip_address, payload_hash
+    id, user_id, action, actor_id, ip_address, payload_hash, prev_hash, hash
 ) VALUES (
-    $1, $2, $3, $4, $5, $6
+    $1, $2, $3, $4, $5, $6, $7, $8
 )
 `
 
@@ -26,6 +26,8 @@ type CreateAuditLogParams struct {
 	ActorID     pgtype.UUID `json:"actor_id"`
 	IpAddress   pgtype.Text `json:"ip_address"`
 	PayloadHash pgtype.Text `json:"payload_hash"`
+	PrevHash    string      `json:"prev_hash"`
+	Hash        string      `json:"hash"`
 }
 
 func (q *Queries) CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) error {
@@ -36,12 +38,31 @@ func (q *Queries) CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) 
 		arg.ActorID,
 		arg.IpAddress,
 		arg.PayloadHash,
+		arg.PrevHash,
+		arg.Hash,
 	)
 	return err
 }
 
+const getLastAuditLog = `-- name: GetLastAuditLog :one
+SELECT id, hash FROM citizen_audit_logs
+ORDER BY created_at DESC, id DESC LIMIT 1
+`
+
+type GetLastAuditLogRow struct {
+	ID   pgtype.UUID `json:"id"`
+	Hash string      `json:"hash"`
+}
+
+func (q *Queries) GetLastAuditLog(ctx context.Context) (GetLastAuditLogRow, error) {
+	row := q.db.QueryRow(ctx, getLastAuditLog)
+	var i GetLastAuditLogRow
+	err := row.Scan(&i.ID, &i.Hash)
+	return i, err
+}
+
 const getUnsyncedAuditLogs = `-- name: GetUnsyncedAuditLogs :many
-SELECT id, user_id, action, actor_id, ip_address, payload_hash, created_at
+SELECT id, user_id, action, actor_id, ip_address, payload_hash, prev_hash, hash, created_at
 FROM citizen_audit_logs
 WHERE synced_to_global_audit = FALSE
 ORDER BY created_at ASC LIMIT $1
@@ -54,6 +75,8 @@ type GetUnsyncedAuditLogsRow struct {
 	ActorID     pgtype.UUID        `json:"actor_id"`
 	IpAddress   pgtype.Text        `json:"ip_address"`
 	PayloadHash pgtype.Text        `json:"payload_hash"`
+	PrevHash    string             `json:"prev_hash"`
+	Hash        string             `json:"hash"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }
 
@@ -73,6 +96,8 @@ func (q *Queries) GetUnsyncedAuditLogs(ctx context.Context, limit int32) ([]GetU
 			&i.ActorID,
 			&i.IpAddress,
 			&i.PayloadHash,
+			&i.PrevHash,
+			&i.Hash,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
