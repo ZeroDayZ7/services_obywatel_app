@@ -62,7 +62,7 @@ func NewPasswordResetService(
 
 // region StartResetProcess
 func (s *passwordResetService) StartResetProcess(ctx context.Context, agreementNumber string, value string, method string) (string, error) {
-	user, err := s.userRepo.GetUserByEmailAndAgreement(ctx, value, agreementNumber)
+	user, err := s.userRepo.GetUserByEmail(ctx, value)
 	if err != nil {
 		return "", errors.ErrEmailIsSendIfExists
 	}

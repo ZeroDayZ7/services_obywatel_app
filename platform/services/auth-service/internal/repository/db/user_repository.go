@@ -70,19 +70,6 @@ func (r *UserRepo) GetUserByEmail(ctx context.Context, email string) (*model.Use
 	return &u, nil
 }
 
-func (r *UserRepo) GetUserByEmailAndAgreement(ctx context.Context, email string, agreementNumber string) (*model.User, error) {
-	var u model.User
-	err := r.db.WithContext(ctx).
-		Joins("Agreement").
-		Where("users.email = ? AND \"Agreement\".\"agreement_number\" = ? AND \"Agreement\".\"status\" = ?",
-			email, agreementNumber, model.AgreementStatusActive).
-		First(&u).Error
-	if err != nil {
-		return nil, err
-	}
-	return &u, nil
-}
-
 // region EmailExists
 func (r *UserRepo) EmailExists(email string) (bool, error) {
 	var count int64

@@ -29,3 +29,33 @@ type CitizenAuditLog struct {
 	SyncedToGlobalAudit bool               `json:"synced_to_global_audit"`
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
 }
+
+type UserAgreement struct {
+	ID              pgtype.UUID        `json:"id"`
+	UserID          pgtype.UUID        `json:"user_id"`
+	AgreementNumber string             `json:"agreement_number"`
+	PeselEncrypted  string             `json:"pesel_encrypted"`
+	VerifiedPhone   string             `json:"verified_phone"`
+	Status          string             `json:"status"`
+	SignedAt        pgtype.Timestamptz `json:"signed_at"`
+	VerifiedAt      pgtype.Timestamptz `json:"verified_at"`
+	VerifiedVia     string             `json:"verified_via"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt       pgtype.Timestamptz `json:"deleted_at"`
+}
+
+type UserPukCode struct {
+	ID              pgtype.UUID        `json:"id"`
+	UserAgreementID pgtype.UUID        `json:"user_agreement_id"`
+	UserID          pgtype.UUID        `json:"user_id"`
+	PukHash         string             `json:"puk_hash"`
+	Status          string             `json:"status"`
+	FailedAttempts  int16              `json:"failed_attempts"`
+	MaxAttempts     int16              `json:"max_attempts"`
+	ExpiresAt       pgtype.Timestamptz `json:"expires_at"`
+	UsedAt          pgtype.Timestamptz `json:"used_at"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt       pgtype.Timestamptz `json:"deleted_at"`
+}
