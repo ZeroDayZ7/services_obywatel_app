@@ -1,6 +1,6 @@
 module github.com/zerodayz7/platform/services/messaging-service
 
-go 1.26.2
+go 1.27.0
 
 require (
 	github.com/gofiber/fiber/v2 v2.52.14

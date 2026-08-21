@@ -1,6 +1,6 @@
 module github.com/zerodayz7/platform/services/gateway
 
-go 1.26.2
+go 1.27.0
 
 require (
 	github.com/fasthttp/websocket v1.5.12

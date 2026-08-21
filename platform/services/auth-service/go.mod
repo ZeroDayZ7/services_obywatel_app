@@ -1,6 +1,6 @@
 module github.com/zerodayz7/platform/services/auth-service
 
-go 1.26.2
+go 1.27.0
 
 require (
 	github.com/gofiber/contrib/otelfiber/v2 v2.2.3
