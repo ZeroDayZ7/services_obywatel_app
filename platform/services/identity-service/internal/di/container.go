@@ -3,6 +3,7 @@ package di
 import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/zerodayz7/platform/pkg/envelope"
+	"github.com/zerodayz7/platform/pkg/httpserver"
 	"github.com/zerodayz7/platform/pkg/kms"
 	"github.com/zerodayz7/platform/pkg/rabbitmq"
 	"github.com/zerodayz7/services/identity-service/config"
@@ -16,9 +17,16 @@ type Container struct {
 	DB             *pgxpool.Pool
 	EventPublisher rabbitmq.EventPublisher
 	CitizenHandler *handler.CitizenHandler
+	KeyStore       *httpserver.KeyStore
 }
 
-func BuildContainer(app *config.App, eventPublisher rabbitmq.EventPublisher, peselHmacKey []byte, kmsCfg kms.Config) *Container {
+func BuildContainer(
+	app *config.App,
+	eventPublisher rabbitmq.EventPublisher,
+	peselHmacKey []byte,
+	kmsCfg kms.Config,
+	keyStore *httpserver.KeyStore,
+) *Container {
 	citizenRepo := repository.NewCitizenRepository(app.DB)
 
 	cryptor := envelope.NewEnvelopeCryptor(kmsCfg)
@@ -38,5 +46,6 @@ func BuildContainer(app *config.App, eventPublisher rabbitmq.EventPublisher, pes
 		DB:             app.DB,
 		EventPublisher: eventPublisher,
 		CitizenHandler: citizenHdl,
+		KeyStore:       keyStore,
 	}
 }

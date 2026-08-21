@@ -22,6 +22,9 @@ func main() {
 	app, closeDB := config.InitApp()
 	defer closeDB()
 
+	// Instancja KeyStore do przechowywania kluczy dla akceptowanych nadawców
+	keyStore := httpserver.NewKeyStore()
+
 	// =========================================================================
 	// 2. KMS SETUP & FETCH KEYS
 	// =========================================================================
@@ -36,16 +39,31 @@ func main() {
 		os.Exit(1)
 	}
 
-	// 2a. Pobranie klucza HMAC do komunikacji z Gatewayem
-	gatewayHmacKey, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, "hmac-gateway-identity", "HmacSha256")
-	if err != nil {
-		log.Error("❌ Nie udało się pobrać klucza HMAC Gateway z KMS", "error", err)
-		os.Exit(1)
-	}
-	app.Config.Internal.HMACSecret = string(gatewayHmacKey)
-	log.Info("✅ Klucz HMAC Gateway pobrany pomyślnie z KMS", "version", version)
+	// 2a. Pobieranie kluczy HMAC dla dopuszczonych nadawców HTTP (Gateway, BFF)
+	for senderID, targetKey := range app.Config.HMAC.TargetKeys {
+		hmacKey, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, targetKey, "HmacSha256")
+		if err != nil {
+			log.Error("❌ Nie udało się pobrać klucza HMAC z KMS", "sender", senderID, "target_key", targetKey, "error", err)
+			os.Exit(1)
+		}
 
-	// 2b. Pobranie klucza HMAC do Blind Indexu PESEL
+		keyStore.SetKey(senderID, hmacKey, version)
+		log.Info("✅ Klucz HMAC HTTP załadowany", "service", senderID, "version", version)
+	}
+
+	// 2b. Pobieranie kluczy HMAC dla zaufanych nadawców zdarzeń RabbitMQ (np. auth-service)
+	for senderID, targetKey := range app.Config.RabbitConsumers.TrustedSenders {
+		hmacKey, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, targetKey, "HmacSha256")
+		if err != nil {
+			log.Error("❌ Nie udało się pobrać klucza HMAC dla Consumer RabbitMQ z KMS", "sender", senderID, "target_key", targetKey, "error", err)
+			os.Exit(1)
+		}
+
+		keyStore.SetKey(senderID, hmacKey, version)
+		log.Info("✅ Klucz HMAC Consumer RabbitMQ załadowany", "service", senderID, "version", version)
+	}
+
+	// 2c. Pobranie klucza HMAC do Blind Indexu PESEL
 	peselHmacKey, peselKeyVersion, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, "identity-pesel-blind-index", "HmacSha256")
 	if err != nil {
 		log.Error("❌ Nie udało się pobrać klucza HMAC dla PESEL z KMS", "error", err)
@@ -53,7 +71,7 @@ func main() {
 	}
 	log.Info("✅ Klucz HMAC dla PESEL pobrany pomyślnie z KMS", "version", peselKeyVersion)
 
-	// 2c. Pobranie klucza HMAC dla RabbitMQ Publishera
+	// 2d. Pobranie klucza HMAC dla własnego RabbitMQ Publishera
 	rabbitHMACKey, rabbitKeyVersion, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, "hmac-identity-rabbitmq", "HmacSha256")
 	if err != nil {
 		log.Error("❌ Nie udało się pobrać klucza HMAC RabbitMQ z KMS", "error", err)
@@ -69,7 +87,7 @@ func main() {
 		log.Info("RabbitMQ is ENABLED. Connecting...")
 		eventPublisher, err = rabbitmq.NewLivePublisher(
 			app.Config.RabbitMQ.GetURL(),
-			app.Config.Server.AppName, // np. "identity-service"
+			app.Config.Server.AppName,
 			rabbitHMACKey,
 		)
 		if err != nil {
@@ -89,7 +107,8 @@ func main() {
 	// =========================================================================
 	// 4. DI CONTAINER & ROUTER
 	// =========================================================================
-	container := di.BuildContainer(app, eventPublisher, peselHmacKey, kmsCfg)
+	// Przekazujemy keyStore do DI Containera (pamiętaj zaktualizować konstruktor BuildContainer!)
+	container := di.BuildContainer(app, eventPublisher, peselHmacKey, kmsCfg, keyStore)
 
 	// 5. Budowanie routera na natywnym http.ServeMux
 	r := router.NewRouter(container)
@@ -98,12 +117,12 @@ func main() {
 	srv := &http.Server{
 		Addr:         ":" + app.Config.Server.Port,
 		Handler:      r,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		ReadTimeout:  app.Config.Server.ReadTimeout,
+		WriteTimeout: app.Config.Server.WriteTimeout,
+		IdleTimeout:  app.Config.Server.IdleTimeout,
 	}
 
-	// 7. Uruchomienie z Graceful Shutdown przez pkg/httpserver
+	// 7. Uruchomienie z Graceful Shutdown
 	if err := httpserver.Run(srv, app.Config.Shutdown); err != nil {
 		log.Error("Server forced shutdown with error", "error", err)
 	}

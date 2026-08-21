@@ -11,7 +11,6 @@ import (
 )
 
 type BFFHMACConfig struct {
-	HeaderName string            `mapstructure:"HMAC_HEADER_NAME" validate:"required"`
 	TargetKeys map[string]string `mapstructure:"HMAC_TARGET_KEYS"`
 }
 
@@ -29,11 +28,7 @@ type Config struct {
 }
 
 func (c *Config) ToKMSServiceConfig() kms.Config {
-	return kms.Config{
-		Endpoint:      c.KMS.Endpoint,
-		ServiceName:   c.Server.AppName,
-		ServiceSecret: c.KMS.ServiceSecret,
-	}
+	return c.KMS.ToKMSServiceConfig(c.Server.AppName)
 }
 
 var AppConfig Config

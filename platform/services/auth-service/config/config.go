@@ -43,13 +43,8 @@ type Config struct {
 	Shutdown        time.Duration           `mapstructure:"SHUTDOWN_TIMEOUT" validate:"required"`
 }
 
-// ToKMSServiceConfig zwraca konfigurację KMS dla komunikacji między-serwisowej
 func (c *Config) ToKMSServiceConfig() kms.Config {
-	return kms.Config{
-		Endpoint:      c.KMS.Endpoint,
-		ServiceName:   c.Server.AppName,
-		ServiceSecret: c.KMS.ServiceSecret,
-	}
+	return c.KMS.ToKMSServiceConfig(c.Server.AppName)
 }
 
 var (

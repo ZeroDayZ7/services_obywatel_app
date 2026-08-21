@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/zerodayz7/platform/pkg/kms"
 )
 
-// #region
+// #region ServerConfig
 type ServerConfig struct {
 	AppName       string        `mapstructure:"APP_NAME" validate:"required"`
 	Port          string        `mapstructure:"PORT" validate:"required,numeric"`
@@ -24,7 +26,7 @@ type ServerConfig struct {
 	WriteTimeout  time.Duration `mapstructure:"WRITE_TIMEOUT"`
 }
 
-// #region
+// #region DBConfig
 type DBConfig struct {
 	Host            string        `mapstructure:"DB_HOST" validate:"required"`
 	Port            int           `mapstructure:"DB_PORT" validate:"required"`
@@ -37,7 +39,7 @@ type DBConfig struct {
 	ConnMaxLifetime time.Duration `mapstructure:"DB_CONN_MAX_LIFETIME"`
 }
 
-// #region
+// #region RedisConfig
 type RedisConfig struct {
 	Host         string        `mapstructure:"REDIS_HOST" validate:"required"`
 	Port         string        `mapstructure:"REDIS_PORT" validate:"required,numeric"`
@@ -49,19 +51,19 @@ type RedisConfig struct {
 	Timeout      time.Duration `mapstructure:"REDIS_TIMEOUT" validate:"required"`
 }
 
-// #region
+// #region InternalSecurityConfig
 type InternalSecurityConfig struct {
 	HMACSecret string `mapstructure:"-"`
 }
 
-// #region
+// #region OTELConfig
 type OTELConfig struct {
 	Enabled     bool   `mapstructure:"OTEL_ENABLED"`
 	Endpoint    string `mapstructure:"OTEL_ENDPOINT" validate:"required_if=Enabled true"`
 	ServiceName string `mapstructure:"OTEL_SERVICE_NAME" validate:"required_if=Enabled true"`
 }
 
-// #region
+// #region RabbitMQConfig
 type RabbitMQConfig struct {
 	Enabled  bool   `mapstructure:"RABBITMQ_ENABLED"`
 	Host     string `mapstructure:"RABBITMQ_HOST" validate:"required_if=Enabled true"`
@@ -71,13 +73,24 @@ type RabbitMQConfig struct {
 	VHost    string `mapstructure:"RABBITMQ_VHOST"`
 }
 
-// #region
+// #region KMSConfig
 type KMSConfig struct {
-	Endpoint      string `mapstructure:"KMS_ENDPOINT" validate:"required,url"`
-	ServiceSecret string `mapstructure:"KMS_SERVICE_SECRET" validate:"required,min=32"`
+	Endpoint      string        `mapstructure:"KMS_ENDPOINT" validate:"required,url"`
+	ServiceSecret string        `mapstructure:"KMS_SERVICE_SECRET" validate:"required,min=32"`
+	Timeout       time.Duration `mapstructure:"KMS_TIMEOUT" validate:"required"`
 }
 
-// #region
+// #region ToKMSServiceConfig
+func (k KMSConfig) ToKMSServiceConfig(appName string) kms.Config {
+	return kms.Config{
+		Endpoint:      k.Endpoint,
+		ServiceName:   appName,
+		ServiceSecret: k.ServiceSecret,
+		Timeout:       k.Timeout,
+	}
+}
+
+// #region SessionConfig
 type SessionConfig struct {
 	TTL time.Duration `mapstructure:"SESSION_TTL" validate:"required"`
 }
