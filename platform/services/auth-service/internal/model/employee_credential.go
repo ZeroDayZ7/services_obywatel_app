@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -29,6 +30,15 @@ type EmployeeCredential struct {
 	CreatedAt        time.Time      `gorm:"autoCreateTime"`
 	UpdatedAt        time.Time      `gorm:"autoUpdateTime"`
 	DeletedAt        gorm.DeletedAt `gorm:"index"`
+}
+
+type EmployeeProfile struct {
+	UserID         uuid.UUID                   `gorm:"type:uuid;primaryKey"`
+	EmployeeNumber string                      `gorm:"size:64;uniqueIndex;not null"` // Nr służbowy
+	InstitutionID  uuid.UUID                   `gorm:"type:uuid;index;not null"`     // ID Urzędu/Gminy
+	DepartmentID   uuid.UUID                   `gorm:"type:uuid;index;not null"`     // ID Wydziału
+	Permissions    datatypes.JSONSlice[string] `gorm:"type:jsonb"`                   // Dedykowane scope'y
+	Active         bool                        `gorm:"default:true"`
 }
 
 // endregion

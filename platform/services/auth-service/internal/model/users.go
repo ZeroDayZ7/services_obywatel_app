@@ -17,6 +17,15 @@ const (
 	RoleRoot     UserRole = "root"
 )
 
+const (
+	RoleCitizen         UserRole = "CITIZEN"
+	RoleOfficer         UserRole = "OFFICER"
+	RoleSupervisor      UserRole = "SUPERVISOR"
+	RoleDepartmentAdmin UserRole = "DEPARTMENT_ADMIN"
+	RoleSysAdmin        UserRole = "SYS_ADMIN"
+	RoleAuditor         UserRole = "AUDITOR"
+)
+
 type UserStatus string
 
 const (
