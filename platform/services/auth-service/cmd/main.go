@@ -99,11 +99,30 @@ func main() {
 	db, closeDB := config.MustInitDB(config.AppConfig.Database)
 	defer closeDB()
 
-	// 7. RabbitMQ
+	// =========================================================================
+	// 7. RabbitMQ Publisher Setup
+	// =========================================================================
 	var eventPublisher rabbitmq.EventPublisher
 	if config.AppConfig.RabbitMQ.Enabled {
-		log.Info("RabbitMQ is ENABLED. Connecting to broker...")
-		eventPublisher, err = rabbitmq.NewLivePublisher(config.AppConfig.RabbitMQ.GetURL())
+		log.Info("RabbitMQ is ENABLED. Fetching HMAC key for Publisher...")
+
+		var publisherHMACKey []byte
+		publisherHMACKey, _, err = kms.FetchSymmetricKeyWithVersion(
+			ctx,
+			kmsServiceCfg,
+			"hmac-auth-rabbitmq",
+			"HmacSha256",
+		)
+		if err != nil {
+			log.Error("❌ Nie udało się pobrać klucza HMAC RabbitMQ z KMS", "error", err)
+			os.Exit(1)
+		}
+
+		eventPublisher, err = rabbitmq.NewLivePublisher(
+			config.AppConfig.RabbitMQ.GetURL(),
+			config.AppConfig.Server.AppName,
+			publisherHMACKey,
+		)
 		if err != nil {
 			log.Error("RabbitMQ initialization failed", "error", err)
 			os.Exit(1)
@@ -121,6 +140,26 @@ func main() {
 	// 8. DI Container & App Setup (Przekazujemy keyStore)
 	container := di.NewContainer(db, redisClient, eventPublisher, &config.AppConfig, keyStore)
 	authApp := app.NewAuthApp(container)
+
+	// =========================================================================
+	// 8a. RABBITMQ CONSUMERS / WORKERS
+	// =========================================================================
+	consumerCtx, cancelConsumers := context.WithCancel(context.Background())
+	defer cancelConsumers()
+
+	if config.AppConfig.RabbitMQ.Enabled {
+		go func() {
+			err := eventPublisher.Subscribe(
+				consumerCtx,
+				rabbitmq.QueueAuthCitizen,
+				rabbitmq.TopicCitizenCreated,
+				container.Consumers.CitizenConsumer.HandleCitizenCreated,
+			)
+			if err != nil && consumerCtx.Err() == nil {
+				log.Error("❌ Error in citizen created consumer", "error", err)
+			}
+		}()
+	}
 
 	router.SetupRoutes(authApp, container)
 

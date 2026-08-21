@@ -20,4 +20,9 @@ func (p *NoOpPublisher) Consume(queueName string, routingKey string) (<-chan amq
 	return ch, nil
 }
 
+func (p *NoOpPublisher) Subscribe(ctx context.Context, queueName string, routingKey string, handler HandlerFunc) error {
+	<-ctx.Done()
+	return ctx.Err()
+}
+
 func (p *NoOpPublisher) Close() error { return nil }

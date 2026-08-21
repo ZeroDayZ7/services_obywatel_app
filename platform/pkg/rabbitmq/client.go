@@ -13,6 +13,8 @@ type Config struct {
 	User     string
 	Password string
 	VHost    string
+	SenderID string
+	HMACKey  []byte
 }
 
 func (c Config) URL() string {
@@ -31,7 +33,7 @@ func NewPublisher(cfg Config) (EventPublisher, error) {
 		return NewNoOpPublisher(), nil
 	}
 
-	pub, err := NewLivePublisher(cfg.URL())
+	pub, err := NewLivePublisher(cfg.URL(), cfg.SenderID, cfg.HMACKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to rabbitmq: %w", err)
 	}
