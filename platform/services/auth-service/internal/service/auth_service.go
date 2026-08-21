@@ -797,10 +797,9 @@ func (s *authService) prepareEmployeeLogin(ctx context.Context, user *model.User
 	}
 
 	return &http.LoginResponse{
-		Type:       "employeeTrust", // Możemy wyróżnić typ odpowiedzi dla klienta
+		Type:       "employeeTrust",
 		Challenge:  challenge,
 		SetupToken: setupToken,
-		IsTrusted:  true,
 	}, nil
 }
 

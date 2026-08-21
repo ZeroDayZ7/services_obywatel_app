@@ -18,6 +18,7 @@ import (
 	"github.com/zerodayz7/platform/pkg/shared"
 )
 
+// #region signInternalContext
 // signInternalContext podpisuje kontekst wewnętrzny HMAC dla komunikacji między mikroserwisami
 func signInternalContext(req *http.Request, keyStore *httpserver.KeyStore, targetServiceID string) {
 	log := shared.GetLogger()
@@ -48,6 +49,9 @@ func signInternalContext(req *http.Request, keyStore *httpserver.KeyStore, targe
 	req.Header.Set("X-Internal-Service", "officer-bff")
 }
 
+// #endregion
+
+// #region NewSingleHostProxy
 // NewSingleHostProxy tworzy standardowe proxy do dowolnego mikroserwisu
 func NewSingleHostProxy(targetURL, targetPath, targetServiceID string, keyStore *httpserver.KeyStore) (http.HandlerFunc, error) {
 	log := shared.GetLogger()
@@ -75,19 +79,25 @@ func NewSingleHostProxy(targetURL, targetPath, targetServiceID string, keyStore 
 	return proxy.ServeHTTP, nil
 }
 
-// NewReverseProxy tworzy zwykłe proxy przelotowe (np. dla GET /auth/me)
+// #endregion
+
+// #region NewReverseProxy
+// NewReverseProxy tworzy zwykłe proxy przelotowe (np. dla GET /auth/me oraz Krok 1 logowania)
 func NewReverseProxy(authServiceURL, targetPath string, keyStore *httpserver.KeyStore) (http.HandlerFunc, error) {
 	return NewSingleHostProxy(authServiceURL, targetPath, "auth-service", keyStore)
 }
 
-// NewAuthLoginProxy przechwytuje odpowiedź z auth-service, zapisuje tokeny w ciasteczkach HttpOnly
-// oraz wycina je z ciała odpowiedzi JSON zwracanej do przeglądarki.
-func NewAuthLoginProxy(authServiceURL, targetPath string, keyStore *httpserver.KeyStore) (http.HandlerFunc, error) {
+// #endregion
+
+// #region NewAuthTokenProxy
+// NewAuthTokenProxy przechwytuje odpowiedź z auth-service, wyciąga access_token/refresh_token,
+// zapisuje je w bezpiecznych ciasteczkach HttpOnly oraz wycina je z odpowiedzi JSON dla Angulara.
+func NewAuthTokenProxy(authServiceURL, targetPath string, keyStore *httpserver.KeyStore) (http.HandlerFunc, error) {
 	log := shared.GetLogger()
 
 	target, err := url.Parse(authServiceURL)
 	if err != nil {
-		log.Error("Błąd parsowania authServiceURL w NewAuthLoginProxy", "url", authServiceURL, "error", err)
+		log.Error("Błąd parsowania authServiceURL w NewAuthTokenProxy", "url", authServiceURL, "error", err)
 		return nil, err
 	}
 
@@ -120,7 +130,7 @@ func NewAuthLoginProxy(authServiceURL, targetPath string, keyStore *httpserver.K
 				return nil
 			}
 
-			// 1. Pobieramy tokeny
+			// 1. Zapisujemy tokeny do bezpiecznych ciasteczek
 			if accessToken, ok := responseData["access_token"].(string); ok && accessToken != "" {
 				setAuthCookie(resp, "access_token", accessToken, 15*time.Minute, "/")
 			}
@@ -129,7 +139,7 @@ func NewAuthLoginProxy(authServiceURL, targetPath string, keyStore *httpserver.K
 				setAuthCookie(resp, "refresh_token", refreshToken, 7*24*time.Hour, "/api/v1/official/auth/refresh")
 			}
 
-			// 2. Wycinamy tokeny z ciała odpowiedzi JSON dla klienta (Angular)
+			// 2. Wycinamy tokeny z ciała odpowiedzi JSON dla przeglądarki
 			delete(responseData, "access_token")
 			delete(responseData, "refresh_token")
 
@@ -153,7 +163,10 @@ func NewAuthLoginProxy(authServiceURL, targetPath string, keyStore *httpserver.K
 	return proxy.ServeHTTP, nil
 }
 
-// NewAuthLogoutProxy przekazuje żądanie wylogowania i czyści ciasteczka po stronie przeglądarki
+// #endregion
+
+// #region NewAuthLogoutProxy
+// NewAuthLogoutProxy przekazuje żądanie wylogowania i czyści ciasteczka w przeglądarce
 func NewAuthLogoutProxy(authServiceURL, targetPath string, keyStore *httpserver.KeyStore) (http.HandlerFunc, error) {
 	log := shared.GetLogger()
 
@@ -185,6 +198,9 @@ func NewAuthLogoutProxy(authServiceURL, targetPath string, keyStore *httpserver.
 	return proxy.ServeHTTP, nil
 }
 
+// #endregion
+
+// #region Helpers (Cookies)
 // setAuthCookie ustawia bezpieczne ciasteczko HttpOnly
 func setAuthCookie(resp *http.Response, name, value string, duration time.Duration, path string) {
 	cookie := &http.Cookie{
@@ -213,3 +229,5 @@ func clearAuthCookie(resp *http.Response, name string) {
 	}
 	resp.Header.Add("Set-Cookie", cookie.String())
 }
+
+// #endregion

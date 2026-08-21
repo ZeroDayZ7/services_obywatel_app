@@ -11,43 +11,12 @@ import (
 func NewRouter(c *di.Container) http.Handler {
 	mux := http.NewServeMux()
 
-	// 1. Rejestracja tras
+	// Rejestracja tras z osobnych plików
 	registerHealthRoutes(mux)
 	registerAuthRoutes(mux, c)
 	registerOfficialRoutes(mux, c)
 
-	// 2. Aplikacja globalnych middleware (od zewnątrz do wewnątrz)
 	return applyGlobalMiddleware(mux, c)
-}
-
-func registerHealthRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("GET /health", httpserver.NewHealthHandler())
-}
-
-func registerAuthRoutes(mux *http.ServeMux, c *di.Container) {
-	loginProxy, err := NewAuthLoginProxy(c.Config.AuthServiceURL, "/auth/login", c.KeyStore)
-	if err != nil {
-		panic(err)
-	}
-
-	logoutProxy, err := NewAuthLogoutProxy(c.Config.AuthServiceURL, "/auth/logout", c.KeyStore)
-	if err != nil {
-		panic(err)
-	}
-
-	// Standardowe proxy przepuszczające ciastko do Auth Service
-	meProxy, err := NewReverseProxy(c.Config.AuthServiceURL, "/auth/me", c.KeyStore)
-	if err != nil {
-		panic(err)
-	}
-
-	mux.HandleFunc("POST /api/v1/official/auth/login", loginProxy)
-	mux.HandleFunc("POST /api/v1/official/auth/logout", logoutProxy)
-	mux.HandleFunc("GET /api/v1/official/auth/me", meProxy)
-}
-
-func registerOfficialRoutes(mux *http.ServeMux, c *di.Container) {
-	mux.HandleFunc("POST /api/v1/official/citizens/register", c.OfficialHandler.RegisterCitizen)
 }
 
 func applyGlobalMiddleware(handler http.Handler, c *di.Container) http.Handler {

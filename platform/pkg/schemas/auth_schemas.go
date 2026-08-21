@@ -11,6 +11,12 @@ type LoginRequest struct {
 	Password []byte `json:"password" validate:"required"`
 }
 
+type LoginStep2Request struct {
+	UserID    string `json:"user_id" validate:"required"`
+	Challenge string `json:"challenge" validate:"required"`
+	Signature string `json:"signature" validate:"required"`
+}
+
 type UnpairDeviceRequest struct {
 	Signature string `json:"signature,omitempty"`
 	Timestamp int64  `json:"timestamp,omitempty"`

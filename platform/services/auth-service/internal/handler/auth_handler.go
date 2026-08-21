@@ -57,6 +57,45 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	return c.JSON(response)
 }
 
+// #region LOGIN STEP 2
+func (h *AuthHandler) LoginStep2(c *fiber.Ctx) error {
+	ctx, cancel := context.WithTimeout(c.UserContext(), 2*time.Second)
+	defer cancel()
+	log := shared.GetLogger()
+
+	body := c.Locals("validatedBody").(schemas.LoginStep2Request)
+	rc := reqctx.MustFromFiber(c)
+
+	fingerprint := rc.DeviceID
+	if fingerprint == "" {
+		return apperr.SendAppError(c, apperr.ErrInvalidDeviceFingerprint)
+	}
+
+	response, err := h.authService.AttemptLoginStep2(
+		ctx,
+		body.UserID,
+		body.Challenge,
+		body.Signature,
+		fingerprint,
+		rc.IP,
+	)
+	if err != nil {
+		log.WarnObj("Login step 2 failed", map[string]any{
+			"user_id": body.UserID,
+			"err":     err.Error(),
+		})
+		return apperr.SendAppError(c, err)
+	}
+
+	log.InfoMap("Login step 2 successful", map[string]any{
+		"user_id": body.UserID,
+	})
+
+	return c.JSON(response)
+}
+
+// #endregion
+
 // #region VerifyDevice
 func (h *AuthHandler) VerifyDevice(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(c.UserContext(), 2*time.Second)
