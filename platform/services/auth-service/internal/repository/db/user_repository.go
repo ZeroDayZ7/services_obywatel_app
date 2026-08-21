@@ -147,10 +147,9 @@ func (r *UserRepo) GetDeviceByFingerprint(ctx context.Context, userID uuid.UUID,
 }
 
 // region IncrementUserFailedLogin
-func (r *UserRepo) IncrementUserFailedLogin(userID uuid.UUID) (int8, error) {
+func (r *UserRepo) IncrementUserFailedLogin(ctx context.Context, userID uuid.UUID) (int8, error) {
 	var user model.User
-	// Wykonujemy update i pobieramy aktualną wartość w jednej operacji (RETURNING)
-	err := r.db.Model(&user).
+	err := r.db.WithContext(ctx).Model(&user).
 		Where("id = ?", userID).
 		Update("failed_login_attempts", gorm.Expr("failed_login_attempts + ?", 1)).
 		Select("failed_login_attempts").
@@ -171,8 +170,8 @@ func (r *UserRepo) LockUserTemporarily(userID uuid.UUID, duration time.Duration)
 }
 
 // region PermanentLock
-func (r *UserRepo) PermanentLock(userID uuid.UUID) error {
-	return r.db.Model(&model.User{}).
+func (r *UserRepo) PermanentLock(ctx context.Context, userID uuid.UUID) error {
+	return r.db.WithContext(ctx).Model(&model.User{}).
 		Where("id = ?", userID).
 		Updates(map[string]any{
 			"status":                model.StatusLocked,

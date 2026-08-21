@@ -13,11 +13,15 @@ import (
 )
 
 var (
-	// Definicje ID powiązane 1:1 z innymi usługami w systemie
-	testUserID1 = uuid.MustParse("707a8869-6867-4601-9337-e23fcb51b0ad") // Jan Kowalski (root@plus.pl)
-	testUserID2 = uuid.MustParse("a2f6b8c9-1122-4a55-8822-b98765432101") // Anna Nowak (anna@plus.pl)
-	testUserID3 = uuid.MustParse("c3d4e5f6-3344-5b66-9933-a12345678902") // Piotr Wiśniewski (piotr@plus.pl)
-	adminUserID = uuid.MustParse("92b98b5a-d0c3-410f-828d-2b30a585dea6") // admin@plus.pl
+	// Statyczne ID użytkowników
+	rootUserID     = uuid.MustParse("707a8869-6867-4601-9337-e23fcb51b0ad") // Root
+	officerUserID  = uuid.MustParse("e1f2a3b4-5566-7788-9900-aabbccddeeff") // Urzędnik
+	citizenUserID1 = uuid.MustParse("a2f6b8c9-1122-4a55-8822-b98765432101") // Anna Nowak
+	citizenUserID2 = uuid.MustParse("c3d4e5f6-3344-5b66-9933-a12345678902") // Piotr Wiśniewski
+
+	// Statyczne ID Organizacji / Departamentów
+	testInstitutionID = uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	testDepartmentID  = uuid.MustParse("22222222-2222-2222-2222-222222222222")
 )
 
 func SeedUsers(db *gorm.DB) error {
@@ -32,9 +36,8 @@ func SeedUsers(db *gorm.DB) error {
 		return nil
 	}
 
-	log.Info("[SEED] Rozpoczynam zasiewanie użytkowników w auth-service...")
+	log.Info("[SEED] Rozpoczynam zasiewanie użytkowników i profilów pracowniczych...")
 
-	// Dynamiczne generowanie hasha dla hasła "Zaq1@wsx"
 	rawPassword := []byte("Zaq1@wsx")
 	defer clear(rawPassword)
 
@@ -43,85 +46,80 @@ func SeedUsers(db *gorm.DB) error {
 		return fmt.Errorf("failed to hash seed password: %w", err)
 	}
 
-	// Standardowy zestaw uprawnień jako JSONSlice
-	userStandardPermissions := datatypes.JSONSlice[string]{
-		permissions.ReportsView,
+	// 1. Definicja kont tożsamości (User)
+	users := []model.User{
+		{
+			ID:               rootUserID,
+			Username:         "root@plus.pl",
+			Email:            "root@plus.pl",
+			Password:         hashedPassword,
+			Role:             model.RoleRoot,
+			TwoFactorEnabled: true,
+		},
+		{
+			ID:               officerUserID,
+			Username:         "urzednik@plus.pl",
+			Email:            "urzednik@plus.pl",
+			Password:         hashedPassword,
+			Role:             model.RoleOfficer,
+			TwoFactorEnabled: true,
+		},
+		{
+			ID:               citizenUserID1,
+			Username:         "anna@plus.pl",
+			Email:            "anna@plus.pl",
+			Password:         hashedPassword,
+			Role:             model.RoleCitizen,
+			TwoFactorEnabled: true,
+		},
+		{
+			ID:               citizenUserID2,
+			Username:         "piotr@plus.pl",
+			Email:            "piotr@plus.pl",
+			Password:         hashedPassword,
+			Role:             model.RoleCitizen,
+			TwoFactorEnabled: true,
+		},
+	}
+
+	// 2. Uprawnienia pracownicze dla Urzędnika
+	officerPermissions := datatypes.JSONSlice[string]{
+		permissions.UsersRead,
+		permissions.UsersWrite,
 		permissions.MessagesRead,
 		permissions.MessagesWrite,
 		permissions.MessagingAccess,
 		permissions.DocumentsRead,
 		permissions.DocumentsWrite,
+		permissions.ReportsView,
+		permissions.ReportsExport,
 	}
 
-	users := []model.User{
-		// 1. Jan Kowalski (Root)
-		{
-			ID:       testUserID1,
-			Username: "root@plus.pl",
-			Email:    "root@plus.pl",
-			Password: hashedPassword,
-			Role:     model.RoleRoot,
-			Permissions: datatypes.JSONSlice[string]{
-				permissions.SystemAdmin,
-				permissions.SystemManage,
-				permissions.UsersRead,
-				permissions.UsersWrite,
-				permissions.UsersDelete,
-				permissions.MessagesRead,
-				permissions.MessagesWrite,
-				permissions.MessagingAccess,
-				permissions.DocumentsRead,
-				permissions.DocumentsWrite,
-			},
-			TwoFactorEnabled: true,
-		},
-		// 2. Admin Systemowy
-		{
-			ID:       adminUserID,
-			Username: "admin@plus.pl",
-			Email:    "admin@plus.pl",
-			Password: hashedPassword,
-			Role:     model.RoleAdmin,
-			Permissions: datatypes.JSONSlice[string]{
-				permissions.UsersRead,
-				permissions.UsersWrite,
-				permissions.ReportsView,
-				permissions.ReportsExport,
-				permissions.MessagesRead,
-				permissions.MessagesWrite,
-				permissions.MessagingAccess,
-			},
-			TwoFactorEnabled: true,
-		},
-		// 3. Anna Nowak
-		{
-			ID:               testUserID2,
-			Username:         "anna@plus.pl",
-			Email:            "anna@plus.pl",
-			Password:         hashedPassword,
-			Role:             model.RoleUser,
-			Permissions:      userStandardPermissions,
-			TwoFactorEnabled: true,
-		},
-		// 4. Piotr Wiśniewski
-		{
-			ID:               testUserID3,
-			Username:         "piotr@plus.pl",
-			Email:            "piotr@plus.pl",
-			Password:         hashedPassword,
-			Role:             model.RoleUser,
-			Permissions:      userStandardPermissions,
-			TwoFactorEnabled: true,
-		},
+	// 3. Profil pracowniczy powiązany z kontem Urzędnika
+	employeeProfile := model.EmployeeProfile{
+		UserID:         officerUserID,
+		EmployeeNumber: "EMP-2026-0001",
+		InstitutionID:  testInstitutionID,
+		DepartmentID:   testDepartmentID,
+		Permissions:    officerPermissions,
+		Active:         true,
 	}
 
 	return db.Transaction(func(tx *gorm.DB) error {
+		// Tworzenie kont użytkowników
 		for _, u := range users {
 			if err := tx.Create(&u).Error; err != nil {
 				return fmt.Errorf("failed to seed user %s: %w", u.Username, err)
 			}
-			log.Info(fmt.Sprintf("[SEED] Utworzono konto użytkownika: %-18s | ID: %s", u.Username, u.ID))
+			log.Info(fmt.Sprintf("[SEED] Utworzono użytkownika: %-18s | ID: %s | Role: %s", u.Username, u.ID, u.Role))
 		}
+
+		// Tworzenie profilu urzędnika
+		if err := tx.Create(&employeeProfile).Error; err != nil {
+			return fmt.Errorf("failed to seed employee profile: %w", err)
+		}
+		log.Info(fmt.Sprintf("[SEED] Utworzono profil pracownika dla ID: %s", employeeProfile.UserID))
+
 		return nil
 	})
 }

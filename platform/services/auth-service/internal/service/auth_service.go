@@ -754,8 +754,6 @@ func (s *authService) AttemptLogin(ctx context.Context, email string, password [
 	return s.finalizeLogin(ctx, user, fingerprint)
 }
 
-// endregion
-
 // region prepareEmployeeLogin
 func (s *authService) prepareEmployeeLogin(ctx context.Context, user *model.User, fingerprint string) (*http.LoginResponse, error) {
 	log := shared.GetLogger()
@@ -770,7 +768,9 @@ func (s *authService) prepareEmployeeLogin(ctx context.Context, user *model.User
 	// 2. Pobieramy aktywną kartę / poświadczenie fizyczne
 	credential, err := s.employeeRepo.GetActiveCredentialByUserID(ctx, user.ID)
 	if err != nil || credential.Status != model.EmployeeCredentialActive {
-		log.Warn("Brak aktywnej karty urzędniczej dla użytkownika", map[string]any{"uid": user.ID})
+		log.WarnMap("Brak aktywnej karty urzędniczej dla użytkownika", map[string]any{
+			"uid": user.ID,
+		})
 		return nil, errors.ErrInvalidCredentials
 	}
 
@@ -1105,13 +1105,13 @@ func (s *authService) CanUserLogin(user *model.User) error {
 func (s *authService) handleFailedLogin(ctx context.Context, userID uuid.UUID) error {
 	log := shared.GetLogger()
 
-	attempts, incErr := s.userRepo.IncrementUserFailedLogin(userID)
+	attempts, incErr := s.userRepo.IncrementUserFailedLogin(ctx, userID)
 	if incErr != nil {
 		log.Error("Failed to increment failed attempts", incErr)
 	}
 
 	if attempts >= 5 {
-		_ = s.userRepo.PermanentLock(userID)
+		_ = s.userRepo.PermanentLock(ctx, userID)
 		return errors.ErrAccountLocked
 	}
 
