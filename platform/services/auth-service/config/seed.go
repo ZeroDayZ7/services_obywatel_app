@@ -15,5 +15,9 @@ func SeedData(db *gorm.DB) error {
 		return fmt.Errorf("user seeding failed: %w", err)
 	}
 
+	if err := SeedInitialEmployeeCredential(db); err != nil {
+		return fmt.Errorf("user seeding failed: %w", err)
+	}
+
 	return nil
 }
