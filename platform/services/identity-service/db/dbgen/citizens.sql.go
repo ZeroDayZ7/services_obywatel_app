@@ -13,9 +13,9 @@ import (
 
 const createCitizenWithAudit = `-- name: CreateCitizenWithAudit :one
 INSERT INTO citizens (
-    user_id, pesel_hash, encrypted_data, encrypted_dek, nonce, key_version
+    user_id, pesel_hash, encrypted_data, encrypted_dek, key_version
 ) VALUES (
-    $1, $2, $3, $4, $5, $6
+    $1, $2, $3, $4, $5
 ) RETURNING user_id, created_at
 `
 
@@ -24,7 +24,6 @@ type CreateCitizenWithAuditParams struct {
 	PeselHash     string      `json:"pesel_hash"`
 	EncryptedData []byte      `json:"encrypted_data"`
 	EncryptedDek  []byte      `json:"encrypted_dek"`
-	Nonce         []byte      `json:"nonce"`
 	KeyVersion    int32       `json:"key_version"`
 }
 
@@ -39,7 +38,6 @@ func (q *Queries) CreateCitizenWithAudit(ctx context.Context, arg CreateCitizenW
 		arg.PeselHash,
 		arg.EncryptedData,
 		arg.EncryptedDek,
-		arg.Nonce,
 		arg.KeyVersion,
 	)
 	var i CreateCitizenWithAuditRow
@@ -48,7 +46,7 @@ func (q *Queries) CreateCitizenWithAudit(ctx context.Context, arg CreateCitizenW
 }
 
 const getCitizenByPeselHash = `-- name: GetCitizenByPeselHash :one
-SELECT user_id, pesel_hash, encrypted_data, encrypted_dek, nonce, key_version, created_at
+SELECT user_id, pesel_hash, encrypted_data, encrypted_dek, key_version, created_at
 FROM citizens WHERE pesel_hash = $1 LIMIT 1
 `
 
@@ -57,7 +55,6 @@ type GetCitizenByPeselHashRow struct {
 	PeselHash     string             `json:"pesel_hash"`
 	EncryptedData []byte             `json:"encrypted_data"`
 	EncryptedDek  []byte             `json:"encrypted_dek"`
-	Nonce         []byte             `json:"nonce"`
 	KeyVersion    int32              `json:"key_version"`
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 }
@@ -70,7 +67,6 @@ func (q *Queries) GetCitizenByPeselHash(ctx context.Context, peselHash string) (
 		&i.PeselHash,
 		&i.EncryptedData,
 		&i.EncryptedDek,
-		&i.Nonce,
 		&i.KeyVersion,
 		&i.CreatedAt,
 	)
@@ -78,7 +74,7 @@ func (q *Queries) GetCitizenByPeselHash(ctx context.Context, peselHash string) (
 }
 
 const getCitizenByUserID = `-- name: GetCitizenByUserID :one
-SELECT user_id, pesel_hash, encrypted_data, encrypted_dek, nonce, key_version, created_at
+SELECT user_id, pesel_hash, encrypted_data, encrypted_dek, key_version, created_at
 FROM citizens WHERE user_id = $1 LIMIT 1
 `
 
@@ -87,7 +83,6 @@ type GetCitizenByUserIDRow struct {
 	PeselHash     string             `json:"pesel_hash"`
 	EncryptedData []byte             `json:"encrypted_data"`
 	EncryptedDek  []byte             `json:"encrypted_dek"`
-	Nonce         []byte             `json:"nonce"`
 	KeyVersion    int32              `json:"key_version"`
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 }
@@ -100,7 +95,6 @@ func (q *Queries) GetCitizenByUserID(ctx context.Context, userID pgtype.UUID) (G
 		&i.PeselHash,
 		&i.EncryptedData,
 		&i.EncryptedDek,
-		&i.Nonce,
 		&i.KeyVersion,
 		&i.CreatedAt,
 	)

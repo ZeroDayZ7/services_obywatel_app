@@ -1,8 +1,6 @@
 package config
 
 import (
-	"context"
-
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/zerodayz7/platform/pkg/database"
 	"github.com/zerodayz7/platform/pkg/shared"
@@ -11,11 +9,6 @@ import (
 
 func MustInitDB(cfg viper.DBConfig) (*pgxpool.Pool, func()) {
 	dbPool, closeDB := database.MustInitDB(cfg)
-
-	ctx := context.Background()
-	if err := database.EnsureSchemasPgx(ctx, dbPool, "citizens"); err != nil {
-		panic(err)
-	}
 
 	if err := RunMigrations(cfg.GetDSN()); err != nil {
 		panic(err)

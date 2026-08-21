@@ -13,7 +13,6 @@ type Citizen struct {
 	PeselHash     string             `json:"pesel_hash"`
 	EncryptedData []byte             `json:"encrypted_data"`
 	EncryptedDek  []byte             `json:"encrypted_dek"`
-	Nonce         []byte             `json:"nonce"`
 	KeyVersion    int32              `json:"key_version"`
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
