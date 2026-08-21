@@ -74,6 +74,18 @@ func main() {
 		log.Info("✅ Klucz HMAC załadowany", "service", senderID, "version", version)
 	}
 
+	// 2c. Pobieranie kluczy HMAC dla zaufanych nadawców zdarzeń RabbitMQ (np. identity-service)
+	for senderID, targetKey := range config.AppConfig.RabbitConsumers.TrustedSenders {
+		hmacKey, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsServiceCfg, targetKey, "HmacSha256")
+		if err != nil {
+			log.Error("❌ Nie udało się pobrać klucza HMAC dla Consumer RabbitMQ z KMS", "sender", senderID, "target_key", targetKey, "error", err)
+			os.Exit(1)
+		}
+
+		keyStore.SetKey(senderID, hmacKey, version)
+		log.Info("✅ Klucz HMAC Consumer RabbitMQ załadowany", "service", senderID, "version", version)
+	}
+
 	// 4. Telemetry (Tracer)
 	if config.AppConfig.OTEL.Enabled {
 		cleanup := telemetry.InitTracer(

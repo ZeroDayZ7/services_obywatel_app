@@ -22,21 +22,25 @@ type JWTConfig struct {
 }
 
 type AuthHMACConfig struct {
-	HeaderName string            `mapstructure:"HMAC_HEADER_NAME"`
 	TargetKeys map[string]string `mapstructure:"HMAC_TARGET_KEYS"`
 }
 
+type RabbitMQConsumersConfig struct {
+	TrustedSenders map[string]string `mapstructure:"RABBITMQ_TRUSTED_SENDERS"`
+}
+
 type Config struct {
-	Server   viper.ServerConfig   `mapstructure:",squash"`
-	Database viper.DBConfig       `mapstructure:",squash"`
-	Redis    viper.RedisConfig    `mapstructure:",squash"`
-	Session  viper.SessionConfig  `mapstructure:",squash"`
-	HMAC     AuthHMACConfig       `mapstructure:",squash"`
-	OTEL     viper.OTELConfig     `mapstructure:",squash"`
-	RabbitMQ viper.RabbitMQConfig `mapstructure:",squash"`
-	KMS      viper.KMSConfig      `mapstructure:",squash"`
-	JWT      JWTConfig            `mapstructure:",squash"`
-	Shutdown time.Duration        `mapstructure:"SHUTDOWN_TIMEOUT" validate:"required"`
+	Server          viper.ServerConfig      `mapstructure:",squash"`
+	Database        viper.DBConfig          `mapstructure:",squash"`
+	Redis           viper.RedisConfig       `mapstructure:",squash"`
+	Session         viper.SessionConfig     `mapstructure:",squash"`
+	HMAC            AuthHMACConfig          `mapstructure:",squash"`
+	OTEL            viper.OTELConfig        `mapstructure:",squash"`
+	RabbitMQ        viper.RabbitMQConfig    `mapstructure:",squash"`
+	RabbitConsumers RabbitMQConsumersConfig `mapstructure:",squash"`
+	KMS             viper.KMSConfig         `mapstructure:",squash"`
+	JWT             JWTConfig               `mapstructure:",squash"`
+	Shutdown        time.Duration           `mapstructure:"SHUTDOWN_TIMEOUT" validate:"required"`
 }
 
 // ToKMSServiceConfig zwraca konfigurację KMS dla komunikacji między-serwisowej
@@ -64,6 +68,10 @@ func LoadConfigGlobal() error {
 	spfViper.SetDefault("HMAC_TARGET_KEYS", map[string]string{
 		"gateway":     "hmac-gateway-auth",
 		"officer-bff": "hmac-bff-auth",
+	})
+
+	spfViper.SetDefault("RABBITMQ_TRUSTED_SENDERS", map[string]string{
+		"identity-service": "hmac-identity-rabbitmq",
 	})
 
 	if err := viper.InitConfig(&AppConfig, "auth-service"); err != nil {

@@ -34,8 +34,8 @@ type User struct {
 	Email               string                      `gorm:"size:100;not null;unique"`
 	Password            string                      `gorm:"size:128;not null"`
 	Role                UserRole                    `gorm:"type:varchar(20);not null;default:'user'"`
-	Departments         datatypes.JSONSlice[string] `gorm:"type:text[]"`
-	Permissions         datatypes.JSONSlice[string] `gorm:"type:text[]"`
+	Departments         datatypes.JSONSlice[string] `gorm:"type:jsonb"`
+	Permissions         datatypes.JSONSlice[string] `gorm:"type:jsonb"`
 	Status              UserStatus                  `gorm:"type:varchar(20);not null;default:'ACTIVE'"`
 	FailedLoginAttempts int8                        `gorm:"not null;default:0"`
 	LockedUntil         *time.Time                  `gorm:"index"`
