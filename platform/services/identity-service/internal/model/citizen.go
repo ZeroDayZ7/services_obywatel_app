@@ -45,7 +45,7 @@ type CitizenAuditLog struct {
 	Action              AuditAction `db:"action" json:"action"`
 	ActorID             uuid.UUID   `db:"actor_id" json:"actor_id"`
 	IPAddress           *string     `db:"ip_address" json:"ip_address,omitempty"`
-	PayloadHash         *string     `db:"payload_hash" json:"payload_hash,omitempty"`
+	PayloadHash         string      `db:"payload_hash" json:"payload_hash"`
 	PrevHash            string      `db:"prev_hash" json:"prev_hash"`
 	Hash                string      `db:"hash" json:"hash"`
 	SyncedToGlobalAudit bool        `db:"synced_to_global_audit" json:"synced_to_global_audit"`

@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -19,14 +20,16 @@ const zeroAuditHash = "000000000000000000000000000000000000000000000000000000000
 type txKey struct{}
 
 type citizenRepository struct {
-	dbPool *pgxpool.Pool
-	q      *dbgen.Queries
+	dbPool       *pgxpool.Pool
+	q            *dbgen.Queries
+	auditHmacKey []byte
 }
 
-func NewCitizenRepository(dbPool *pgxpool.Pool) CitizenRepository {
+func NewCitizenRepository(dbPool *pgxpool.Pool, auditHmacKey []byte) CitizenRepository {
 	return &citizenRepository{
-		dbPool: dbPool,
-		q:      dbgen.New(dbPool),
+		dbPool:       dbPool,
+		q:            dbgen.New(dbPool),
+		auditHmacKey: auditHmacKey,
 	}
 }
 
@@ -116,7 +119,6 @@ func (r *citizenRepository) CreatePukCode(ctx context.Context, puk *model.UserPu
 func (r *citizenRepository) CreateAuditLog(ctx context.Context, audit *model.CitizenAuditLog) error {
 	q := r.getQueries(ctx)
 
-	// Pobranie ostatniego logu i wyliczenie hash-a wewnątrz repozytorium
 	prevHash := zeroAuditHash
 	lastLog, err := q.GetLastAuditLog(ctx)
 	if err == nil {
@@ -126,7 +128,15 @@ func (r *citizenRepository) CreateAuditLog(ctx context.Context, audit *model.Cit
 	}
 
 	audit.PrevHash = prevHash
-	audit.Hash = calculateAuditHash(audit.ID, audit.UserID, string(audit.Action), audit.ActorID, prevHash)
+	audit.Hash = calculateAuditHMAC(
+		audit.ID,
+		audit.UserID,
+		string(audit.Action),
+		audit.ActorID,
+		audit.PayloadHash,
+		prevHash,
+		r.auditHmacKey,
+	)
 
 	err = q.CreateAuditLog(ctx, dbgen.CreateAuditLogParams{
 		ID:          audit.ID,
@@ -201,8 +211,11 @@ func (r *citizenRepository) GetByPESELHash(ctx context.Context, peselHash string
 	}, nil
 }
 
-func calculateAuditHash(id, userID uuid.UUID, action string, actorID uuid.UUID, prevHash string) string {
-	raw := fmt.Sprintf("%s:%s:%s:%s:%s", id.String(), userID.String(), action, actorID.String(), prevHash)
-	sum := sha256.Sum256([]byte(raw))
-	return hex.EncodeToString(sum[:])
+func calculateAuditHMAC(id, userID uuid.UUID, action string, actorID uuid.UUID, payloadHash, prevHash string, hmacSecret []byte) string {
+	raw := fmt.Sprintf("%s:%s:%s:%s:%s:%s", id.String(), userID.String(), action, actorID.String(), payloadHash, prevHash)
+
+	h := hmac.New(sha256.New, hmacSecret)
+	h.Write([]byte(raw))
+
+	return hex.EncodeToString(h.Sum(nil))
 }

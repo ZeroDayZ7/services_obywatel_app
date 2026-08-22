@@ -12,6 +12,7 @@ import (
 
 type IdentityHMACConfig struct {
 	TargetKeys map[string]string `mapstructure:"HMAC_TARGET_KEYS"`
+	AuditKey   string            `mapstructure:"HMAC_AUDIT_KEY"`
 }
 
 type RabbitMQConsumersConfig struct {
@@ -53,6 +54,8 @@ func LoadConfigGlobal() error {
 	spfViper.SetDefault("RABBITMQ_TRUSTED_SENDERS", map[string]string{
 		"auth-service": "hmac-auth-rabbitmq",
 	})
+
+	spfViper.SetDefault("HMAC_AUDIT_KEY", "identity-audit-hmac")
 
 	if err := viper.InitConfig(&AppConfig, "identity_service"); err != nil {
 		return fmt.Errorf("failed to initialize identity_service config: %w", err)

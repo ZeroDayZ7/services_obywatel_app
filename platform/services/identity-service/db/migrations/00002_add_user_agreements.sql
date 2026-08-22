@@ -2,7 +2,7 @@
 -- +goose StatementBegin
 CREATE TABLE IF NOT EXISTS user_agreements (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL UNIQUE,
+    user_id UUID NOT NULL UNIQUE REFERENCES citizens(user_id) ON DELETE CASCADE,
     agreement_number VARCHAR(64) NOT NULL UNIQUE,
     pesel_encrypted BYTEA NOT NULL,
     verified_phone VARCHAR(20) NOT NULL,
@@ -21,7 +21,7 @@ CREATE INDEX IF NOT EXISTS idx_user_agreements_deleted_at ON user_agreements(del
 CREATE TABLE IF NOT EXISTS user_puk_codes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_agreement_id UUID NOT NULL UNIQUE REFERENCES user_agreements(id) ON DELETE CASCADE,
-    user_id UUID NOT NULL,
+    user_id UUID NOT NULL REFERENCES citizens(user_id) ON DELETE CASCADE,
     puk_hash VARCHAR(128) NOT NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
     failed_attempts SMALLINT NOT NULL DEFAULT 0,

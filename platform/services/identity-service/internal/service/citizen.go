@@ -45,6 +45,7 @@ func NewCitizenService(
 	}
 }
 
+// #region RegisterCitizen
 func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.CitizenPayload) (*model.RegisterCitizenResponse, error) {
 	peselHash := s.hashPESEL(payload.PESEL)
 
@@ -127,11 +128,15 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 		MaxAttempts:     3,
 	}
 
+	payloadSum := sha256.Sum256(plaintextBytes)
+	payloadHash := hex.EncodeToString(payloadSum[:])
+
 	auditLog := &model.CitizenAuditLog{
-		ID:      shared.NewUUIDv7(),
-		UserID:  userID,
-		Action:  model.ActionCitizenRegistered,
-		ActorID: userID,
+		ID:          shared.NewUUIDv7(),
+		UserID:      userID,
+		Action:      model.ActionCitizenRegistered,
+		ActorID:     userID,
+		PayloadHash: payloadHash,
 	}
 
 	eventPayload, err := json.Marshal(map[string]any{
@@ -194,6 +199,7 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 	}, nil
 }
 
+// #region GetCitizenByID
 func (s *citizenService) GetCitizenByID(ctx context.Context, userID uuid.UUID) (*model.CitizenPayload, error) {
 	citizen, err := s.repo.GetByID(ctx, userID)
 	if err != nil {
@@ -236,6 +242,7 @@ func (s *citizenService) GetCitizenByID(ctx context.Context, userID uuid.UUID) (
 	return &payload, nil
 }
 
+// #region hashPESEL
 func (s *citizenService) hashPESEL(pesel string) string {
 	h := hmac.New(sha256.New, s.hmacSecret)
 	h.Write([]byte(pesel))

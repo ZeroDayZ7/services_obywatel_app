@@ -24,15 +24,26 @@ type Container struct {
 func BuildContainer(
 	app *config.App,
 	eventPublisher rabbitmq.EventPublisher,
-	peselHmacKey []byte,
 	kmsCfg kms.Config,
 	keyStore *httpserver.KeyStore,
 ) *Container {
-	citizenRepo := repository.NewCitizenRepository(app.DB)
+	peselHmacKey, _, ok := keyStore.GetKey("pesel")
+	if !ok {
+		panic("critical error: missing 'pesel' key in KeyStore")
+	}
+
+	auditHmacKey, _, ok := keyStore.GetKey("audit")
+	if !ok {
+		panic("critical error: missing 'audit' key in KeyStore")
+	}
+
+	// Repozytoria
+	citizenRepo := repository.NewCitizenRepository(app.DB, auditHmacKey)
 	outboxRepo := repository.NewOutboxRepository(app.DB)
 
 	cryptor := envelope.NewEnvelopeCryptor(kmsCfg)
 
+	// Serwisy
 	citizenSvc := service.NewCitizenService(
 		citizenRepo,
 		cryptor,
@@ -40,6 +51,7 @@ func BuildContainer(
 		"identity-citizen-data",
 	)
 
+	// Handlery
 	citizenHdl := handler.NewCitizenHandler(citizenSvc)
 
 	return &Container{

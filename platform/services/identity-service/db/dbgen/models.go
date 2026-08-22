@@ -25,8 +25,8 @@ type CitizenAuditLog struct {
 	UserID              uuid.UUID `json:"user_id"`
 	Action              string    `json:"action"`
 	ActorID             uuid.UUID `json:"actor_id"`
-	IpAddress           *string   `json:"ip_address"`
-	PayloadHash         *string   `json:"payload_hash"`
+	IpAddress           string    `json:"ip_address"`
+	PayloadHash         string    `json:"payload_hash"`
 	PrevHash            string    `json:"prev_hash"`
 	Hash                string    `json:"hash"`
 	SyncedToGlobalAudit bool      `json:"synced_to_global_audit"`
