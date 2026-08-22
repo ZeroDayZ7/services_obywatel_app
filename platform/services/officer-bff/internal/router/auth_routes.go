@@ -30,14 +30,8 @@ func registerAuthRoutes(mux *http.ServeMux, c *di.Container) {
 		panic(err)
 	}
 
-	meProxy, err := NewReverseProxy(c.Config.AuthServiceURL, "/auth/me", c.KeyStore)
-	if err != nil {
-		panic(err)
-	}
-
 	mux.HandleFunc("POST /api/v1/official/auth/login", loginStep1Proxy)
 	mux.HandleFunc("POST /api/v1/official/auth/login/step2", loginStep2Proxy)
 	mux.HandleFunc("POST /api/v1/official/auth/refresh", refreshProxy)
 	mux.HandleFunc("POST /api/v1/official/auth/logout", logoutProxy)
-	mux.HandleFunc("GET /api/v1/official/auth/me", meProxy)
 }

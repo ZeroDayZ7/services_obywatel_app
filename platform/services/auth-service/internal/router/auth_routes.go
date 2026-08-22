@@ -63,12 +63,6 @@ func SetupAuthRoutes(
 		middleware.ValidateBody[schemas.RefreshTokenRequest](),
 		h.Logout,
 	)
-	// #endregion
-
-	// ==========================
-	// SESSION / USER CONTEXT
-	// ==========================
-	auth.Get("/me", h.GetMe)
 
 	// ==========================
 	// DEVICE MANAGEMENT

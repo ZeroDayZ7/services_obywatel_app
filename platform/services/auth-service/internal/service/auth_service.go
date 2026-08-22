@@ -36,7 +36,6 @@ type AuthService interface {
 	RegisterDevice(ctx context.Context, userID uuid.UUID, sessionID string, clientIP string, req schemas.RegisterDeviceRequest) (*http.RegisterDeviceResponse, error)
 	RefreshToken(ctx context.Context, tokenStr string, fingerprint string) (*http.RefreshResponse, error)
 	VerifyDeviceSignature(ctx context.Context, userID, challenge, signature, fingerprint string) (*http.LoginResponse, error)
-	GetProfile(ctx context.Context, userID uuid.UUID) (*http.UserProfileResponse, error)
 	UnpairDevice(ctx context.Context, userID uuid.UUID, deviceFingerprint, sessionID string, req schemas.UnpairDeviceRequest) error
 
 	AttemptLoginStep2(ctx context.Context, userIDStr, challenge, signature, fingerprint, clientIP string) (*http.LoginResponse, error)
@@ -134,18 +133,11 @@ func (s *authService) AttemptLoginStep2(ctx context.Context, userIDStr string, s
 		return nil, errors.ErrUntrustedDevice
 	}
 
-	// 3. Przygotowanie bajtów wyzwania
-	challengeBytes, err := base64.StdEncoding.DecodeString(storedChallenge)
-	if err != nil {
-		challengeBytes = []byte(storedChallenge)
-		log.InfoMap("[AttemptLoginStep2] Challenge użyty jako surowy ciąg bajtów (RAW string)", map[string]any{
-			"challenge_bytes_len": len(challengeBytes),
-		})
-	} else {
-		log.InfoMap("[AttemptLoginStep2] Challenge zdekodowany z Base64", map[string]any{
-			"challenge_bytes_len": len(challengeBytes),
-		})
-	}
+	// 3. Przygotowanie bajtów wyzwania bezpośrednio jako ciąg UTF-8 (bez dekodowania Base64)
+	challengeBytes := []byte(storedChallenge)
+	log.InfoMap("[AttemptLoginStep2] Challenge przygotowany jako surowy UTF-8", map[string]any{
+		"challenge_bytes_len": len(challengeBytes),
+	})
 
 	// 4. Weryfikacja podpisu z klucza publicznego przypisanego do karty pracownika
 	log.InfoMap("[AttemptLoginStep2] Próba weryfikacji podpisu Ed25519", map[string]any{
@@ -153,7 +145,7 @@ func (s *authService) AttemptLoginStep2(ctx context.Context, userIDStr string, s
 		"signature_in": signature,
 	})
 
-	isValid := shared.VerifyEd25519Signature(cred.PublicKey, challengeBytes, signature)
+	isValid := shared.VerifyEd25519SignatureHex(cred.PublicKey, challengeBytes, signature)
 	if !isValid {
 		log.WarnMap("SECURITY ALERT: Nieprawidłowy podpis pracownika (VerifyEd25519Signature returned false)", map[string]any{
 			"user_id":       userIDStr,
@@ -170,7 +162,7 @@ func (s *authService) AttemptLoginStep2(ctx context.Context, userIDStr string, s
 	// 5. Usunięcie wyzwania z Redisa (ochrona przed Replay Attack)
 	_ = s.cache.DeleteChallenge(ctx, sessionID)
 
-	// 6. Pobranie danych pracownika/użytkownika
+	// 6. Pobranie danych użytkownika oraz profilu pracownika (dla instytucji/uprawnień)
 	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil || user == nil {
 		log.WarnMap("[AttemptLoginStep2] Nie znaleziono konta użytkownika", map[string]any{
@@ -188,7 +180,25 @@ func (s *authService) AttemptLoginStep2(ctx context.Context, userIDStr string, s
 		return nil, err
 	}
 
-	// 7. Generowanie tokenów oraz pełnej sesji
+	// Pobieramy dodatkowe metadane urzędnika (Permissions, InstitutionID, DepartmentID)
+	var permissions []string
+	var instID, deptID string
+
+	if user.Role != model.RoleCitizen && user.Role != model.RoleUser {
+		empProfile, err := s.employeeRepo.GetProfileByUserID(ctx, user.ID)
+		if err == nil && empProfile != nil {
+			permissions = empProfile.Permissions
+			instID = empProfile.InstitutionID.String()
+			deptID = empProfile.DepartmentID.String()
+		} else {
+			log.WarnMap("[AttemptLoginStep2] Nie pobrano profilu pracownika", map[string]any{
+				"user_id": user.ID,
+				"err":     err,
+			})
+		}
+	}
+
+	// 7. Generowanie tokenów oraz PEŁNEJ sesji dla Redisa
 	accessToken, newSessionID, err := s.CreateAccessToken(ctx, user.ID, fingerprint)
 	if err != nil {
 		log.ErrorObj("[AttemptLoginStep2] Błąd podczas tworzenia access tokena", err)
@@ -201,10 +211,15 @@ func (s *authService) AttemptLoginStep2(ctx context.Context, userIDStr string, s
 		return nil, errors.ErrInternal
 	}
 
+	// Zapisujemy PEŁNY obiekt w Redis (który potem odczytuje Gateway dla /auth/me)
 	sessionData := redis.UserSession{
-		UserID:      user.ID.String(),
-		Fingerprint: fingerprint,
-		Role:        string(user.Role),
+		UserID:        user.ID.String(),
+		Fingerprint:   shared.HashSHA256(fingerprint),
+		Role:          string(user.Role),
+		PublicKey:     cred.PublicKey,
+		InstitutionID: instID,
+		DepartmentID:  deptID,
+		Permissions:   permissions,
 	}
 
 	if err := s.cache.SetSession(ctx, newSessionID, sessionData, s.cfg.Session.TTL); err != nil {
@@ -212,8 +227,9 @@ func (s *authService) AttemptLoginStep2(ctx context.Context, userIDStr string, s
 		return nil, errors.ErrInternal
 	}
 
-	log.InfoMap("[AttemptLoginStep2] Logowanie zakończone pełnym sukcesem", map[string]any{
-		"user_id": user.ID.String(),
+	log.InfoMap("[AttemptLoginStep2] Logowanie zakończone pełnym sukcesem i zapisem do Redis", map[string]any{
+		"user_id":         user.ID.String(),
+		"permissions_cnt": len(permissions),
 	})
 
 	return &http.LoginResponse{
@@ -222,32 +238,6 @@ func (s *authService) AttemptLoginStep2(ctx context.Context, userIDStr string, s
 		RefreshToken: refreshToken.Token,
 		UserID:       user.ID.String(),
 		ExpiresAt:    time.Now().Add(s.cfg.JWT.AccessTTL).Unix(),
-	}, nil
-}
-
-// #endregion
-
-// region GetProfile
-func (s *authService) GetProfile(ctx context.Context, userID uuid.UUID) (*http.UserProfileResponse, error) {
-	log := shared.GetLogger()
-
-	user, err := s.userRepo.GetByID(ctx, userID)
-	if err != nil || user == nil {
-		log.WarnMap("GetProfile: user not found", map[string]any{"user_id": userID})
-		return nil, errors.ErrUserNotFound
-	}
-
-	if err := s.CanUserLogin(user); err != nil {
-		return nil, err
-	}
-
-	return &http.UserProfileResponse{
-		UserID:      user.ID.String(),
-		Email:       user.Email,
-		DisplayName: user.Username,
-		Status:      string(user.Status),
-		Role:        string(user.Role),
-		LastLogin:   user.LastLogin.Format(time.RFC3339),
 	}, nil
 }
 
@@ -355,7 +345,7 @@ func (s *authService) VerifyDeviceSignature(ctx context.Context, userIDStr, sess
 	// Zapis rozdzielonej roli i uprawnień do pełnej sesji w Redis
 	sessionData := redis.UserSession{
 		UserID:      user.ID.String(),
-		Fingerprint: fingerprint,
+		Fingerprint: shared.HashSHA256(fingerprint),
 		Role:        string(user.Role),
 	}
 
@@ -443,7 +433,7 @@ func (s *authService) RefreshToken(ctx context.Context, tokenStr string, fingerp
 	// 8. Zapis sesji w Redis
 	sessionData := redis.UserSession{
 		UserID:      user.ID.String(),
-		Fingerprint: fingerprint,
+		Fingerprint: shared.HashSHA256(fingerprint),
 		PublicKey:   device.PublicKey,
 		Role:        string(user.Role),
 	}
@@ -940,14 +930,10 @@ func (s *authService) prepareEmployeeLogin(ctx context.Context, user *model.User
 
 	// 4. Konstruujemy dane sesji z kontekstem urzędnika i kluczem z KARTY
 	sessionData := redis.UserSession{
-		UserID: user.ID.String(),
-		// Fingerprint:   fingerprint,
-		Fingerprint:   shared.HashSHA256(fingerprint),
-		PublicKey:     credential.PublicKey,
-		Role:          string(user.Role),
-		InstitutionID: empProfile.InstitutionID.String(),
-		DepartmentID:  empProfile.DepartmentID.String(),
-		Permissions:   empProfile.Permissions,
+		UserID:      user.ID.String(),
+		Fingerprint: shared.HashSHA256(fingerprint),
+		PublicKey:   credential.PublicKey,
+		Role:        string(user.Role),
 	}
 
 	if err := s.cache.SetSetupSession(ctx, sessionID, sessionData, 15*time.Minute); err != nil {
@@ -1006,11 +992,10 @@ func (s *authService) prepare2FASession(ctx context.Context, user *model.User, f
 	// 3. Tworzymy sesję 2FA
 	token := shared.GenerateSessionID()
 	session := redis.TwoFASession{
-		UserID:   user.ID.String(),
-		Email:    user.Email,
-		Token:    token,
-		CodeHash: hashedCode,
-		// Fingerprint: fingerprint,
+		UserID:      user.ID.String(),
+		Email:       user.Email,
+		Token:       token,
+		CodeHash:    hashedCode,
 		Fingerprint: shared.HashSHA256(fingerprint),
 		Attempts:    0,
 	}
@@ -1290,7 +1275,7 @@ func (s *authService) preparePreTrustSession(ctx context.Context, user *model.Us
 	// 2. Dane sesji dla zwykłego urządzenia
 	sessionData := redis.UserSession{
 		UserID:      user.ID.String(),
-		Fingerprint: fingerprint,
+		Fingerprint: shared.HashSHA256(fingerprint),
 		PublicKey:   publicKey,
 		Role:        string(user.Role),
 	}

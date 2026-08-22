@@ -120,6 +120,7 @@ func AuthRedisMiddleware(rdb *redis.Client) fiber.Handler {
 		c.Locals("userID", session.UserID)
 		c.Locals("sessionID", sessionID)
 		c.Locals("deviceID", hashedClientFingerprint)
+		c.Locals("userSession", session)
 
 		return c.Next()
 	}

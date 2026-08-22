@@ -3,6 +3,7 @@ package router
 import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/zerodayz7/platform/services/gateway/internal/di"
+	"github.com/zerodayz7/platform/services/gateway/internal/handlers"
 )
 
 const ServiceOfficerBFF = "officer-bff"
@@ -13,10 +14,11 @@ func RegisterOfficerRoutes(app *fiber.App, container *di.Container) {
 	// Grupa tras przeznaczona dla urzędu
 	official := app.Group("/api/v1/official")
 
+	official.Get("/auth/me", handlers.GetMeHandler)
+
 	// 1. Auth urzędnika (przekierowanie do officer-bff w celu obsługi ciasteczek)
 	official.Post("/auth/login", ReverseProxy(container, ServiceOfficerBFF, target))
 	official.Post("/auth/login/step2", ReverseProxySecure(container, ServiceOfficerBFF, target))
-	official.Get("/auth/me", ReverseProxy(container, ServiceOfficerBFF, target))
 	official.Post("/auth/refresh", ReverseProxy(container, ServiceOfficerBFF, target))
 	official.Post("/auth/logout", ReverseProxy(container, ServiceOfficerBFF, target))
 
