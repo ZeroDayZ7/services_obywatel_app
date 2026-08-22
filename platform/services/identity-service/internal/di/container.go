@@ -18,6 +18,7 @@ type Container struct {
 	EventPublisher rabbitmq.EventPublisher
 	CitizenHandler *handler.CitizenHandler
 	KeyStore       *httpserver.KeyStore
+	OutboxRepo     repository.OutboxRepository
 }
 
 func BuildContainer(
@@ -28,12 +29,12 @@ func BuildContainer(
 	keyStore *httpserver.KeyStore,
 ) *Container {
 	citizenRepo := repository.NewCitizenRepository(app.DB)
+	outboxRepo := repository.NewOutboxRepository(app.DB)
 
 	cryptor := envelope.NewEnvelopeCryptor(kmsCfg)
 
 	citizenSvc := service.NewCitizenService(
 		citizenRepo,
-		eventPublisher,
 		cryptor,
 		peselHmacKey,
 		"identity-citizen-data",
@@ -47,5 +48,6 @@ func BuildContainer(
 		EventPublisher: eventPublisher,
 		CitizenHandler: citizenHdl,
 		KeyStore:       keyStore,
+		OutboxRepo:     outboxRepo,
 	}
 }

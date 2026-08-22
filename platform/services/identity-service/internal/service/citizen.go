@@ -3,10 +3,13 @@ package service
 import (
 	"context"
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math/big"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/pkg/envelope"
@@ -23,7 +26,6 @@ type CitizenService interface {
 
 type citizenService struct {
 	repo       repository.CitizenRepository
-	eventPub   rabbitmq.EventPublisher
 	cryptor    *envelope.EnvelopeCryptor
 	hmacSecret []byte
 	keyAlias   string
@@ -31,14 +33,12 @@ type citizenService struct {
 
 func NewCitizenService(
 	repo repository.CitizenRepository,
-	eventPub rabbitmq.EventPublisher,
 	cryptor *envelope.EnvelopeCryptor,
 	hmacSecret []byte,
 	keyAlias string,
 ) CitizenService {
 	return &citizenService{
 		repo:       repo,
-		eventPub:   eventPub,
 		cryptor:    cryptor,
 		hmacSecret: hmacSecret,
 		keyAlias:   keyAlias,
@@ -60,6 +60,7 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 
 	peselHash := s.hashPESEL(payload.PESEL)
 
+	// 1. Model Citizen
 	citizen := &model.Citizen{
 		UserID:        userID,
 		PESELHash:     peselHash,
@@ -68,6 +69,36 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 		KeyVersion:    1,
 	}
 
+	// 2. Model UserAgreement
+	agreementID := shared.NewUUIDv7()
+	now := time.Now().UTC()
+	agreement := &model.UserAgreement{
+		ID:              agreementID,
+		UserID:          userID,
+		AgreementNumber: fmt.Sprintf("AGR/%s/%d", now.Format("20060102"), now.Unix()%100000),
+		PeselEncrypted:  encryptedPayload.EncryptedData, // Lub wyizolowane zaszyfrowane pole PESEL
+		Status:          model.AgreementStatusActive,
+		SignedAt:        now,
+	}
+
+	// 3. Model UserPukCode (Generowanie np. 8-cyfrowego PUK)
+	rawPUK, err := generateRandomPUK(8)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate PUK: %w", err)
+	}
+	pukHash := s.hashPESEL(rawPUK) // Hashowanie kodu PUK
+
+	puk := &model.UserPukCode{
+		ID:              shared.NewUUIDv7(),
+		UserAgreementID: agreementID,
+		UserID:          userID,
+		PukHash:         pukHash,
+		Status:          model.PukStatusActive,
+		FailedAttempts:  0,
+		MaxAttempts:     3,
+	}
+
+	// 4. Model AuditLog
 	auditLog := &model.CitizenAuditLog{
 		ID:      shared.NewUUIDv7(),
 		UserID:  userID,
@@ -75,20 +106,29 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 		ActorID: userID,
 	}
 
-	if err := s.repo.CreateWithAudit(ctx, citizen, auditLog); err != nil {
-		return nil, fmt.Errorf("failed to save citizen to repository: %w", err)
-	}
-
+	// 5. Model OutboxMessage (zamiast bezpośredniej publikacji RabbitMQ)
 	eventPayload, err := json.Marshal(map[string]any{
 		"user_id":     citizen.UserID,
 		"key_version": citizen.KeyVersion,
+		"signed_at":   agreement.SignedAt,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal event payload: %w", err)
 	}
 
-	if err := s.eventPub.Publish(ctx, rabbitmq.TopicCitizenCreated, eventPayload); err != nil {
-		return nil, fmt.Errorf("failed to publish citizen.created event: %w", err)
+	outboxMsg := &model.OutboxMessage{
+		ID:            shared.NewUUIDv7(),
+		AggregateType: "citizen",
+		AggregateID:   userID,
+		EventType:     string(rabbitmq.TopicCitizenCreated),
+		Payload:       eventPayload,
+		Status:        model.OutboxStatusPending,
+	}
+
+	// Wykonanie całej operacji w jednej transakcji DB
+	err = s.repo.RegisterCitizenWorkflow(ctx, citizen, agreement, puk, auditLog, outboxMsg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute register citizen workflow: %w", err)
 	}
 
 	return citizen, nil
@@ -122,4 +162,17 @@ func (s *citizenService) hashPESEL(pesel string) string {
 	h := hmac.New(sha256.New, s.hmacSecret)
 	h.Write([]byte(pesel))
 	return hex.EncodeToString(h.Sum(nil))
+}
+
+func generateRandomPUK(length int) (string, error) {
+	const digits = "0123456789"
+	result := make([]byte, length)
+	for i := 0; i < length; i++ {
+		num, err := rand.Int(rand.Reader, big.NewInt(int64(len(digits))))
+		if err != nil {
+			return "", err
+		}
+		result[i] = digits[num.Int64()]
+	}
+	return string(result), nil
 }

@@ -8,6 +8,7 @@ package dbgen
 import (
 	"context"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -20,15 +21,15 @@ INSERT INTO citizens (
 `
 
 type CreateCitizenWithAuditParams struct {
-	UserID        pgtype.UUID `json:"user_id"`
-	PeselHash     string      `json:"pesel_hash"`
-	EncryptedData []byte      `json:"encrypted_data"`
-	EncryptedDek  []byte      `json:"encrypted_dek"`
-	KeyVersion    int32       `json:"key_version"`
+	UserID        uuid.UUID `json:"user_id"`
+	PeselHash     string    `json:"pesel_hash"`
+	EncryptedData []byte    `json:"encrypted_data"`
+	EncryptedDek  []byte    `json:"encrypted_dek"`
+	KeyVersion    int32     `json:"key_version"`
 }
 
 type CreateCitizenWithAuditRow struct {
-	UserID    pgtype.UUID        `json:"user_id"`
+	UserID    uuid.UUID          `json:"user_id"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
@@ -51,7 +52,7 @@ FROM citizens WHERE pesel_hash = $1 LIMIT 1
 `
 
 type GetCitizenByPeselHashRow struct {
-	UserID        pgtype.UUID        `json:"user_id"`
+	UserID        uuid.UUID          `json:"user_id"`
 	PeselHash     string             `json:"pesel_hash"`
 	EncryptedData []byte             `json:"encrypted_data"`
 	EncryptedDek  []byte             `json:"encrypted_dek"`
@@ -79,7 +80,7 @@ FROM citizens WHERE user_id = $1 LIMIT 1
 `
 
 type GetCitizenByUserIDRow struct {
-	UserID        pgtype.UUID        `json:"user_id"`
+	UserID        uuid.UUID          `json:"user_id"`
 	PeselHash     string             `json:"pesel_hash"`
 	EncryptedData []byte             `json:"encrypted_data"`
 	EncryptedDek  []byte             `json:"encrypted_dek"`
@@ -87,7 +88,7 @@ type GetCitizenByUserIDRow struct {
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 }
 
-func (q *Queries) GetCitizenByUserID(ctx context.Context, userID pgtype.UUID) (GetCitizenByUserIDRow, error) {
+func (q *Queries) GetCitizenByUserID(ctx context.Context, userID uuid.UUID) (GetCitizenByUserIDRow, error) {
 	row := q.db.QueryRow(ctx, getCitizenByUserID, userID)
 	var i GetCitizenByUserIDRow
 	err := row.Scan(

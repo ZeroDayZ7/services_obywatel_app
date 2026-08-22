@@ -8,6 +8,7 @@ package dbgen
 import (
 	"context"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -20,10 +21,10 @@ INSERT INTO citizen_audit_logs (
 `
 
 type CreateAuditLogParams struct {
-	ID          pgtype.UUID `json:"id"`
-	UserID      pgtype.UUID `json:"user_id"`
+	ID          uuid.UUID   `json:"id"`
+	UserID      uuid.UUID   `json:"user_id"`
 	Action      string      `json:"action"`
-	ActorID     pgtype.UUID `json:"actor_id"`
+	ActorID     uuid.UUID   `json:"actor_id"`
 	IpAddress   pgtype.Text `json:"ip_address"`
 	PayloadHash pgtype.Text `json:"payload_hash"`
 	PrevHash    string      `json:"prev_hash"`
@@ -50,8 +51,8 @@ ORDER BY created_at DESC, id DESC LIMIT 1
 `
 
 type GetLastAuditLogRow struct {
-	ID   pgtype.UUID `json:"id"`
-	Hash string      `json:"hash"`
+	ID   uuid.UUID `json:"id"`
+	Hash string    `json:"hash"`
 }
 
 func (q *Queries) GetLastAuditLog(ctx context.Context) (GetLastAuditLogRow, error) {
@@ -69,10 +70,10 @@ ORDER BY created_at ASC LIMIT $1
 `
 
 type GetUnsyncedAuditLogsRow struct {
-	ID          pgtype.UUID        `json:"id"`
-	UserID      pgtype.UUID        `json:"user_id"`
+	ID          uuid.UUID          `json:"id"`
+	UserID      uuid.UUID          `json:"user_id"`
 	Action      string             `json:"action"`
-	ActorID     pgtype.UUID        `json:"actor_id"`
+	ActorID     uuid.UUID          `json:"actor_id"`
 	IpAddress   pgtype.Text        `json:"ip_address"`
 	PayloadHash pgtype.Text        `json:"payload_hash"`
 	PrevHash    string             `json:"prev_hash"`
@@ -116,7 +117,7 @@ SET synced_to_global_audit = TRUE
 WHERE id = ANY($1::uuid[])
 `
 
-func (q *Queries) MarkAuditLogsAsSynced(ctx context.Context, dollar_1 []pgtype.UUID) error {
+func (q *Queries) MarkAuditLogsAsSynced(ctx context.Context, dollar_1 []uuid.UUID) error {
 	_, err := q.db.Exec(ctx, markAuditLogsAsSynced, dollar_1)
 	return err
 }

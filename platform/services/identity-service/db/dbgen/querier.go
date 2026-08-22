@@ -7,17 +7,29 @@ package dbgen
 import (
 	"context"
 
-	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/google/uuid"
 )
 
 type Querier interface {
 	CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) error
 	CreateCitizenWithAudit(ctx context.Context, arg CreateCitizenWithAuditParams) (CreateCitizenWithAuditRow, error)
+	CreateOutboxMessage(ctx context.Context, arg CreateOutboxMessageParams) (OutboxMessage, error)
+	CreateUserAgreement(ctx context.Context, arg CreateUserAgreementParams) (UserAgreement, error)
+	CreateUserPukCode(ctx context.Context, arg CreateUserPukCodeParams) (UserPukCode, error)
+	FetchPendingOutboxMessages(ctx context.Context, limit int32) ([]FetchPendingOutboxMessagesRow, error)
+	GetAgreementByNumber(ctx context.Context, agreementNumber string) (UserAgreement, error)
+	GetAgreementByUserID(ctx context.Context, userID uuid.UUID) (UserAgreement, error)
 	GetCitizenByPeselHash(ctx context.Context, peselHash string) (GetCitizenByPeselHashRow, error)
-	GetCitizenByUserID(ctx context.Context, userID pgtype.UUID) (GetCitizenByUserIDRow, error)
+	GetCitizenByUserID(ctx context.Context, userID uuid.UUID) (GetCitizenByUserIDRow, error)
 	GetLastAuditLog(ctx context.Context) (GetLastAuditLogRow, error)
+	GetPukCodeByUserID(ctx context.Context, userID uuid.UUID) (UserPukCode, error)
 	GetUnsyncedAuditLogs(ctx context.Context, limit int32) ([]GetUnsyncedAuditLogsRow, error)
-	MarkAuditLogsAsSynced(ctx context.Context, dollar_1 []pgtype.UUID) error
+	IncrementPukFailedAttempts(ctx context.Context, id uuid.UUID) error
+	MarkAuditLogsAsSynced(ctx context.Context, dollar_1 []uuid.UUID) error
+	MarkOutboxMessageAsFailed(ctx context.Context, arg MarkOutboxMessageAsFailedParams) error
+	MarkOutboxMessageAsSent(ctx context.Context, id uuid.UUID) error
+	MarkPukAsUsed(ctx context.Context, id uuid.UUID) error
+	UpdateAgreementStatus(ctx context.Context, arg UpdateAgreementStatusParams) error
 }
 
 var _ Querier = (*Queries)(nil)

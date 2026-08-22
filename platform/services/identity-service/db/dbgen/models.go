@@ -5,11 +5,12 @@
 package dbgen
 
 import (
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Citizen struct {
-	UserID        pgtype.UUID        `json:"user_id"`
+	UserID        uuid.UUID          `json:"user_id"`
 	PeselHash     string             `json:"pesel_hash"`
 	EncryptedData []byte             `json:"encrypted_data"`
 	EncryptedDek  []byte             `json:"encrypted_dek"`
@@ -19,10 +20,10 @@ type Citizen struct {
 }
 
 type CitizenAuditLog struct {
-	ID                  pgtype.UUID        `json:"id"`
-	UserID              pgtype.UUID        `json:"user_id"`
+	ID                  uuid.UUID          `json:"id"`
+	UserID              uuid.UUID          `json:"user_id"`
 	Action              string             `json:"action"`
-	ActorID             pgtype.UUID        `json:"actor_id"`
+	ActorID             uuid.UUID          `json:"actor_id"`
 	IpAddress           pgtype.Text        `json:"ip_address"`
 	PayloadHash         pgtype.Text        `json:"payload_hash"`
 	PrevHash            string             `json:"prev_hash"`
@@ -31,11 +32,26 @@ type CitizenAuditLog struct {
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
 }
 
+type OutboxMessage struct {
+	ID            uuid.UUID          `json:"id"`
+	AggregateType string             `json:"aggregate_type"`
+	AggregateID   uuid.UUID          `json:"aggregate_id"`
+	EventType     string             `json:"event_type"`
+	Payload       []byte             `json:"payload"`
+	Status        string             `json:"status"`
+	RetryCount    int16              `json:"retry_count"`
+	LastError     *string            `json:"last_error"`
+	ProcessedAt   pgtype.Timestamptz `json:"processed_at"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt     pgtype.Timestamptz `json:"deleted_at"`
+}
+
 type UserAgreement struct {
-	ID              pgtype.UUID        `json:"id"`
-	UserID          pgtype.UUID        `json:"user_id"`
+	ID              uuid.UUID          `json:"id"`
+	UserID          uuid.UUID          `json:"user_id"`
 	AgreementNumber string             `json:"agreement_number"`
-	PeselEncrypted  string             `json:"pesel_encrypted"`
+	PeselEncrypted  []byte             `json:"pesel_encrypted"`
 	VerifiedPhone   string             `json:"verified_phone"`
 	Status          string             `json:"status"`
 	SignedAt        pgtype.Timestamptz `json:"signed_at"`
@@ -47,9 +63,9 @@ type UserAgreement struct {
 }
 
 type UserPukCode struct {
-	ID              pgtype.UUID        `json:"id"`
-	UserAgreementID pgtype.UUID        `json:"user_agreement_id"`
-	UserID          pgtype.UUID        `json:"user_id"`
+	ID              uuid.UUID          `json:"id"`
+	UserAgreementID uuid.UUID          `json:"user_agreement_id"`
+	UserID          uuid.UUID          `json:"user_id"`
 	PukHash         string             `json:"puk_hash"`
 	Status          string             `json:"status"`
 	FailedAttempts  int16              `json:"failed_attempts"`

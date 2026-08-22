@@ -30,7 +30,7 @@ type UserAgreement struct {
 	ID              uuid.UUID       `gorm:"type:uuid;primaryKey;default:uuidv7()"`
 	UserID          uuid.UUID       `gorm:"type:uuid;not null;uniqueIndex"`
 	AgreementNumber string          `gorm:"size:64;not null;uniqueIndex"`
-	PeselEncrypted  string          `gorm:"size:256;not null;index"` // PESEL zaszyfrowany AES-GCM
+	PeselEncrypted  []byte          `gorm:"size:256;not null;index"` // PESEL zaszyfrowany AES-GCM
 	VerifiedPhone   string          `gorm:"size:20;not null"`        // Numer telefonu do kodów SMS z umowy
 	Status          AgreementStatus `gorm:"type:varchar(20);not null;default:'PENDING'"`
 	SignedAt        time.Time       `gorm:"not null"`

@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS user_agreements (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL UNIQUE,
     agreement_number VARCHAR(64) NOT NULL UNIQUE,
-    pesel_encrypted VARCHAR(256) NOT NULL,
+    pesel_encrypted BYTEA NOT NULL,
     verified_phone VARCHAR(20) NOT NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
     signed_at TIMESTAMP WITH TIME ZONE NOT NULL,
