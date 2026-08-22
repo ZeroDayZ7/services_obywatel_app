@@ -71,10 +71,15 @@ func (h *AuthHandler) LoginStep2(c *fiber.Ctx) error {
 		return apperr.SendAppError(c, apperr.ErrInvalidDeviceFingerprint)
 	}
 
+	if rc.SessionID == "" {
+		log.WarnMap("LoginStep2: Brak SessionID w kontekście żądania", map[string]any{"user_id": body.UserID})
+		return apperr.SendAppError(c, apperr.ErrUnauthorized)
+	}
+
 	response, err := h.authService.AttemptLoginStep2(
 		ctx,
 		body.UserID,
-		body.Challenge,
+		rc.SessionID,
 		body.Signature,
 		fingerprint,
 		rc.IP,

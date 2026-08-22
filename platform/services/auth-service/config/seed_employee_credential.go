@@ -25,6 +25,23 @@ type AngularDevCard struct {
 func SeedInitialEmployeeCredential(db *gorm.DB) error {
 	log := shared.GetLogger()
 
+	cardSerial := "CARD-OFFICER-DEV-001"
+
+	// 1. Sprawdzamy czy konkretny CardSerialNumber istnieje (również wśród usuniętych soft-delete)
+	var count int64
+	if err := db.Unscoped().
+		Model(&model.EmployeeCredential{}).
+		Where("card_serial_number = ?", cardSerial).
+		Count(&count).Error; err != nil {
+		log.Error("❌ Błąd podczas sprawdzania poświadczenia w bazie", "error", err)
+		return err
+	}
+
+	if count > 0 {
+		return nil
+	}
+
+	// 2. Generowanie kluczy Ed25519 tylko gdy karta nie istnieje
 	pubKey, privKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		log.Error("❌ Błąd podczas generowania kluczy Ed25519", "error", err)
@@ -38,9 +55,9 @@ func SeedInitialEmployeeCredential(db *gorm.DB) error {
 	systemIssuerID := uuid.MustParse("707a8869-6867-4601-9337-e23fcb51b0ad")
 
 	credential := model.EmployeeCredential{
-		ID:               uuid.New(),
+		ID:               shared.NewUUIDv7(),
 		UserID:           adminUserID,
-		CardSerialNumber: "CARD-OFFICER-DEV-001",
+		CardSerialNumber: cardSerial,
 		PublicKey:        pubKeyHex,
 		KeyAlgorithm:     "ED25519",
 		Status:           model.EmployeeCredentialActive,
@@ -48,13 +65,12 @@ func SeedInitialEmployeeCredential(db *gorm.DB) error {
 		ExpiresAt:        func() *time.Time { t := time.Now().AddDate(1, 0, 0); return &t }(),
 	}
 
-	err = db.Where("card_serial_number = ?", credential.CardSerialNumber).FirstOrCreate(&credential).Error
-	if err != nil {
+	if err := db.Create(&credential).Error; err != nil {
 		log.Error("❌ Błąd zapisywania poświadczenia w bazie", "error", err)
 		return err
 	}
 
-	// Zapis do pliku dla Angulara
+	// 3. Zapis pliku dla Angulara
 	devCard := AngularDevCard{
 		CardSerialNumber: credential.CardSerialNumber,
 		PublicKey:        pubKeyHex,

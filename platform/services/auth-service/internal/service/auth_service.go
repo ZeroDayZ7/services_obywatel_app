@@ -38,6 +38,8 @@ type AuthService interface {
 	VerifyDeviceSignature(ctx context.Context, userID, challenge, signature, fingerprint string) (*http.LoginResponse, error)
 	GetProfile(ctx context.Context, userID uuid.UUID) (*http.UserProfileResponse, error)
 	UnpairDevice(ctx context.Context, userID uuid.UUID, deviceFingerprint, sessionID string, req schemas.UnpairDeviceRequest) error
+
+	AttemptLoginStep2(ctx context.Context, userIDStr, challenge, signature, fingerprint, clientIP string) (*http.LoginResponse, error)
 }
 
 // region struct
@@ -67,6 +69,114 @@ func NewAuthService(
 		eventPublisher: eventPublisher,
 		cfg:            cfg,
 	}
+}
+
+// #region AttemptLoginStep2
+// #region AttemptLoginStep2
+func (s *authService) AttemptLoginStep2(
+	ctx context.Context,
+	userIDStr string,
+	sessionID string,
+	signature string,
+	fingerprint string,
+	clientIP string,
+) (*http.LoginResponse, error) {
+	log := shared.GetLogger()
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		return nil, errors.ErrInvalidParams
+	}
+
+	// 1. Pobranie wyzwania z Redisa na podstawie SessionID
+	storedChallenge, err := s.cache.GetChallenge(ctx, sessionID)
+	if err != nil || storedChallenge == "" {
+		log.WarnMap("[AttemptLoginStep2] Challenge not found or expired", map[string]any{
+			"user_id": userIDStr,
+			"sid":     sessionID,
+		})
+		return nil, errors.ErrInvalidChallenge
+	}
+
+	// 2. Pobranie aktywnego poświadczenia (karty/klucza) pracownika
+	cred, err := s.employeeRepo.GetActiveCredentialByUserID(ctx, userID)
+	if err != nil || cred == nil {
+		log.WarnMap("[AttemptLoginStep2] Active employee credential not found", map[string]any{
+			"user_id": userIDStr,
+			"err":     err,
+		})
+		return nil, errors.ErrUntrustedDevice
+	}
+
+	// Opcjonalne sprawdzenie czy karta nie wygasła czasowo
+	if cred.ExpiresAt != nil && cred.ExpiresAt.Before(time.Now()) {
+		log.WarnMap("[AttemptLoginStep2] Employee credential expired", map[string]any{
+			"user_id": userIDStr,
+			"card_sn": cred.CardSerialNumber,
+		})
+		return nil, errors.ErrUntrustedDevice
+	}
+
+	// 3. Przygotowanie bajtów wyzwania
+	challengeBytes, err := base64.StdEncoding.DecodeString(storedChallenge)
+	if err != nil {
+		challengeBytes = []byte(storedChallenge)
+	}
+
+	// 4. Weryfikacja podpisu z klucza publicznego przypisanego do karty pracownika
+	if !shared.VerifyEd25519Signature(cred.PublicKey, challengeBytes, signature) {
+		log.WarnMap("SECURITY ALERT: Invalid employee signature", map[string]any{
+			"user_id": userIDStr,
+			"card_sn": cred.CardSerialNumber,
+		})
+		return nil, errors.ErrInvalidSignature
+	}
+
+	// 5. Usunięcie wyzwania z Redisa (ochrona przed Replay Attack)
+	_ = s.cache.DeleteChallenge(ctx, sessionID)
+
+	// 6. Pobranie danych pracownika/użytkownika i sprawdzanie czy może się zalogować
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil || user == nil {
+		return nil, errors.ErrUserNotFound
+	}
+
+	if err := s.CanUserLogin(user); err != nil {
+		log.WarnMap("[AttemptLoginStep2] Employee user account is locked/inactive", map[string]any{
+			"user_id": user.ID,
+		})
+		return nil, err
+	}
+
+	// 7. Generowanie tokenów oraz pełnej sesji
+	accessToken, newSessionID, err := s.CreateAccessToken(ctx, user.ID, fingerprint)
+	if err != nil {
+		return nil, errors.ErrInternal
+	}
+
+	refreshToken, err := s.CreateRefreshToken(user.ID, fingerprint, nil)
+	if err != nil {
+		return nil, errors.ErrInternal
+	}
+
+	sessionData := redis.UserSession{
+		UserID:      user.ID.String(),
+		Fingerprint: fingerprint,
+		Role:        string(user.Role),
+	}
+
+	if err := s.cache.SetSession(ctx, newSessionID, sessionData, s.cfg.Session.TTL); err != nil {
+		log.ErrorObj("[AttemptLoginStep2] Failed to save session in Redis", err)
+		return nil, errors.ErrInternal
+	}
+
+	return &http.LoginResponse{
+		Type:         "fullSuccess",
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken.Token,
+		UserID:       user.ID.String(),
+		ExpiresAt:    time.Now().Add(s.cfg.JWT.AccessTTL).Unix(),
+	}, nil
 }
 
 // region GetProfile
@@ -784,7 +894,7 @@ func (s *authService) prepareEmployeeLogin(ctx context.Context, user *model.User
 	sessionData := redis.UserSession{
 		UserID:        user.ID.String(),
 		Fingerprint:   fingerprint,
-		PublicKey:     credential.PublicKey, // Klucz publiczny z czipu karty
+		PublicKey:     credential.PublicKey,
 		Role:          string(user.Role),
 		InstitutionID: empProfile.InstitutionID.String(),
 		DepartmentID:  empProfile.DepartmentID.String(),
