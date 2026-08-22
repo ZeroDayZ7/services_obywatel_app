@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createAuditLog = `-- name: CreateAuditLog :exec
@@ -22,14 +21,14 @@ INSERT INTO citizen_audit_logs (
 `
 
 type CreateAuditLogParams struct {
-	ID          uuid.UUID   `json:"id"`
-	UserID      uuid.UUID   `json:"user_id"`
-	Action      string      `json:"action"`
-	ActorID     uuid.UUID   `json:"actor_id"`
-	IpAddress   pgtype.Text `json:"ip_address"`
-	PayloadHash pgtype.Text `json:"payload_hash"`
-	PrevHash    string      `json:"prev_hash"`
-	Hash        string      `json:"hash"`
+	ID          uuid.UUID `json:"id"`
+	UserID      uuid.UUID `json:"user_id"`
+	Action      string    `json:"action"`
+	ActorID     uuid.UUID `json:"actor_id"`
+	IpAddress   *string   `json:"ip_address"`
+	PayloadHash *string   `json:"payload_hash"`
+	PrevHash    string    `json:"prev_hash"`
+	Hash        string    `json:"hash"`
 }
 
 func (q *Queries) CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) error {
@@ -71,15 +70,15 @@ ORDER BY created_at ASC LIMIT $1
 `
 
 type GetUnsyncedAuditLogsRow struct {
-	ID          uuid.UUID   `json:"id"`
-	UserID      uuid.UUID   `json:"user_id"`
-	Action      string      `json:"action"`
-	ActorID     uuid.UUID   `json:"actor_id"`
-	IpAddress   pgtype.Text `json:"ip_address"`
-	PayloadHash pgtype.Text `json:"payload_hash"`
-	PrevHash    string      `json:"prev_hash"`
-	Hash        string      `json:"hash"`
-	CreatedAt   time.Time   `json:"created_at"`
+	ID          uuid.UUID `json:"id"`
+	UserID      uuid.UUID `json:"user_id"`
+	Action      string    `json:"action"`
+	ActorID     uuid.UUID `json:"actor_id"`
+	IpAddress   *string   `json:"ip_address"`
+	PayloadHash *string   `json:"payload_hash"`
+	PrevHash    string    `json:"prev_hash"`
+	Hash        string    `json:"hash"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 func (q *Queries) GetUnsyncedAuditLogs(ctx context.Context, limit int32) ([]GetUnsyncedAuditLogsRow, error) {

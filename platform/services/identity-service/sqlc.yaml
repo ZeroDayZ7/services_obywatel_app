@@ -34,6 +34,16 @@ sql:
           # citizen_audit_logs
           - column: "citizen_audit_logs.created_at"
             go_type: "time.Time"
+            
+          - column: "citizen_audit_logs.ip_address"
+            go_type:
+              type: "string"
+              pointer: true
+
+          - column: "citizen_audit_logs.payload_hash"
+            go_type:
+              type: "string"
+              pointer: true
 
           # user_agreements
           - column: "user_agreements.signed_at"

@@ -9,7 +9,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/zerodayz7/services/identity-service/db/dbgen"
 	"github.com/zerodayz7/services/identity-service/internal/model"
@@ -108,8 +107,8 @@ func (r *citizenRepository) RegisterCitizenWorkflow(ctx context.Context, citizen
 		UserID:      audit.UserID,
 		Action:      string(audit.Action),
 		ActorID:     audit.ActorID,
-		IpAddress:   stringToPgText(audit.IPAddress),
-		PayloadHash: stringToPgText(audit.PayloadHash),
+		IpAddress:   audit.IPAddress,
+		PayloadHash: audit.PayloadHash,
 		PrevHash:    prevHash,
 		Hash:        entryHash,
 	})
@@ -175,8 +174,8 @@ func (r *citizenRepository) CreateWithAudit(ctx context.Context, citizen *model.
 		UserID:      audit.UserID,
 		Action:      string(audit.Action),
 		ActorID:     audit.ActorID,
-		IpAddress:   stringToPgText(audit.IPAddress),
-		PayloadHash: stringToPgText(audit.PayloadHash),
+		IpAddress:   audit.IPAddress,
+		PayloadHash: audit.PayloadHash,
 		PrevHash:    prevHash,
 		Hash:        entryHash,
 	})
@@ -222,14 +221,6 @@ func (r *citizenRepository) GetByPESELHash(ctx context.Context, peselHash string
 		KeyVersion:    row.KeyVersion,
 		CreatedAt:     row.CreatedAt,
 	}, nil
-}
-
-// #region stringToPgText
-func stringToPgText(s *string) pgtype.Text {
-	if s == nil {
-		return pgtype.Text{Valid: false}
-	}
-	return pgtype.Text{String: *s, Valid: true}
 }
 
 // #region calculateAuditHash
