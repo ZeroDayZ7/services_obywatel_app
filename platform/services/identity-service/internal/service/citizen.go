@@ -75,8 +75,8 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 	agreement := &model.UserAgreement{
 		ID:              agreementID,
 		UserID:          userID,
-		AgreementNumber: fmt.Sprintf("AGR/%s/%d", now.Format("20060102"), now.Unix()%100000),
-		PeselEncrypted:  encryptedPayload.EncryptedData, // Lub wyizolowane zaszyfrowane pole PESEL
+		AgreementNumber: shared.GenerateAgreementNumber(now),
+		PeselEncrypted:  encryptedPayload.EncryptedData,
 		Status:          model.AgreementStatusActive,
 		SignedAt:        now,
 	}
