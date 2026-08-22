@@ -182,7 +182,7 @@ func (s *authService) AttemptLoginStep2(ctx context.Context, userIDStr string, s
 
 	// Pobieramy dodatkowe metadane urzędnika (Permissions, InstitutionID, DepartmentID)
 	var permissions []string
-	var instID, deptID string
+	var instID, deptID, empNumber string
 
 	if user.Role != model.RoleCitizen && user.Role != model.RoleUser {
 		empProfile, err := s.employeeRepo.GetProfileByUserID(ctx, user.ID)
@@ -211,15 +211,17 @@ func (s *authService) AttemptLoginStep2(ctx context.Context, userIDStr string, s
 		return nil, errors.ErrInternal
 	}
 
-	// Zapisujemy PEŁNY obiekt w Redis (który potem odczytuje Gateway dla /auth/me)
 	sessionData := redis.UserSession{
-		UserID:        user.ID.String(),
-		Fingerprint:   shared.HashSHA256(fingerprint),
-		Role:          string(user.Role),
-		PublicKey:     cred.PublicKey,
-		InstitutionID: instID,
-		DepartmentID:  deptID,
-		Permissions:   permissions,
+		UserID:         user.ID.String(),
+		Username:       user.Username,
+		Email:          user.Email,
+		Role:           string(user.Role),
+		EmployeeNumber: empNumber,
+		InstitutionID:  instID,
+		DepartmentID:   deptID,
+		Permissions:    permissions,
+		Fingerprint:    shared.HashSHA256(fingerprint),
+		PublicKey:      cred.PublicKey,
 	}
 
 	if err := s.cache.SetSession(ctx, newSessionID, sessionData, s.cfg.Session.TTL); err != nil {

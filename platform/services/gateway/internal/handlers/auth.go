@@ -14,8 +14,9 @@ func GetMeHandler(c *fiber.Ctx) error {
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"user_id":        sess.UserID,
+		"username":       sess.Username,
+		"email":          sess.Email,
 		"role":           sess.Role,
-		"public_key":     sess.PublicKey,
 		"institution_id": sess.InstitutionID,
 		"department_id":  sess.DepartmentID,
 		"permissions":    sess.Permissions,

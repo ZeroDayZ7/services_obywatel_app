@@ -58,8 +58,8 @@ func SeedUsers(db *gorm.DB) error {
 		},
 		{
 			ID:               officerUserID,
-			Username:         "urzednik@plus.pl",
-			Email:            "urzednik@plus.pl",
+			Username:         "officer@plus.pl",
+			Email:            "officer@plus.pl",
 			Password:         hashedPassword,
 			Role:             model.RoleOfficer,
 			TwoFactorEnabled: true,
