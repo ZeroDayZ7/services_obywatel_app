@@ -133,6 +133,7 @@ func (r *citizenRepository) CreateAuditLog(ctx context.Context, audit *model.Cit
 		audit.UserID,
 		string(audit.Action),
 		audit.ActorID,
+		audit.IPAddress,
 		audit.PayloadHash,
 		prevHash,
 		r.auditHmacKey,
@@ -211,11 +212,19 @@ func (r *citizenRepository) GetByPESELHash(ctx context.Context, peselHash string
 	}, nil
 }
 
-func calculateAuditHMAC(id, userID uuid.UUID, action string, actorID uuid.UUID, payloadHash, prevHash string, hmacSecret []byte) string {
-	raw := fmt.Sprintf("%s:%s:%s:%s:%s:%s", id.String(), userID.String(), action, actorID.String(), payloadHash, prevHash)
+func calculateAuditHMAC(id, userID uuid.UUID, action string, actorID uuid.UUID, ipAddress, payloadHash, prevHash string, hmacSecret []byte) string {
+	// Łączymy wszystkie kluczowe pola (w tym IPAddress i PrevHash)
+	raw := fmt.Sprintf("%s:%s:%s:%s:%s:%s:%s",
+		id.String(),
+		userID.String(),
+		action,
+		actorID.String(),
+		ipAddress,
+		payloadHash,
+		prevHash,
+	)
 
 	h := hmac.New(sha256.New, hmacSecret)
 	h.Write([]byte(raw))
-
 	return hex.EncodeToString(h.Sum(nil))
 }

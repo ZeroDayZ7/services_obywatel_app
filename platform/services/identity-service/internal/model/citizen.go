@@ -44,7 +44,7 @@ type CitizenAuditLog struct {
 	UserID              uuid.UUID   `db:"user_id" json:"user_id"`
 	Action              AuditAction `db:"action" json:"action"`
 	ActorID             uuid.UUID   `db:"actor_id" json:"actor_id"`
-	IPAddress           *string     `db:"ip_address" json:"ip_address,omitempty"`
+	IPAddress           string      `db:"ip_address" json:"ip_address,omitempty"`
 	PayloadHash         string      `db:"payload_hash" json:"payload_hash"`
 	PrevHash            string      `db:"prev_hash" json:"prev_hash"`
 	Hash                string      `db:"hash" json:"hash"`

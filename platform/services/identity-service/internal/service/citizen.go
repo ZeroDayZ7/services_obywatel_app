@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	reqctx "github.com/zerodayz7/platform/pkg/context"
 	"github.com/zerodayz7/platform/pkg/envelope"
 	apperr "github.com/zerodayz7/platform/pkg/errors"
 	"github.com/zerodayz7/platform/pkg/rabbitmq"
@@ -130,14 +131,19 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 
 	payloadSum := sha256.Sum256(plaintextBytes)
 	payloadHash := hex.EncodeToString(payloadSum[:])
+	clientIP := reqctx.GetIP(ctx)
 
 	auditLog := &model.CitizenAuditLog{
 		ID:          shared.NewUUIDv7(),
 		UserID:      userID,
 		Action:      model.ActionCitizenRegistered,
 		ActorID:     userID,
+		IPAddress:   clientIP,
 		PayloadHash: payloadHash,
 	}
+
+	log := shared.GetLogger()
+	log.DebugObj("Created audit log", auditLog)
 
 	eventPayload, err := json.Marshal(map[string]any{
 		"user_id":          citizen.UserID,
