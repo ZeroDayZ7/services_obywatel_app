@@ -7,20 +7,29 @@ import (
 )
 
 func registerAuthRoutes(mux *http.ServeMux, c *di.Container) {
-	// Krok 1: Przelotówka (zwraca challenge i userId, bez tokenów)
 	loginStep1Proxy, err := NewReverseProxy(c.Config.AuthServiceURL, "/auth/login", c.KeyStore)
 	if err != nil {
 		panic(err)
 	}
 
-	// Krok 2: Pr przechwytuje tokeny JWT i wrzuca do HttpOnly Cookies
-	loginStep2Proxy, err := NewAuthTokenProxy(c.Config.AuthServiceURL, "/auth/login/step2", c.KeyStore)
+	loginStep2Proxy, err := NewAuthTokenProxy(
+		c.Config.AuthServiceURL,
+		"/auth/login/step2",
+		c.KeyStore,
+		c.Config.AccessTokenTTL,
+		c.Config.RefreshTokenTTL,
+	)
 	if err != nil {
 		panic(err)
 	}
 
-	// Refresh: Też używa NewAuthTokenProxy bo zwraca nowe ciasteczko access_token
-	refreshProxy, err := NewAuthTokenProxy(c.Config.AuthServiceURL, "/auth/refresh", c.KeyStore)
+	refreshProxy, err := NewAuthTokenProxy(
+		c.Config.AuthServiceURL,
+		"/auth/refresh",
+		c.KeyStore,
+		c.Config.AccessTokenTTL,
+		c.Config.RefreshTokenTTL,
+	)
 	if err != nil {
 		panic(err)
 	}

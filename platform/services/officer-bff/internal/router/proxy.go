@@ -49,8 +49,6 @@ func signInternalContext(req *http.Request, keyStore *httpserver.KeyStore, targe
 	req.Header.Set("X-Internal-Service", "officer-bff")
 }
 
-// #endregion
-
 // #region NewSingleHostProxy
 // NewSingleHostProxy tworzy standardowe proxy do dowolnego mikroserwisu
 func NewSingleHostProxy(targetURL, targetPath, targetServiceID string, keyStore *httpserver.KeyStore) (http.HandlerFunc, error) {
@@ -92,7 +90,7 @@ func NewReverseProxy(authServiceURL, targetPath string, keyStore *httpserver.Key
 // #region NewAuthTokenProxy
 // NewAuthTokenProxy przechwytuje odpowiedź z auth-service, wyciąga access_token/refresh_token,
 // zapisuje je w bezpiecznych ciasteczkach HttpOnly oraz wycina je z odpowiedzi JSON dla Angulara.
-func NewAuthTokenProxy(authServiceURL, targetPath string, keyStore *httpserver.KeyStore) (http.HandlerFunc, error) {
+func NewAuthTokenProxy(authServiceURL, targetPath string, keyStore *httpserver.KeyStore, accessTokenTTL, refreshTokenTTL time.Duration) (http.HandlerFunc, error) {
 	log := shared.GetLogger()
 
 	target, err := url.Parse(authServiceURL)
@@ -132,11 +130,11 @@ func NewAuthTokenProxy(authServiceURL, targetPath string, keyStore *httpserver.K
 
 			// 1. Zapisujemy tokeny do bezpiecznych ciasteczek
 			if accessToken, ok := responseData["access_token"].(string); ok && accessToken != "" {
-				setAuthCookie(resp, "access_token", accessToken, 15*time.Minute, "/")
+				setAuthCookie(resp, "access_token", accessToken, accessTokenTTL, "/")
 			}
 
 			if refreshToken, ok := responseData["refresh_token"].(string); ok && refreshToken != "" {
-				setAuthCookie(resp, "refresh_token", refreshToken, 7*24*time.Hour, "/api/v1/official/auth/refresh")
+				setAuthCookie(resp, "refresh_token", refreshToken, refreshTokenTTL, "/api/v1/official/auth/refresh")
 			}
 
 			// 2. Wycinamy tokeny z ciała odpowiedzi JSON dla przeglądarki
