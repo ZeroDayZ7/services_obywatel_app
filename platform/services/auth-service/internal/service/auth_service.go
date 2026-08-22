@@ -72,47 +72,64 @@ func NewAuthService(
 }
 
 // #region AttemptLoginStep2
-// #region AttemptLoginStep2
-func (s *authService) AttemptLoginStep2(
-	ctx context.Context,
-	userIDStr string,
-	sessionID string,
-	signature string,
-	fingerprint string,
-	clientIP string,
-) (*http.LoginResponse, error) {
+func (s *authService) AttemptLoginStep2(ctx context.Context, userIDStr string, sessionID string, signature string, fingerprint string, clientIP string) (*http.LoginResponse, error) {
 	log := shared.GetLogger()
+
+	log.InfoMap("[AttemptLoginStep2] Rozpoczęcie weryfikacji Step 2", map[string]any{
+		"user_id_input": userIDStr,
+		"session_id":    sessionID,
+		"signature_len": len(signature),
+		"client_ip":     clientIP,
+	})
 
 	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
+		log.WarnMap("[AttemptLoginStep2] Błąd parsowania UUID użytkownika", map[string]any{
+			"user_id_input": userIDStr,
+			"err":           err.Error(),
+		})
 		return nil, errors.ErrInvalidParams
 	}
 
 	// 1. Pobranie wyzwania z Redisa na podstawie SessionID
 	storedChallenge, err := s.cache.GetChallenge(ctx, sessionID)
 	if err != nil || storedChallenge == "" {
-		log.WarnMap("[AttemptLoginStep2] Challenge not found or expired", map[string]any{
+		log.WarnMap("[AttemptLoginStep2] Challenge nie znaleziony w Redis lub wygasł", map[string]any{
 			"user_id": userIDStr,
 			"sid":     sessionID,
+			"err":     err,
 		})
 		return nil, errors.ErrInvalidChallenge
 	}
 
+	log.InfoMap("[AttemptLoginStep2] Odczytano challenge z Redis", map[string]any{
+		"user_id":          userIDStr,
+		"stored_challenge": storedChallenge,
+	})
+
 	// 2. Pobranie aktywnego poświadczenia (karty/klucza) pracownika
 	cred, err := s.employeeRepo.GetActiveCredentialByUserID(ctx, userID)
 	if err != nil || cred == nil {
-		log.WarnMap("[AttemptLoginStep2] Active employee credential not found", map[string]any{
+		log.WarnMap("[AttemptLoginStep2] Nie znaleziono aktywnej karty/poświadczenia w DB", map[string]any{
 			"user_id": userIDStr,
 			"err":     err,
 		})
 		return nil, errors.ErrUntrustedDevice
 	}
 
-	// Opcjonalne sprawdzenie czy karta nie wygasła czasowo
+	log.InfoMap("[AttemptLoginStep2] Znaleziono poświadczenie pracownika w DB", map[string]any{
+		"user_id":    userIDStr,
+		"card_sn":    cred.CardSerialNumber,
+		"public_key": cred.PublicKey,
+		"status":     cred.Status,
+	})
+
+	// Sprawdzenie wygaśnięcia karty
 	if cred.ExpiresAt != nil && cred.ExpiresAt.Before(time.Now()) {
-		log.WarnMap("[AttemptLoginStep2] Employee credential expired", map[string]any{
-			"user_id": userIDStr,
-			"card_sn": cred.CardSerialNumber,
+		log.WarnMap("[AttemptLoginStep2] Karta pracownika wygasła", map[string]any{
+			"user_id":    userIDStr,
+			"card_sn":    cred.CardSerialNumber,
+			"expires_at": cred.ExpiresAt,
 		})
 		return nil, errors.ErrUntrustedDevice
 	}
@@ -121,29 +138,52 @@ func (s *authService) AttemptLoginStep2(
 	challengeBytes, err := base64.StdEncoding.DecodeString(storedChallenge)
 	if err != nil {
 		challengeBytes = []byte(storedChallenge)
+		log.InfoMap("[AttemptLoginStep2] Challenge użyty jako surowy ciąg bajtów (RAW string)", map[string]any{
+			"challenge_bytes_len": len(challengeBytes),
+		})
+	} else {
+		log.InfoMap("[AttemptLoginStep2] Challenge zdekodowany z Base64", map[string]any{
+			"challenge_bytes_len": len(challengeBytes),
+		})
 	}
 
 	// 4. Weryfikacja podpisu z klucza publicznego przypisanego do karty pracownika
-	if !shared.VerifyEd25519Signature(cred.PublicKey, challengeBytes, signature) {
-		log.WarnMap("SECURITY ALERT: Invalid employee signature", map[string]any{
-			"user_id": userIDStr,
-			"card_sn": cred.CardSerialNumber,
+	log.InfoMap("[AttemptLoginStep2] Próba weryfikacji podpisu Ed25519", map[string]any{
+		"pub_key_raw":  cred.PublicKey,
+		"signature_in": signature,
+	})
+
+	isValid := shared.VerifyEd25519Signature(cred.PublicKey, challengeBytes, signature)
+	if !isValid {
+		log.WarnMap("SECURITY ALERT: Nieprawidłowy podpis pracownika (VerifyEd25519Signature returned false)", map[string]any{
+			"user_id":       userIDStr,
+			"card_sn":       cred.CardSerialNumber,
+			"pub_key_in_db": cred.PublicKey,
+			"signature_in":  signature,
+			"challenge_str": storedChallenge,
 		})
 		return nil, errors.ErrInvalidSignature
 	}
 
+	log.Info("[AttemptLoginStep2] Weryfikacja podpisu kryptograficznego zakończona sukcesem!")
+
 	// 5. Usunięcie wyzwania z Redisa (ochrona przed Replay Attack)
 	_ = s.cache.DeleteChallenge(ctx, sessionID)
 
-	// 6. Pobranie danych pracownika/użytkownika i sprawdzanie czy może się zalogować
+	// 6. Pobranie danych pracownika/użytkownika
 	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil || user == nil {
+		log.WarnMap("[AttemptLoginStep2] Nie znaleziono konta użytkownika", map[string]any{
+			"user_id": userIDStr,
+			"err":     err,
+		})
 		return nil, errors.ErrUserNotFound
 	}
 
 	if err := s.CanUserLogin(user); err != nil {
-		log.WarnMap("[AttemptLoginStep2] Employee user account is locked/inactive", map[string]any{
+		log.WarnMap("[AttemptLoginStep2] Konto pracownika jest zablokowane/nieaktywne", map[string]any{
 			"user_id": user.ID,
+			"err":     err,
 		})
 		return nil, err
 	}
@@ -151,11 +191,13 @@ func (s *authService) AttemptLoginStep2(
 	// 7. Generowanie tokenów oraz pełnej sesji
 	accessToken, newSessionID, err := s.CreateAccessToken(ctx, user.ID, fingerprint)
 	if err != nil {
+		log.ErrorObj("[AttemptLoginStep2] Błąd podczas tworzenia access tokena", err)
 		return nil, errors.ErrInternal
 	}
 
 	refreshToken, err := s.CreateRefreshToken(user.ID, fingerprint, nil)
 	if err != nil {
+		log.ErrorObj("[AttemptLoginStep2] Błąd podczas tworzenia refresh tokena", err)
 		return nil, errors.ErrInternal
 	}
 
@@ -166,9 +208,13 @@ func (s *authService) AttemptLoginStep2(
 	}
 
 	if err := s.cache.SetSession(ctx, newSessionID, sessionData, s.cfg.Session.TTL); err != nil {
-		log.ErrorObj("[AttemptLoginStep2] Failed to save session in Redis", err)
+		log.ErrorObj("[AttemptLoginStep2] Błąd zapisu sesji w Redis", err)
 		return nil, errors.ErrInternal
 	}
+
+	log.InfoMap("[AttemptLoginStep2] Logowanie zakończone pełnym sukcesem", map[string]any{
+		"user_id": user.ID.String(),
+	})
 
 	return &http.LoginResponse{
 		Type:         "fullSuccess",
@@ -178,6 +224,8 @@ func (s *authService) AttemptLoginStep2(
 		ExpiresAt:    time.Now().Add(s.cfg.JWT.AccessTTL).Unix(),
 	}, nil
 }
+
+// #endregion
 
 // region GetProfile
 func (s *authService) GetProfile(ctx context.Context, userID uuid.UUID) (*http.UserProfileResponse, error) {
@@ -892,8 +940,9 @@ func (s *authService) prepareEmployeeLogin(ctx context.Context, user *model.User
 
 	// 4. Konstruujemy dane sesji z kontekstem urzędnika i kluczem z KARTY
 	sessionData := redis.UserSession{
-		UserID:        user.ID.String(),
-		Fingerprint:   fingerprint,
+		UserID: user.ID.String(),
+		// Fingerprint:   fingerprint,
+		Fingerprint:   shared.HashSHA256(fingerprint),
 		PublicKey:     credential.PublicKey,
 		Role:          string(user.Role),
 		InstitutionID: empProfile.InstitutionID.String(),
@@ -957,11 +1006,12 @@ func (s *authService) prepare2FASession(ctx context.Context, user *model.User, f
 	// 3. Tworzymy sesję 2FA
 	token := shared.GenerateSessionID()
 	session := redis.TwoFASession{
-		UserID:      user.ID.String(),
-		Email:       user.Email,
-		Token:       token,
-		CodeHash:    hashedCode,
-		Fingerprint: fingerprint,
+		UserID:   user.ID.String(),
+		Email:    user.Email,
+		Token:    token,
+		CodeHash: hashedCode,
+		// Fingerprint: fingerprint,
+		Fingerprint: shared.HashSHA256(fingerprint),
 		Attempts:    0,
 	}
 
