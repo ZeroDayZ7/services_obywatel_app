@@ -3,24 +3,25 @@ package service
 import (
 	"context"
 	"crypto/hmac"
-	"crypto/rand"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"math/big"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/pkg/envelope"
 	"github.com/zerodayz7/platform/pkg/rabbitmq"
+	"github.com/zerodayz7/platform/pkg/security"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/services/identity-service/internal/model"
 	"github.com/zerodayz7/services/identity-service/internal/repository"
 )
 
 type CitizenService interface {
-	RegisterCitizen(ctx context.Context, payload model.CitizenPayload) (*model.Citizen, error)
+	RegisterCitizen(ctx context.Context, payload model.CitizenPayload) (*model.RegisterCitizenResponse, error)
 	GetCitizenByID(ctx context.Context, userID uuid.UUID) (*model.CitizenPayload, error)
 }
 
@@ -45,7 +46,20 @@ func NewCitizenService(
 	}
 }
 
-func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.CitizenPayload) (*model.Citizen, error) {
+func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.CitizenPayload) (*model.RegisterCitizenResponse, error) {
+	peselHash := s.hashPESEL(payload.PESEL)
+
+	// 1. Sprawdzamy czy obywatel istnieje w bazie
+	existingCitizen, err := s.repo.GetByPESELHash(ctx, peselHash)
+	if err == nil && existingCitizen != nil {
+		return nil, repository.ErrCitizenAlreadyExists
+	}
+
+	// Jeśli błąd jest inny niż brak rekordu (sql.ErrNoRows), to coś poszło nie tak z bazą
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("failed to check citizen existence: %w", err)
+	}
+
 	userID := shared.NewUUIDv7()
 
 	plaintextBytes, err := json.Marshal(payload)
@@ -57,8 +71,6 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 	if err != nil {
 		return nil, fmt.Errorf("failed to seal citizen payload: %w", err)
 	}
-
-	peselHash := s.hashPESEL(payload.PESEL)
 
 	// 1. Model Citizen
 	citizen := &model.Citizen{
@@ -72,21 +84,23 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 	// 2. Model UserAgreement
 	agreementID := shared.NewUUIDv7()
 	now := time.Now().UTC()
+	agreementNumber := shared.GenerateAgreementNumber(now)
+
 	agreement := &model.UserAgreement{
 		ID:              agreementID,
 		UserID:          userID,
-		AgreementNumber: shared.GenerateAgreementNumber(now),
+		AgreementNumber: agreementNumber,
 		PeselEncrypted:  encryptedPayload.EncryptedData,
 		Status:          model.AgreementStatusActive,
 		SignedAt:        now,
 	}
 
-	// 3. Model UserPukCode (Generowanie np. 8-cyfrowego PUK)
-	rawPUK, err := generateRandomPUK(8)
+	// 3. Generowanie PUK z platform/pkg/security
+	rawPUK, err := security.GenerateOTP(8)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate PUK: %w", err)
 	}
-	pukHash := s.hashPESEL(rawPUK) // Hashowanie kodu PUK
+	pukHash := s.hashPESEL(rawPUK)
 
 	puk := &model.UserPukCode{
 		ID:              shared.NewUUIDv7(),
@@ -106,11 +120,12 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 		ActorID: userID,
 	}
 
-	// 5. Model OutboxMessage (zamiast bezpośredniej publikacji RabbitMQ)
+	// 5. Outbox Message dla RabbitMQ
 	eventPayload, err := json.Marshal(map[string]any{
-		"user_id":     citizen.UserID,
-		"key_version": citizen.KeyVersion,
-		"signed_at":   agreement.SignedAt,
+		"user_id":          citizen.UserID,
+		"agreement_number": agreement.AgreementNumber,
+		"key_version":      citizen.KeyVersion,
+		"signed_at":        agreement.SignedAt,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal event payload: %w", err)
@@ -125,13 +140,19 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 		Status:        model.OutboxStatusPending,
 	}
 
-	// Wykonanie całej operacji w jednej transakcji DB
+	// Wykonanie transakcji w bazie
 	err = s.repo.RegisterCitizenWorkflow(ctx, citizen, agreement, puk, auditLog, outboxMsg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute register citizen workflow: %w", err)
 	}
 
-	return citizen, nil
+	// Zwrot DTO z danymi dla urzędnika/frontendu
+	return &model.RegisterCitizenResponse{
+		UserID:          userID,
+		AgreementNumber: agreementNumber,
+		PukCode:         rawPUK,
+		CreatedAt:       now,
+	}, nil
 }
 
 func (s *citizenService) GetCitizenByID(ctx context.Context, userID uuid.UUID) (*model.CitizenPayload, error) {
@@ -162,17 +183,4 @@ func (s *citizenService) hashPESEL(pesel string) string {
 	h := hmac.New(sha256.New, s.hmacSecret)
 	h.Write([]byte(pesel))
 	return hex.EncodeToString(h.Sum(nil))
-}
-
-func generateRandomPUK(length int) (string, error) {
-	const digits = "0123456789"
-	result := make([]byte, length)
-	for i := 0; i < length; i++ {
-		num, err := rand.Int(rand.Reader, big.NewInt(int64(len(digits))))
-		if err != nil {
-			return "", err
-		}
-		result[i] = digits[num.Int64()]
-	}
-	return string(result), nil
 }

@@ -11,7 +11,6 @@ import (
 func NewRouter(c *di.Container) http.Handler {
 	mux := http.NewServeMux()
 
-	// Rejestracja tras z osobnych plików
 	registerHealthRoutes(mux)
 	registerAuthRoutes(mux, c)
 	registerOfficialRoutes(mux, c)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -13,6 +14,8 @@ import (
 	"github.com/zerodayz7/services/identity-service/db/dbgen"
 	"github.com/zerodayz7/services/identity-service/internal/model"
 )
+
+var ErrCitizenAlreadyExists = errors.New("citizen already exists")
 
 type CitizenRepository interface {
 	CreateWithAudit(ctx context.Context, citizen *model.Citizen, audit *model.CitizenAuditLog) error
