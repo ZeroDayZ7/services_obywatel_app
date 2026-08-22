@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/zerodayz7/services/identity-service/db/dbgen"
 	"github.com/zerodayz7/services/identity-service/internal/model"
 )
@@ -36,9 +37,9 @@ func (r *outboxRepository) FetchPendingMessages(ctx context.Context, limit int32
 	messages := make([]model.OutboxMessage, len(rows))
 	for i, row := range rows {
 		messages[i] = model.OutboxMessage{
-			ID:            row.ID.Bytes,
+			ID:            row.ID,
 			AggregateType: row.AggregateType,
-			AggregateID:   row.AggregateID.Bytes,
+			AggregateID:   row.AggregateID,
 			EventType:     row.EventType,
 			Payload:       row.Payload,
 			RetryCount:    int8(row.RetryCount),
@@ -49,13 +50,18 @@ func (r *outboxRepository) FetchPendingMessages(ctx context.Context, limit int32
 }
 
 func (r *outboxRepository) MarkAsSent(ctx context.Context, id uuid.UUID) error {
-	return r.q.MarkOutboxMessageAsSent(ctx, uuidToPgType(id))
+	return r.q.MarkOutboxMessageAsSent(ctx, id)
 }
 
 func (r *outboxRepository) MarkAsFailed(ctx context.Context, id uuid.UUID, maxRetries int16, lastErr string) error {
+	var lastErrPtr *string
+	if lastErr != "" {
+		lastErrPtr = &lastErr
+	}
+
 	return r.q.MarkOutboxMessageAsFailed(ctx, dbgen.MarkOutboxMessageAsFailedParams{
-		ID:         uuidToPgType(id),
+		ID:         id,
 		RetryCount: maxRetries,
-		LastError:  stringToPgText(&lastErr),
+		LastError:  lastErrPtr,
 	})
 }

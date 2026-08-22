@@ -7,9 +7,9 @@ package dbgen
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createUserAgreement = `-- name: CreateUserAgreement :one
@@ -21,15 +21,15 @@ INSERT INTO user_agreements (
 `
 
 type CreateUserAgreementParams struct {
-	ID              uuid.UUID          `json:"id"`
-	UserID          uuid.UUID          `json:"user_id"`
-	AgreementNumber string             `json:"agreement_number"`
-	PeselEncrypted  []byte             `json:"pesel_encrypted"`
-	VerifiedPhone   string             `json:"verified_phone"`
-	Status          string             `json:"status"`
-	SignedAt        pgtype.Timestamptz `json:"signed_at"`
-	VerifiedAt      pgtype.Timestamptz `json:"verified_at"`
-	VerifiedVia     string             `json:"verified_via"`
+	ID              uuid.UUID  `json:"id"`
+	UserID          uuid.UUID  `json:"user_id"`
+	AgreementNumber string     `json:"agreement_number"`
+	PeselEncrypted  []byte     `json:"pesel_encrypted"`
+	VerifiedPhone   string     `json:"verified_phone"`
+	Status          string     `json:"status"`
+	SignedAt        time.Time  `json:"signed_at"`
+	VerifiedAt      *time.Time `json:"verified_at"`
+	VerifiedVia     string     `json:"verified_via"`
 }
 
 func (q *Queries) CreateUserAgreement(ctx context.Context, arg CreateUserAgreementParams) (UserAgreement, error) {
@@ -71,14 +71,14 @@ INSERT INTO user_puk_codes (
 `
 
 type CreateUserPukCodeParams struct {
-	ID              uuid.UUID          `json:"id"`
-	UserAgreementID uuid.UUID          `json:"user_agreement_id"`
-	UserID          uuid.UUID          `json:"user_id"`
-	PukHash         string             `json:"puk_hash"`
-	Status          string             `json:"status"`
-	FailedAttempts  int16              `json:"failed_attempts"`
-	MaxAttempts     int16              `json:"max_attempts"`
-	ExpiresAt       pgtype.Timestamptz `json:"expires_at"`
+	ID              uuid.UUID  `json:"id"`
+	UserAgreementID uuid.UUID  `json:"user_agreement_id"`
+	UserID          uuid.UUID  `json:"user_id"`
+	PukHash         string     `json:"puk_hash"`
+	Status          string     `json:"status"`
+	FailedAttempts  int16      `json:"failed_attempts"`
+	MaxAttempts     int16      `json:"max_attempts"`
+	ExpiresAt       *time.Time `json:"expires_at"`
 }
 
 func (q *Queries) CreateUserPukCode(ctx context.Context, arg CreateUserPukCodeParams) (UserPukCode, error) {
@@ -216,9 +216,9 @@ WHERE id = $1 AND deleted_at IS NULL
 `
 
 type UpdateAgreementStatusParams struct {
-	ID         uuid.UUID          `json:"id"`
-	Status     string             `json:"status"`
-	VerifiedAt pgtype.Timestamptz `json:"verified_at"`
+	ID         uuid.UUID  `json:"id"`
+	Status     string     `json:"status"`
+	VerifiedAt *time.Time `json:"verified_at"`
 }
 
 func (q *Queries) UpdateAgreementStatus(ctx context.Context, arg UpdateAgreementStatusParams) error {

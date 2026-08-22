@@ -7,9 +7,9 @@ package dbgen
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createCitizenWithAudit = `-- name: CreateCitizenWithAudit :one
@@ -29,8 +29,8 @@ type CreateCitizenWithAuditParams struct {
 }
 
 type CreateCitizenWithAuditRow struct {
-	UserID    uuid.UUID          `json:"user_id"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UserID    uuid.UUID `json:"user_id"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 func (q *Queries) CreateCitizenWithAudit(ctx context.Context, arg CreateCitizenWithAuditParams) (CreateCitizenWithAuditRow, error) {
@@ -52,12 +52,12 @@ FROM citizens WHERE pesel_hash = $1 LIMIT 1
 `
 
 type GetCitizenByPeselHashRow struct {
-	UserID        uuid.UUID          `json:"user_id"`
-	PeselHash     string             `json:"pesel_hash"`
-	EncryptedData []byte             `json:"encrypted_data"`
-	EncryptedDek  []byte             `json:"encrypted_dek"`
-	KeyVersion    int32              `json:"key_version"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UserID        uuid.UUID `json:"user_id"`
+	PeselHash     string    `json:"pesel_hash"`
+	EncryptedData []byte    `json:"encrypted_data"`
+	EncryptedDek  []byte    `json:"encrypted_dek"`
+	KeyVersion    int32     `json:"key_version"`
+	CreatedAt     time.Time `json:"created_at"`
 }
 
 func (q *Queries) GetCitizenByPeselHash(ctx context.Context, peselHash string) (GetCitizenByPeselHashRow, error) {
@@ -80,12 +80,12 @@ FROM citizens WHERE user_id = $1 LIMIT 1
 `
 
 type GetCitizenByUserIDRow struct {
-	UserID        uuid.UUID          `json:"user_id"`
-	PeselHash     string             `json:"pesel_hash"`
-	EncryptedData []byte             `json:"encrypted_data"`
-	EncryptedDek  []byte             `json:"encrypted_dek"`
-	KeyVersion    int32              `json:"key_version"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UserID        uuid.UUID `json:"user_id"`
+	PeselHash     string    `json:"pesel_hash"`
+	EncryptedData []byte    `json:"encrypted_data"`
+	EncryptedDek  []byte    `json:"encrypted_dek"`
+	KeyVersion    int32     `json:"key_version"`
+	CreatedAt     time.Time `json:"created_at"`
 }
 
 func (q *Queries) GetCitizenByUserID(ctx context.Context, userID uuid.UUID) (GetCitizenByUserIDRow, error) {

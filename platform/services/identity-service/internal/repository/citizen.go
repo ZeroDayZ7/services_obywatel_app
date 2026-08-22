@@ -16,14 +16,7 @@ import (
 
 type CitizenRepository interface {
 	CreateWithAudit(ctx context.Context, citizen *model.Citizen, audit *model.CitizenAuditLog) error
-	RegisterCitizenWorkflow(
-		ctx context.Context,
-		citizen *model.Citizen,
-		agreement *model.UserAgreement,
-		puk *model.UserPukCode,
-		audit *model.CitizenAuditLog,
-		outbox *model.OutboxMessage,
-	) error
+	RegisterCitizenWorkflow(ctx context.Context, citizen *model.Citizen, agreement *model.UserAgreement, puk *model.UserPukCode, audit *model.CitizenAuditLog, outbox *model.OutboxMessage) error
 	GetByID(ctx context.Context, userID uuid.UUID) (*model.Citizen, error)
 	GetByPESELHash(ctx context.Context, peselHash string) (*model.Citizen, error)
 }
@@ -42,14 +35,7 @@ func NewCitizenRepository(dbPool *pgxpool.Pool) CitizenRepository {
 }
 
 // #region RegisterCitizenWorkflow
-func (r *citizenRepository) RegisterCitizenWorkflow(
-	ctx context.Context,
-	citizen *model.Citizen,
-	agreement *model.UserAgreement,
-	puk *model.UserPukCode,
-	audit *model.CitizenAuditLog,
-	outbox *model.OutboxMessage,
-) error {
+func (r *citizenRepository) RegisterCitizenWorkflow(ctx context.Context, citizen *model.Citizen, agreement *model.UserAgreement, puk *model.UserPukCode, audit *model.CitizenAuditLog, outbox *model.OutboxMessage) error {
 	tx, err := r.dbPool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
