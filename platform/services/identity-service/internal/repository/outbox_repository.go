@@ -10,12 +10,6 @@ import (
 	"github.com/zerodayz7/services/identity-service/internal/model"
 )
 
-type OutboxRepository interface {
-	FetchPendingMessages(ctx context.Context, limit int32) ([]model.OutboxMessage, error)
-	MarkAsSent(ctx context.Context, id uuid.UUID) error
-	MarkAsFailed(ctx context.Context, id uuid.UUID, maxRetries int16, lastErr string) error
-}
-
 type outboxRepository struct {
 	dbPool *pgxpool.Pool
 	q      *dbgen.Queries

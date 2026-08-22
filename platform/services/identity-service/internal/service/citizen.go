@@ -4,10 +4,9 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
-	"database/sql"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -20,7 +19,6 @@ import (
 	"github.com/zerodayz7/services/identity-service/internal/repository"
 )
 
-// #region interface
 type CitizenService interface {
 	RegisterCitizen(ctx context.Context, payload model.CitizenPayload) (*model.RegisterCitizenResponse, error)
 	GetCitizenByID(ctx context.Context, userID uuid.UUID) (*model.CitizenPayload, error)
@@ -47,20 +45,11 @@ func NewCitizenService(
 	}
 }
 
-// #region RegisterCitizen
 func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.CitizenPayload) (*model.RegisterCitizenResponse, error) {
 	peselHash := s.hashPESEL(payload.PESEL)
 
 	existingCitizen, err := s.repo.GetByPESELHash(ctx, peselHash)
-	if err == nil && existingCitizen != nil {
-		return nil, &apperr.AppError{
-			Code:    "CITIZEN_EXISTS",
-			Type:    apperr.Conflict,
-			Message: "Obywatel z takim numerem PESEL już istnieje w systemie.",
-		}
-	}
-
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+	if err != nil {
 		return nil, &apperr.AppError{
 			Code:    "DATABASE_ERROR",
 			Type:    apperr.Internal,
@@ -68,9 +57,15 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 			Err:     err,
 		}
 	}
+	if existingCitizen != nil {
+		return nil, &apperr.AppError{
+			Code:    "CITIZEN_EXISTS",
+			Type:    apperr.Conflict,
+			Message: "Obywatel z takim numerem PESEL już istnieje w systemie.",
+		}
+	}
 
 	userID := shared.NewUUIDv7()
-
 	plaintextBytes, err := json.Marshal(payload)
 	if err != nil {
 		return nil, &apperr.AppError{
@@ -102,7 +97,6 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 	agreementID := shared.NewUUIDv7()
 	now := time.Now().UTC()
 	agreementNumber := shared.GenerateAgreementNumber(now)
-
 	agreement := &model.UserAgreement{
 		ID:              agreementID,
 		UserID:          userID,
@@ -110,6 +104,7 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 		PeselEncrypted:  encryptedPayload.EncryptedData,
 		Status:          model.AgreementStatusActive,
 		SignedAt:        now,
+		VerifiedVia:     "SYSTEM",
 	}
 
 	rawPUK, err := security.GenerateOTP(8)
@@ -122,7 +117,6 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 		}
 	}
 	pukHash := s.hashPESEL(rawPUK)
-
 	puk := &model.UserPukCode{
 		ID:              shared.NewUUIDv7(),
 		UserAgreementID: agreementID,
@@ -164,7 +158,25 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 		Status:        model.OutboxStatusPending,
 	}
 
-	err = s.repo.RegisterCitizenWorkflow(ctx, citizen, agreement, puk, auditLog, outboxMsg)
+	// Atomowe wykonanie zapisu w ramach jednej transakcji
+	err = s.repo.WithinTx(ctx, func(txCtx context.Context) error {
+		if err := s.repo.Create(txCtx, citizen); err != nil {
+			return fmt.Errorf("create citizen: %w", err)
+		}
+		if err := s.repo.CreateAgreement(txCtx, agreement); err != nil {
+			return fmt.Errorf("create agreement: %w", err)
+		}
+		if err := s.repo.CreatePukCode(txCtx, puk); err != nil {
+			return fmt.Errorf("create PUK: %w", err)
+		}
+		if err := s.repo.CreateAuditLog(txCtx, auditLog); err != nil {
+			return fmt.Errorf("create audit log: %w", err)
+		}
+		if err := s.repo.CreateOutboxMessage(txCtx, outboxMsg); err != nil {
+			return fmt.Errorf("create outbox message: %w", err)
+		}
+		return nil
+	})
 	if err != nil {
 		return nil, &apperr.AppError{
 			Code:    "WORKFLOW_FAILED",
@@ -182,19 +194,18 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 	}, nil
 }
 
-// #region GetCitizenByID
 func (s *citizenService) GetCitizenByID(ctx context.Context, userID uuid.UUID) (*model.CitizenPayload, error) {
 	citizen, err := s.repo.GetByID(ctx, userID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, apperr.ErrNotFound
-		}
 		return nil, &apperr.AppError{
 			Code:    "DATABASE_ERROR",
 			Type:    apperr.Internal,
 			Message: "Błąd podczas pobierania danych obywatela.",
 			Err:     err,
 		}
+	}
+	if citizen == nil {
+		return nil, apperr.ErrNotFound
 	}
 
 	encPayload := envelope.EncryptedPayload{
@@ -225,7 +236,6 @@ func (s *citizenService) GetCitizenByID(ctx context.Context, userID uuid.UUID) (
 	return &payload, nil
 }
 
-// #region hashPESEL
 func (s *citizenService) hashPESEL(pesel string) string {
 	h := hmac.New(sha256.New, s.hmacSecret)
 	h.Write([]byte(pesel))

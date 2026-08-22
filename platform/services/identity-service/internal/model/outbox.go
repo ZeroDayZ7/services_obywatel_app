@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"gorm.io/gorm"
 )
 
 type OutboxStatus string
@@ -17,16 +16,16 @@ const (
 )
 
 type OutboxMessage struct {
-	ID            uuid.UUID    `gorm:"type:uuid;primaryKey;default:uuidv7()"`
-	AggregateType string       `gorm:"size:64;not null;index"`   // np. "CITIZEN", "USER_AGREEMENT"
-	AggregateID   uuid.UUID    `gorm:"type:uuid;not null;index"` // np. Citizen.UserID
-	EventType     string       `gorm:"size:128;not null;index"`  // np. "CitizenRegistered", "AgreementSigned"
-	Payload       []byte       `gorm:"type:jsonb;not null"`      // Lub []byte (blob) w zależności od DB
-	Status        OutboxStatus `gorm:"type:varchar(20);not null;default:'PENDING';index"`
-	RetryCount    int8         `gorm:"not null;default:0"`
-	LastError     *string      `gorm:"type:text"`
-	ProcessedAt   *time.Time
-	CreatedAt     time.Time      `gorm:"autoCreateTime;index"`
-	UpdatedAt     time.Time      `gorm:"autoUpdateTime"`
-	DeletedAt     gorm.DeletedAt `gorm:"index"`
+	ID            uuid.UUID    `json:"id"`
+	AggregateType string       `json:"aggregate_type"` // np. "CITIZEN", "USER_AGREEMENT"
+	AggregateID   uuid.UUID    `json:"aggregate_id"`   // np. Citizen.UserID
+	EventType     string       `json:"event_type"`     // np. "CitizenRegistered", "AgreementSigned"
+	Payload       []byte       `json:"payload"`
+	Status        OutboxStatus `json:"status"`
+	RetryCount    int8         `json:"retry_count"`
+	LastError     *string      `json:"last_error,omitempty"`
+	ProcessedAt   *time.Time   `json:"processed_at,omitempty"`
+	CreatedAt     time.Time    `json:"created_at"`
+	UpdatedAt     time.Time    `json:"updated_at"`
+	DeletedAt     *time.Time   `json:"deleted_at,omitempty"`
 }
