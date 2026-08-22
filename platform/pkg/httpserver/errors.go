@@ -3,13 +3,14 @@ package httpserver
 import (
 	"net/http"
 
-	apperr "github.com/zerodayz7/platform/pkg/errors"
+	apperr "github.com/zerodayz7/platform/pkg/errors" // zmień ścieżkę na swój moduł błędów
 )
 
-// SendError mapuje AppError na kod HTTP i wysyła JSON
+// SendAppError mapuje AppError na kod HTTP i wysyła czysty JSON przez net/http
 func SendError(w http.ResponseWriter, r *http.Request, err error) {
 	appErr, ok := err.(*apperr.AppError)
 	if !ok {
+		// Jeśli to nie jest nasz AppError (np. błąd z bazy), traktujemy jako Internal
 		appErr = apperr.ErrInternal
 	}
 
@@ -29,9 +30,15 @@ func SendError(w http.ResponseWriter, r *http.Request, err error) {
 		status = http.StatusInternalServerError
 	}
 
-	JSON(w, status, ErrorResponse{
-		Code:    appErr.Code,
-		Message: appErr.Message,
-		Meta:    appErr.Meta,
-	})
+	// Struktura odpowiedzi zgodna z tym, czego oczekujesz
+	responseBody := map[string]any{
+		"code":    appErr.Code,
+		"message": appErr.Message,
+	}
+
+	if len(appErr.Meta) > 0 {
+		responseBody["meta"] = appErr.Meta
+	}
+
+	JSON(w, status, responseBody)
 }
