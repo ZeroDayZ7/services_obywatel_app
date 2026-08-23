@@ -24,4 +24,5 @@ func RegisterOfficerRoutes(app *fiber.App, container *di.Container) {
 
 	// 2. Rejestracja obywatela (orkiestrowana w officer-bff)
 	official.Post("/citizens/register", ReverseProxy(container, ServiceOfficerBFF, target))
+	official.Get("/agreements/:agreement_id/download", ReverseProxy(container, ServiceOfficerBFF, target))
 }

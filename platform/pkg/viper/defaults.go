@@ -59,3 +59,13 @@ func SetGatewayHMACDefaults() {
 	SetHMACDefaults()
 	viper.SetDefault("HMAC_TARGET_KEYS", map[string]string{})
 }
+
+func SetS3Defaults() {
+	viper.SetDefault("S3_ENABLED", false)
+	viper.SetDefault("S3_ENDPOINT", "localhost:9000")
+	viper.SetDefault("S3_ACCESS_KEY", "minioadmin")
+	viper.SetDefault("S3_SECRET_KEY", "minioadminpassword")
+	viper.SetDefault("S3_BUCKET", "citizens-data")
+	viper.SetDefault("S3_REGION", "us-east-1")
+	viper.SetDefault("S3_USE_SSL", false)
+}

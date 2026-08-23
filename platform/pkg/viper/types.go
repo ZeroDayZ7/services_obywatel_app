@@ -51,6 +51,17 @@ type RedisConfig struct {
 	Timeout      time.Duration `mapstructure:"REDIS_TIMEOUT" validate:"required"`
 }
 
+// #region S3Config
+type S3Config struct {
+	Enabled   bool   `mapstructure:"S3_ENABLED"`
+	Endpoint  string `mapstructure:"S3_ENDPOINT" validate:"required_if=Enabled true"`
+	AccessKey string `mapstructure:"S3_ACCESS_KEY" validate:"required_if=Enabled true"`
+	SecretKey string `mapstructure:"S3_SECRET_KEY" validate:"required_if=Enabled true"`
+	Bucket    string `mapstructure:"S3_BUCKET" validate:"required_if=Enabled true"`
+	Region    string `mapstructure:"S3_REGION"`
+	UseSSL    bool   `mapstructure:"S3_USE_SSL"`
+}
+
 // #region InternalSecurityConfig
 type InternalSecurityConfig struct {
 	HMACSecret string `mapstructure:"-"`

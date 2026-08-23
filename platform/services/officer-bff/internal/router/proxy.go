@@ -11,6 +11,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/zerodayz7/platform/pkg/constants"
@@ -50,7 +51,7 @@ func signInternalContext(req *http.Request, keyStore *httpserver.KeyStore, targe
 }
 
 // #region NewSingleHostProxy
-// NewSingleHostProxy tworzy standardowe proxy do dowolnego mikroserwisu
+// NewSingleHostProxy tworzy proxy, które zachowuje dynamiczną końcówkę ścieżki (np. ID i akcję)
 func NewSingleHostProxy(targetURL, targetPath, targetServiceID string, keyStore *httpserver.KeyStore) (http.HandlerFunc, error) {
 	log := shared.GetLogger()
 
@@ -65,10 +66,25 @@ func NewSingleHostProxy(targetURL, targetPath, targetServiceID string, keyStore 
 			pr.SetURL(target)
 			pr.SetXForwarded()
 
-			if targetPath != "" {
-				pr.Out.URL.Path = targetPath
-				pr.Out.URL.RawPath = targetPath
+			// 1. Pobieramy oryginalną ścieżkę z żądania przychodzącego do BFF
+			originalPath := pr.In.URL.Path // np. /api/v1/official/agreements/01a02c7f-.../download
+
+			// 2. Usuwamy prefiks BFF (/api/v1/official)
+			trimmed := strings.TrimPrefix(originalPath, "/api/v1/official") // np. /agreements/01a02c7f-.../download
+
+			// 3. Określamy, jaki zasób obsługujemy (np. /agreements lub /citizens) na podstawie trimmed
+			var suffix string
+			if strings.HasPrefix(trimmed, "/agreements") {
+				suffix = strings.TrimPrefix(trimmed, "/agreements")
+			} else if strings.HasPrefix(trimmed, "/citizens") {
+				suffix = strings.TrimPrefix(trimmed, "/citizens")
+			} else {
+				suffix = trimmed
 			}
+
+			// 4. Składamy docelową ścieżkę dla mikroserwisu (np. /api/v1/agreements + /{id}/download)
+			pr.Out.URL.Path = targetPath + suffix
+			pr.Out.URL.RawPath = pr.Out.URL.Path
 
 			signInternalContext(pr.Out, keyStore, targetServiceID)
 		},

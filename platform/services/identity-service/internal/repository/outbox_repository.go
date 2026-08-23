@@ -22,7 +22,7 @@ func NewOutboxRepository(dbPool *pgxpool.Pool) OutboxRepository {
 	}
 }
 
-func (r *outboxRepository) FetchPendingMessages(ctx context.Context, limit int32) ([]model.OutboxMessage, error) {
+func (r *outboxRepository) FetchPendingMessages(ctx context.Context, limit int) ([]model.OutboxMessage, error) {
 	rows, err := r.q.FetchPendingOutboxMessages(ctx, limit)
 	if err != nil {
 		return nil, err

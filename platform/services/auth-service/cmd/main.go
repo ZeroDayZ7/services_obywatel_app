@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/zerodayz7/platform/pkg/httpserver"
-	"github.com/zerodayz7/platform/pkg/kms"
 	"github.com/zerodayz7/platform/pkg/rabbitmq"
 	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/server"
@@ -40,50 +39,10 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	kmsServiceCfg := config.AppConfig.ToKMSServiceConfig()
-
-	log.Info("🔍 Sprawdzanie stanu serwisu KMS...")
-	if err := kms.HealthCheck(ctx, kmsServiceCfg); err != nil {
-		log.Error("❌ KMS Health Check nie powiódł się", "error", err)
+	rabbitHMACKey, err := LoadSecurityKeys(ctx, &config.AppConfig, keyStore)
+	if err != nil {
+		log.Error("❌ Nie udało się załadować kluczy bezpieczeństwa z KMS", "error", err)
 		os.Exit(1)
-	}
-
-	// 2a. Pobranie klucza prywatnego Ed25519 do podpisywania Access Tokenów
-	if config.AppConfig.JWT.SigningMode == "local" {
-		log.Info("🔑 [MODE: LOCAL] Pobieranie klucza prywatnego JWT z KMS do pamięci serwisu...")
-		privKey, err := kms.FetchAuthPrivateKey(ctx, kmsServiceCfg, "shared-jwt")
-		if err != nil {
-			log.Error("❌ Krytyczny błąd pobierania klucza prywatnego JWT z KMS", "error", err)
-			os.Exit(1)
-		}
-		config.AppConfig.JWT.AccessPrivateKey = privKey
-		log.Info("✅ Pomyślnie pobrano i załadowano klucz prywatny JWT do pamięci")
-	} else {
-		log.Info("🛡️ [MODE: KMS] Tokeny będą podpisywane zdalnie przez API KMS")
-	}
-
-	// 2b. Pobieranie kluczy HMAC dla dopuszczonych nadawców (Gateway, BFF itp.)
-	for senderID, targetKey := range config.AppConfig.HMAC.TargetKeys {
-		hmacKey, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsServiceCfg, targetKey, "HmacSha256")
-		if err != nil {
-			log.Error("❌ Nie udało się pobrać klucza HMAC z KMS", "sender", senderID, "target_key", targetKey, "error", err)
-			os.Exit(1)
-		}
-
-		keyStore.SetKey(senderID, hmacKey, version)
-		log.Info("✅ Klucz HMAC załadowany", "service", senderID, "version", version)
-	}
-
-	// 2c. Pobieranie kluczy HMAC dla zaufanych nadawców zdarzeń RabbitMQ (np. identity-service)
-	for senderID, targetKey := range config.AppConfig.RabbitConsumers.TrustedSenders {
-		hmacKey, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsServiceCfg, targetKey, "HmacSha256")
-		if err != nil {
-			log.Error("❌ Nie udało się pobrać klucza HMAC dla Consumer RabbitMQ z KMS", "sender", senderID, "target_key", targetKey, "error", err)
-			os.Exit(1)
-		}
-
-		keyStore.SetKey(senderID, hmacKey, version)
-		log.Info("✅ Klucz HMAC Consumer RabbitMQ załadowany", "service", senderID, "version", version)
 	}
 
 	// 4. Telemetry (Tracer)
@@ -118,22 +77,10 @@ func main() {
 	if config.AppConfig.RabbitMQ.Enabled {
 		log.Info("RabbitMQ is ENABLED. Fetching HMAC key for Publisher...")
 
-		var publisherHMACKey []byte
-		publisherHMACKey, _, err = kms.FetchSymmetricKeyWithVersion(
-			ctx,
-			kmsServiceCfg,
-			"hmac-auth-rabbitmq",
-			"HmacSha256",
-		)
-		if err != nil {
-			log.Error("❌ Nie udało się pobrać klucza HMAC RabbitMQ z KMS", "error", err)
-			os.Exit(1)
-		}
-
 		eventPublisher, err = rabbitmq.NewLivePublisher(
 			config.AppConfig.RabbitMQ.GetURL(),
 			config.AppConfig.Server.AppName,
-			publisherHMACKey,
+			rabbitHMACKey,
 		)
 		if err != nil {
 			log.Error("RabbitMQ initialization failed", "error", err)

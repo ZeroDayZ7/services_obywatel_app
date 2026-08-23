@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -19,14 +20,16 @@ const zeroAuditHash = "000000000000000000000000000000000000000000000000000000000
 type txKey struct{}
 
 type citizenRepository struct {
-	dbPool *pgxpool.Pool
-	q      *dbgen.Queries
+	dbPool       *pgxpool.Pool
+	q            *dbgen.Queries
+	auditHmacKey []byte
 }
 
-func NewCitizenRepository(dbPool *pgxpool.Pool) CitizenRepository {
+func NewCitizenRepository(dbPool *pgxpool.Pool, auditHmacKey []byte) CitizenRepository {
 	return &citizenRepository{
-		dbPool: dbPool,
-		q:      dbgen.New(dbPool),
+		dbPool:       dbPool,
+		q:            dbgen.New(dbPool),
+		auditHmacKey: auditHmacKey,
 	}
 }
 
@@ -65,7 +68,7 @@ func (r *citizenRepository) Create(ctx context.Context, citizen *model.Citizen) 
 		PeselHash:     citizen.PESELHash,
 		EncryptedData: citizen.EncryptedData,
 		EncryptedDek:  citizen.EncryptedDEK,
-		KeyVersion:    citizen.KeyVersion,
+		KeyVersion:    int32(citizen.KeyVersion),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to insert citizen: %w", err)
@@ -80,6 +83,10 @@ func (r *citizenRepository) CreateAgreement(ctx context.Context, agreement *mode
 		ID:              agreement.ID,
 		UserID:          agreement.UserID,
 		AgreementNumber: agreement.AgreementNumber,
+		S3Key:           agreement.S3Key,
+		S3Bucket:        agreement.S3Bucket,
+		EncryptedDek:    agreement.EncryptedDEK,
+		KeyVersion:      int32(agreement.KeyVersion),
 		PeselEncrypted:  agreement.PeselEncrypted,
 		VerifiedPhone:   agreement.VerifiedPhone,
 		Status:          string(agreement.Status),
@@ -116,7 +123,6 @@ func (r *citizenRepository) CreatePukCode(ctx context.Context, puk *model.UserPu
 func (r *citizenRepository) CreateAuditLog(ctx context.Context, audit *model.CitizenAuditLog) error {
 	q := r.getQueries(ctx)
 
-	// Pobranie ostatniego logu i wyliczenie hash-a wewnątrz repozytorium
 	prevHash := zeroAuditHash
 	lastLog, err := q.GetLastAuditLog(ctx)
 	if err == nil {
@@ -126,7 +132,16 @@ func (r *citizenRepository) CreateAuditLog(ctx context.Context, audit *model.Cit
 	}
 
 	audit.PrevHash = prevHash
-	audit.Hash = calculateAuditHash(audit.ID, audit.UserID, string(audit.Action), audit.ActorID, prevHash)
+	audit.Hash = calculateAuditHMAC(
+		audit.ID,
+		audit.UserID,
+		string(audit.Action),
+		audit.ActorID,
+		audit.IPAddress,
+		audit.PayloadHash,
+		prevHash,
+		r.auditHmacKey,
+	)
 
 	err = q.CreateAuditLog(ctx, dbgen.CreateAuditLogParams{
 		ID:          audit.ID,
@@ -176,7 +191,7 @@ func (r *citizenRepository) GetByID(ctx context.Context, userID uuid.UUID) (*mod
 		PESELHash:     row.PeselHash,
 		EncryptedData: row.EncryptedData,
 		EncryptedDEK:  row.EncryptedDek,
-		KeyVersion:    row.KeyVersion,
+		KeyVersion:    int(row.KeyVersion),
 		CreatedAt:     row.CreatedAt,
 	}, nil
 }
@@ -196,13 +211,53 @@ func (r *citizenRepository) GetByPESELHash(ctx context.Context, peselHash string
 		PESELHash:     row.PeselHash,
 		EncryptedData: row.EncryptedData,
 		EncryptedDEK:  row.EncryptedDek,
-		KeyVersion:    row.KeyVersion,
+		KeyVersion:    int(row.KeyVersion),
 		CreatedAt:     row.CreatedAt,
 	}, nil
 }
 
-func calculateAuditHash(id, userID uuid.UUID, action string, actorID uuid.UUID, prevHash string) string {
-	raw := fmt.Sprintf("%s:%s:%s:%s:%s", id.String(), userID.String(), action, actorID.String(), prevHash)
-	sum := sha256.Sum256([]byte(raw))
-	return hex.EncodeToString(sum[:])
+func (r *citizenRepository) GetAgreementByID(ctx context.Context, agreementID uuid.UUID) (*model.UserAgreement, error) {
+	q := r.getQueries(ctx)
+	row, err := q.GetAgreementByID(ctx, agreementID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	return &model.UserAgreement{
+		ID:              row.ID,
+		UserID:          row.UserID,
+		AgreementNumber: row.AgreementNumber,
+		S3Key:           row.S3Key,
+		S3Bucket:        row.S3Bucket,
+		EncryptedDEK:    row.EncryptedDek,
+		KeyVersion:      int(row.KeyVersion),
+		PeselEncrypted:  row.PeselEncrypted,
+		VerifiedPhone:   row.VerifiedPhone,
+		Status:          model.AgreementStatus(row.Status),
+		SignedAt:        row.SignedAt,
+		VerifiedAt:      row.VerifiedAt,
+		VerifiedVia:     row.VerifiedVia,
+		CreatedAt:       row.CreatedAt,
+		UpdatedAt:       row.UpdatedAt,
+	}, nil
+}
+
+func calculateAuditHMAC(id, userID uuid.UUID, action string, actorID uuid.UUID, ipAddress, payloadHash, prevHash string, hmacSecret []byte) string {
+	// Łączymy wszystkie kluczowe pola (w tym IPAddress i PrevHash)
+	raw := fmt.Sprintf("%s:%s:%s:%s:%s:%s:%s",
+		id.String(),
+		userID.String(),
+		action,
+		actorID.String(),
+		ipAddress,
+		payloadHash,
+		prevHash,
+	)
+
+	h := hmac.New(sha256.New, hmacSecret)
+	h.Write([]byte(raw))
+	return hex.EncodeToString(h.Sum(nil))
 }

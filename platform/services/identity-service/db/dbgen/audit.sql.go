@@ -25,8 +25,8 @@ type CreateAuditLogParams struct {
 	UserID      uuid.UUID `json:"user_id"`
 	Action      string    `json:"action"`
 	ActorID     uuid.UUID `json:"actor_id"`
-	IpAddress   *string   `json:"ip_address"`
-	PayloadHash *string   `json:"payload_hash"`
+	IpAddress   string    `json:"ip_address"`
+	PayloadHash string    `json:"payload_hash"`
 	PrevHash    string    `json:"prev_hash"`
 	Hash        string    `json:"hash"`
 }
@@ -74,14 +74,14 @@ type GetUnsyncedAuditLogsRow struct {
 	UserID      uuid.UUID `json:"user_id"`
 	Action      string    `json:"action"`
 	ActorID     uuid.UUID `json:"actor_id"`
-	IpAddress   *string   `json:"ip_address"`
-	PayloadHash *string   `json:"payload_hash"`
+	IpAddress   string    `json:"ip_address"`
+	PayloadHash string    `json:"payload_hash"`
 	PrevHash    string    `json:"prev_hash"`
 	Hash        string    `json:"hash"`
 	CreatedAt   time.Time `json:"created_at"`
 }
 
-func (q *Queries) GetUnsyncedAuditLogs(ctx context.Context, limit int32) ([]GetUnsyncedAuditLogsRow, error) {
+func (q *Queries) GetUnsyncedAuditLogs(ctx context.Context, limit int) ([]GetUnsyncedAuditLogsRow, error) {
 	rows, err := q.db.Query(ctx, getUnsyncedAuditLogs, limit)
 	if err != nil {
 		return nil, err

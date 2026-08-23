@@ -16,13 +16,20 @@ sql:
         overrides:
           # UUID
           - db_type: "uuid"
-            go_type: "github.com/google/uuid.UUID"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
 
+          # UUID (dla NULLable) -> jeśli chcesz czyste UUID, ustaw pointer: false
           - db_type: "uuid"
             nullable: true
             go_type:
-              type: "github.com/google/uuid.UUID"
-              pointer: true
+              import: "github.com/google/uuid"
+              type: "UUID"
+              pointer: false
+          
+          - db_type: "integer"
+            go_type: "int"
 
           # citizens
           - column: "citizens.created_at"
@@ -36,14 +43,10 @@ sql:
             go_type: "time.Time"
             
           - column: "citizen_audit_logs.ip_address"
-            go_type:
-              type: "string"
-              pointer: true
+            go_type: "string"
 
           - column: "citizen_audit_logs.payload_hash"
-            go_type:
-              type: "string"
-              pointer: true
+            go_type: "string"
 
           # user_agreements
           - column: "user_agreements.signed_at"

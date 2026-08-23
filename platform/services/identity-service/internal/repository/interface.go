@@ -19,10 +19,12 @@ type CitizenRepository interface {
 	CreateOutboxMessage(ctx context.Context, outbox *model.OutboxMessage) error
 	GetByID(ctx context.Context, userID uuid.UUID) (*model.Citizen, error)
 	GetByPESELHash(ctx context.Context, peselHash string) (*model.Citizen, error)
+
+	GetAgreementByID(ctx context.Context, agreementID uuid.UUID) (*model.UserAgreement, error)
 }
 
 type OutboxRepository interface {
-	FetchPendingMessages(ctx context.Context, limit int32) ([]model.OutboxMessage, error)
+	FetchPendingMessages(ctx context.Context, limit int) ([]model.OutboxMessage, error)
 	MarkAsSent(ctx context.Context, id uuid.UUID) error
 	MarkAsFailed(ctx context.Context, id uuid.UUID, maxRetries int16, lastErr string) error
 }

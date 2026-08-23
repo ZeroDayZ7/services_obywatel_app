@@ -1,11 +1,14 @@
 package di
 
 import (
+	"fmt"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/zerodayz7/platform/pkg/envelope"
 	"github.com/zerodayz7/platform/pkg/httpserver"
 	"github.com/zerodayz7/platform/pkg/kms"
 	"github.com/zerodayz7/platform/pkg/rabbitmq"
+	"github.com/zerodayz7/platform/pkg/storage"
 	"github.com/zerodayz7/services/identity-service/config"
 	"github.com/zerodayz7/services/identity-service/internal/handler"
 	"github.com/zerodayz7/services/identity-service/internal/repository"
@@ -19,27 +22,49 @@ type Container struct {
 	CitizenHandler *handler.CitizenHandler
 	KeyStore       *httpserver.KeyStore
 	OutboxRepo     repository.OutboxRepository
+	Storage        storage.StorageClient
 }
 
 func BuildContainer(
 	app *config.App,
 	eventPublisher rabbitmq.EventPublisher,
-	peselHmacKey []byte,
 	kmsCfg kms.Config,
 	keyStore *httpserver.KeyStore,
+	fileStorage storage.StorageClient,
 ) *Container {
-	citizenRepo := repository.NewCitizenRepository(app.DB)
+	peselHmacKey, _, ok := keyStore.GetKey("pesel")
+	if !ok {
+		panic("critical error: missing 'pesel' key in KeyStore")
+	}
+
+	auditHmacKey, _, ok := keyStore.GetKey("audit")
+	if !ok {
+		panic("critical error: missing 'audit' key in KeyStore")
+	}
+
+	// Repozytoria
+	citizenRepo := repository.NewCitizenRepository(app.DB, auditHmacKey)
 	outboxRepo := repository.NewOutboxRepository(app.DB)
 
 	cryptor := envelope.NewEnvelopeCryptor(kmsCfg)
 
+	pdfGen, err := service.NewPDFGenerator()
+	if err != nil {
+		panic(fmt.Sprintf("critical error: failed to initialize PDF generator: %v", err))
+	}
+
+	// Serwisy
 	citizenSvc := service.NewCitizenService(
 		citizenRepo,
 		cryptor,
+		fileStorage,
+		pdfGen,
 		peselHmacKey,
 		"identity-citizen-data",
+		"identity-agreements-key",
 	)
 
+	// Handlery
 	citizenHdl := handler.NewCitizenHandler(citizenSvc)
 
 	return &Container{
@@ -49,5 +74,6 @@ func BuildContainer(
 		CitizenHandler: citizenHdl,
 		KeyStore:       keyStore,
 		OutboxRepo:     outboxRepo,
+		Storage:        fileStorage,
 	}
 }

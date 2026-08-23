@@ -14,7 +14,7 @@ CREATE INDEX IF NOT EXISTS idx_citizens_pesel_hash ON citizens(pesel_hash);
 
 CREATE TABLE IF NOT EXISTS citizen_audit_logs (
     id UUID PRIMARY KEY,
-    user_id UUID NOT NULL,
+    user_id UUID REFERENCES citizens(user_id) ON DELETE SET NULL,
     action VARCHAR(50) NOT NULL,
     actor_id UUID NOT NULL,
     ip_address VARCHAR(45),

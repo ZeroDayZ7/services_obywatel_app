@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"time"
@@ -10,51 +11,58 @@ import (
 	"github.com/zerodayz7/platform/pkg/kms"
 	"github.com/zerodayz7/platform/pkg/rabbitmq"
 	"github.com/zerodayz7/platform/pkg/shared"
+	"github.com/zerodayz7/platform/pkg/storage"
 	"github.com/zerodayz7/services/identity-service/config"
 	"github.com/zerodayz7/services/identity-service/internal/di"
 	"github.com/zerodayz7/services/identity-service/internal/router"
 )
 
-func LoadSecurityKeys(ctx context.Context, app *config.App, keyStore *httpserver.KeyStore) ([]byte, []byte, error) {
+func LoadSecurityKeys(ctx context.Context, app *config.App, keyStore *httpserver.KeyStore) error {
 	log := shared.GetLogger()
 	kmsCfg := app.Config.ToKMSServiceConfig()
 
 	log.Info("🔍 Sprawdzanie stanu serwisu KMS...")
 	if err := kms.HealthCheck(ctx, kmsCfg); err != nil {
-		return nil, nil, err
+		return err
 	}
 
+	// 1. Klucze HTTP
 	for senderID, targetKey := range app.Config.HMAC.TargetKeys {
 		hmacKey, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, targetKey, "HmacSha256")
 		if err != nil {
-			return nil, nil, err
+			return err
 		}
 		keyStore.SetKey(senderID, hmacKey, version)
 		log.Info("✅ Klucz HMAC HTTP załadowany", "service", senderID, "version", version)
 	}
 
+	// 2. Klucze RabbitMQ Consumer
 	for senderID, targetKey := range app.Config.RabbitConsumers.TrustedSenders {
 		hmacKey, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, targetKey, "HmacSha256")
 		if err != nil {
-			return nil, nil, err
+			return err
 		}
 		keyStore.SetKey(senderID, hmacKey, version)
 		log.Info("✅ Klucz HMAC Consumer RabbitMQ załadowany", "service", senderID, "version", version)
 	}
 
-	peselHmacKey, peselKeyVersion, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, "identity-pesel-blind-index", "HmacSha256")
-	if err != nil {
-		return nil, nil, err
+	// 3. Klucze wewnętrzne serwisu (PESEL, RabbitMQ Publisher, Audyt)
+	internalKeys := map[string]string{
+		"pesel":    "identity-pesel-blind-index",
+		"rabbitmq": "hmac-identity-rabbitmq",
+		"audit":    "identity-audit-hmac",
 	}
-	log.Info("✅ Klucz HMAC dla PESEL pobrany pomyślnie z KMS", "version", peselKeyVersion)
 
-	rabbitHMACKey, rabbitKeyVersion, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, "hmac-identity-rabbitmq", "HmacSha256")
-	if err != nil {
-		return nil, nil, err
+	for keyAlias, kmsTarget := range internalKeys {
+		key, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, kmsTarget, "HmacSha256")
+		if err != nil {
+			return fmt.Errorf("failed to load %s key: %w", keyAlias, err)
+		}
+		keyStore.SetKey(keyAlias, key, version)
+		log.Info("✅ Klucz wewnętrzny załadowany", "alias", keyAlias, "version", version)
 	}
-	log.Info("✅ Klucz HMAC dla RabbitMQ pobrany pomyślnie z KMS", "version", rabbitKeyVersion)
 
-	return peselHmacKey, rabbitHMACKey, nil
+	return nil
 }
 
 func main() {
@@ -68,12 +76,19 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	peselHmacKey, rabbitHMACKey, err := LoadSecurityKeys(ctx, app, keyStore)
-	if err != nil {
-		log.Error("❌ Nie udało się załadować kluczy bezpieczeństwa z KMS", "error", err)
+	if err := LoadSecurityKeys(ctx, app, keyStore); err != nil {
+		log.Error("❌ Nie udało się załadować kluczy z KMS", "error", err)
 		os.Exit(1)
 	}
 
+	// Pobranie klucza do podpisywania zdarzeń wychodzących w RabbitMQ z KeyStore
+	rabbitHMACKey, _, ok := keyStore.GetKey("rabbitmq")
+	if !ok {
+		log.Error("❌ Brak klucza RabbitMQ w KeyStore")
+		os.Exit(1)
+	}
+
+	var err error
 	var eventPublisher rabbitmq.EventPublisher
 	if app.Config.RabbitMQ.Enabled {
 		log.Info("RabbitMQ is ENABLED. Connecting...")
@@ -96,7 +111,32 @@ func main() {
 		}
 	}()
 
-	container := di.BuildContainer(app, eventPublisher, peselHmacKey, app.Config.ToKMSServiceConfig(), keyStore)
+	// =========================================================================
+	// INICJALIZACJA S3 STORAGE (NOWY KOD)
+	// =========================================================================
+	var fileStorage storage.StorageClient
+
+	if app.Config.S3.Enabled {
+		log.Info("S3 Storage is ENABLED. Connecting...")
+		s3, err := storage.NewS3Storage(
+			app.Config.S3.Endpoint,
+			app.Config.S3.AccessKey,
+			app.Config.S3.SecretKey,
+			app.Config.S3.Bucket,
+			app.Config.S3.UseSSL,
+		)
+		if err != nil {
+			log.Error("❌ S3 initialization failed", "error", err)
+			os.Exit(1)
+		}
+		fileStorage = s3
+	} else {
+		log.Warn("S3 Storage is DISABLED. Using No-Op storage.")
+		fileStorage = &storage.NoOpStorage{}
+	}
+
+	// Tworzenie kontenera z przekazaniem fileStorage
+	container := di.BuildContainer(app, eventPublisher, app.Config.ToKMSServiceConfig(), keyStore, fileStorage)
 
 	r := router.NewRouter(container)
 	server := &http.Server{
