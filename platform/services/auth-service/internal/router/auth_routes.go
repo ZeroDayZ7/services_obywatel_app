@@ -22,12 +22,21 @@ func SetupAuthRoutes(
 	// ==========================
 	// LOGIN / REGISTER / JWT
 	// ==========================
-	// #region 	auth.Post("/login",
+	// #region Krok 1: Weryfikacja loginu/hasła -> zwraca challenge
 	auth.Post("/login",
 		middleware.ValidateBody[schemas.LoginRequest](),
 		h.Login,
 	)
-	// #region auth.Post("/2fa-verify",
+	// #endregion
+
+	// #region Krok 2: Weryfikacja podpisu kryptograficznego -> zwraca JWT
+	auth.Post("/login/step2",
+		middleware.ValidateBody[schemas.LoginStep2Request](),
+		h.LoginStep2,
+	)
+	// #endregion
+
+	// #region 2FA
 	auth.Post("/2fa-verify",
 		middleware.ValidateBody[schemas.TwoFARequest](),
 		h.Verify2FA,
@@ -37,7 +46,9 @@ func SetupAuthRoutes(
 		middleware.ValidateBody[schemas.ResendTwoFARequest](),
 		h.Resend2FA,
 	)
+	// #endregion
 
+	// #region Register & Refresh & Logout
 	auth.Post("/register",
 		middleware.ValidateBody[schemas.RegisterRequest](),
 		h.Register,
@@ -54,14 +65,8 @@ func SetupAuthRoutes(
 	)
 
 	// ==========================
-	// SESSION / USER CONTEXT
+	// DEVICE MANAGEMENT
 	// ==========================
-	auth.Get("/me", h.GetMe)
-
-	// ==========================
-	// DEVICE MANAGEMENT (NEW)
-	// ==========================
-	// Tutaj dodajemy endpoint, którego szuka Flutter
 	auth.Post("/register-device",
 		middleware.ValidateBody[schemas.RegisterDeviceRequest](),
 		h.RegisterDevice,
@@ -76,7 +81,7 @@ func SetupAuthRoutes(
 
 	// ==========================
 	// RESET PASSWORD
-	// =========================
+	// ==========================
 	// #region Group("/reset")
 	reset := auth.Group("/reset")
 	reset.Use(shared.GetLimiter(shared.LimitReset, nil))
@@ -95,4 +100,5 @@ func SetupAuthRoutes(
 		middleware.ValidateBody[schemas.ResetPasswordFinalRequest](),
 		resetHandler.FinalizeReset,
 	)
+	// #endregion
 }

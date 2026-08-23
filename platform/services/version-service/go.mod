@@ -1,6 +1,6 @@
 module github.com/zerodayz7/platform/services/version-service
 
-go 1.26.2
+go 1.27.0
 
 require github.com/spf13/viper v1.21.0
 

@@ -11,6 +11,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/zerodayz7/platform/pkg/constants"
@@ -18,6 +19,7 @@ import (
 	"github.com/zerodayz7/platform/pkg/shared"
 )
 
+// #region signInternalContext
 // signInternalContext podpisuje kontekst wewnętrzny HMAC dla komunikacji między mikroserwisami
 func signInternalContext(req *http.Request, keyStore *httpserver.KeyStore, targetServiceID string) {
 	log := shared.GetLogger()
@@ -48,7 +50,8 @@ func signInternalContext(req *http.Request, keyStore *httpserver.KeyStore, targe
 	req.Header.Set("X-Internal-Service", "officer-bff")
 }
 
-// NewSingleHostProxy tworzy standardowe proxy do dowolnego mikroserwisu
+// #region NewSingleHostProxy
+// NewSingleHostProxy tworzy proxy, które zachowuje dynamiczną końcówkę ścieżki (np. ID i akcję)
 func NewSingleHostProxy(targetURL, targetPath, targetServiceID string, keyStore *httpserver.KeyStore) (http.HandlerFunc, error) {
 	log := shared.GetLogger()
 
@@ -63,10 +66,25 @@ func NewSingleHostProxy(targetURL, targetPath, targetServiceID string, keyStore 
 			pr.SetURL(target)
 			pr.SetXForwarded()
 
-			if targetPath != "" {
-				pr.Out.URL.Path = targetPath
-				pr.Out.URL.RawPath = targetPath
+			// 1. Pobieramy oryginalną ścieżkę z żądania przychodzącego do BFF
+			originalPath := pr.In.URL.Path // np. /api/v1/official/agreements/01a02c7f-.../download
+
+			// 2. Usuwamy prefiks BFF (/api/v1/official)
+			trimmed := strings.TrimPrefix(originalPath, "/api/v1/official") // np. /agreements/01a02c7f-.../download
+
+			// 3. Określamy, jaki zasób obsługujemy (np. /agreements lub /citizens) na podstawie trimmed
+			var suffix string
+			if strings.HasPrefix(trimmed, "/agreements") {
+				suffix = strings.TrimPrefix(trimmed, "/agreements")
+			} else if strings.HasPrefix(trimmed, "/citizens") {
+				suffix = strings.TrimPrefix(trimmed, "/citizens")
+			} else {
+				suffix = trimmed
 			}
+
+			// 4. Składamy docelową ścieżkę dla mikroserwisu (np. /api/v1/agreements + /{id}/download)
+			pr.Out.URL.Path = targetPath + suffix
+			pr.Out.URL.RawPath = pr.Out.URL.Path
 
 			signInternalContext(pr.Out, keyStore, targetServiceID)
 		},
@@ -75,19 +93,25 @@ func NewSingleHostProxy(targetURL, targetPath, targetServiceID string, keyStore 
 	return proxy.ServeHTTP, nil
 }
 
-// NewReverseProxy tworzy zwykłe proxy przelotowe (np. dla GET /auth/me)
+// #endregion
+
+// #region NewReverseProxy
+// NewReverseProxy tworzy zwykłe proxy przelotowe (np. dla GET /auth/me oraz Krok 1 logowania)
 func NewReverseProxy(authServiceURL, targetPath string, keyStore *httpserver.KeyStore) (http.HandlerFunc, error) {
 	return NewSingleHostProxy(authServiceURL, targetPath, "auth-service", keyStore)
 }
 
-// NewAuthLoginProxy przechwytuje odpowiedź z auth-service, zapisuje tokeny w ciasteczkach HttpOnly
-// oraz wycina je z ciała odpowiedzi JSON zwracanej do przeglądarki.
-func NewAuthLoginProxy(authServiceURL, targetPath string, keyStore *httpserver.KeyStore) (http.HandlerFunc, error) {
+// #endregion
+
+// #region NewAuthTokenProxy
+// NewAuthTokenProxy przechwytuje odpowiedź z auth-service, wyciąga access_token/refresh_token,
+// zapisuje je w bezpiecznych ciasteczkach HttpOnly oraz wycina je z odpowiedzi JSON dla Angulara.
+func NewAuthTokenProxy(authServiceURL, targetPath string, keyStore *httpserver.KeyStore, accessTokenTTL, refreshTokenTTL time.Duration) (http.HandlerFunc, error) {
 	log := shared.GetLogger()
 
 	target, err := url.Parse(authServiceURL)
 	if err != nil {
-		log.Error("Błąd parsowania authServiceURL w NewAuthLoginProxy", "url", authServiceURL, "error", err)
+		log.Error("Błąd parsowania authServiceURL w NewAuthTokenProxy", "url", authServiceURL, "error", err)
 		return nil, err
 	}
 
@@ -120,16 +144,16 @@ func NewAuthLoginProxy(authServiceURL, targetPath string, keyStore *httpserver.K
 				return nil
 			}
 
-			// 1. Pobieramy tokeny
+			// 1. Zapisujemy tokeny do bezpiecznych ciasteczek
 			if accessToken, ok := responseData["access_token"].(string); ok && accessToken != "" {
-				setAuthCookie(resp, "access_token", accessToken, 15*time.Minute, "/")
+				setAuthCookie(resp, "access_token", accessToken, accessTokenTTL, "/")
 			}
 
 			if refreshToken, ok := responseData["refresh_token"].(string); ok && refreshToken != "" {
-				setAuthCookie(resp, "refresh_token", refreshToken, 7*24*time.Hour, "/api/v1/official/auth/refresh")
+				setAuthCookie(resp, "refresh_token", refreshToken, refreshTokenTTL, "/api/v1/official/auth/refresh")
 			}
 
-			// 2. Wycinamy tokeny z ciała odpowiedzi JSON dla klienta (Angular)
+			// 2. Wycinamy tokeny z ciała odpowiedzi JSON dla przeglądarki
 			delete(responseData, "access_token")
 			delete(responseData, "refresh_token")
 
@@ -153,7 +177,10 @@ func NewAuthLoginProxy(authServiceURL, targetPath string, keyStore *httpserver.K
 	return proxy.ServeHTTP, nil
 }
 
-// NewAuthLogoutProxy przekazuje żądanie wylogowania i czyści ciasteczka po stronie przeglądarki
+// #endregion
+
+// #region NewAuthLogoutProxy
+// NewAuthLogoutProxy przekazuje żądanie wylogowania i czyści ciasteczka w przeglądarce
 func NewAuthLogoutProxy(authServiceURL, targetPath string, keyStore *httpserver.KeyStore) (http.HandlerFunc, error) {
 	log := shared.GetLogger()
 
@@ -185,6 +212,9 @@ func NewAuthLogoutProxy(authServiceURL, targetPath string, keyStore *httpserver.
 	return proxy.ServeHTTP, nil
 }
 
+// #endregion
+
+// #region Helpers (Cookies)
 // setAuthCookie ustawia bezpieczne ciasteczko HttpOnly
 func setAuthCookie(resp *http.Response, name, value string, duration time.Duration, path string) {
 	cookie := &http.Cookie{
@@ -213,3 +243,5 @@ func clearAuthCookie(resp *http.Response, name string) {
 	}
 	resp.Header.Add("Set-Cookie", cookie.String())
 }
+
+// #endregion

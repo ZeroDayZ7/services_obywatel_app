@@ -13,10 +13,16 @@ type Config struct {
 	User     string
 	Password string
 	VHost    string
+	SenderID string
+	HMACKey  []byte
 }
 
 func (c Config) URL() string {
-	return fmt.Sprintf("amqp://%s:%s@%s:%d%s", c.User, c.Password, c.Host, c.Port, c.VHost)
+	vhost := c.VHost
+	if vhost != "" && vhost[0] != '/' {
+		vhost = "/" + vhost
+	}
+	return fmt.Sprintf("amqp://%s:%s@%s:%d%s", c.User, c.Password, c.Host, c.Port, vhost)
 }
 
 func NewPublisher(cfg Config) (EventPublisher, error) {
@@ -27,7 +33,7 @@ func NewPublisher(cfg Config) (EventPublisher, error) {
 		return NewNoOpPublisher(), nil
 	}
 
-	pub, err := NewLivePublisher(cfg.URL())
+	pub, err := NewLivePublisher(cfg.URL(), cfg.SenderID, cfg.HMACKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to rabbitmq: %w", err)
 	}

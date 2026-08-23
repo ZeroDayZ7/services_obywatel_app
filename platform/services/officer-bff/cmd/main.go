@@ -58,13 +58,13 @@ func main() {
 	// 4. Budowanie routera HTTP
 	r := router.NewRouter(container)
 
-	// 5. Konfiguracja serwera HTTP
+	// 5. Konfiguracja serwera HTTP z wykorzystaniem wartości z pliku konfiguracji
 	srv := &http.Server{
 		Addr:         ":" + config.AppConfig.Server.Port,
 		Handler:      r,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		ReadTimeout:  config.AppConfig.Server.ReadTimeout,
+		WriteTimeout: config.AppConfig.Server.WriteTimeout,
+		IdleTimeout:  config.AppConfig.Server.IdleTimeout,
 	}
 
 	// 6. Graceful Shutdown

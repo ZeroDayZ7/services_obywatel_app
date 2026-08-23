@@ -33,26 +33,26 @@ type decryptResponse struct {
 }
 
 // #region EncryptDEK
-func EncryptDEK(ctx context.Context, cfg Config, keyAlias string, plaintextDEK []byte) ([]byte, error) {
+func EncryptDEK(ctx context.Context, cfg Config, keyAlias string, plaintextDEK []byte) ([]byte, int, error) {
 	reqBody, err := json.Marshal(encryptRequest{
 		KeyAlias:  keyAlias,
 		Plaintext: plaintextDEK,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("kms: failed to marshal encrypt request: %w", err)
+		return nil, 0, fmt.Errorf("kms: failed to marshal encrypt request: %w", err)
 	}
 
 	bodyBytes, err := executeRequest(ctx, cfg, http.MethodPost, EncryptEndpoint, reqBody, true)
 	if err != nil {
-		return nil, fmt.Errorf("kms: encrypt request failed: %w", err)
+		return nil, 0, fmt.Errorf("kms: encrypt request failed: %w", err)
 	}
 
 	var out encryptResponse
 	if err := json.Unmarshal(bodyBytes, &out); err != nil {
-		return nil, fmt.Errorf("kms: failed to unmarshal encrypt response: %w", err)
+		return nil, 0, fmt.Errorf("kms: failed to unmarshal encrypt response: %w", err)
 	}
 
-	return out.Ciphertext, nil
+	return out.Ciphertext, out.KeyVersion, nil
 }
 
 // #region DecryptDEK

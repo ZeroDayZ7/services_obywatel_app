@@ -48,7 +48,6 @@ func SetSessionDefaults() {
 
 func SetKMSDefaults() {
 	viper.SetDefault("KMS_ENDPOINT", "http://127.0.0.1:8080")
-	viper.SetDefault("KMS_SERVICE_NAME", "auth-service")
 	viper.SetDefault("KMS_TIMEOUT", "2s")
 }
 
@@ -59,4 +58,14 @@ func SetHMACDefaults() {
 func SetGatewayHMACDefaults() {
 	SetHMACDefaults()
 	viper.SetDefault("HMAC_TARGET_KEYS", map[string]string{})
+}
+
+func SetS3Defaults() {
+	viper.SetDefault("S3_ENABLED", false)
+	viper.SetDefault("S3_ENDPOINT", "localhost:9000")
+	viper.SetDefault("S3_ACCESS_KEY", "minioadmin")
+	viper.SetDefault("S3_SECRET_KEY", "minioadminpassword")
+	viper.SetDefault("S3_BUCKET", "citizens-data")
+	viper.SetDefault("S3_REGION", "us-east-1")
+	viper.SetDefault("S3_USE_SSL", false)
 }

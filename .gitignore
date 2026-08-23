@@ -12,6 +12,7 @@
 **/logs/
 **/combined.txt
 **/temp.md
+**/temp
 **/pgadmin_data/
 *.drawio.bkp
 .$*.bkp

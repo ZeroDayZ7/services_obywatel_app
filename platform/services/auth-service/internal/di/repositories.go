@@ -10,11 +10,13 @@ import (
 type Repositories struct {
 	UserRepo         repo.UserRepository
 	RefreshTokenRepo repo.RefreshTokenRepository
+	EmployeeRepo     repo.EmployeeRepository
 }
 
 func NewRepositories(db *gorm.DB) *Repositories {
 	return &Repositories{
 		UserRepo:         repoDB.NewUserRepository(db),
 		RefreshTokenRepo: repoDB.NewRefreshTokenRepository(db),
+		EmployeeRepo:     repoDB.NewEmployeeRepository(db),
 	}
 }

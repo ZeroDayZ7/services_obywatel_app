@@ -56,7 +56,7 @@ func AuthRedisMiddleware(rdb *redis.Client) fiber.Handler {
 		expectedScope := constants.ScopeAccess.String()
 		redisPrefix := constants.SessionPrefix
 
-		if path == "/auth/register-device" || path == "/auth/verify-device" {
+		if slices.Contains(constants.DeviceVerifyPaths, path) {
 			expectedScope = constants.ScopeDeviceVerify.String()
 			redisPrefix = constants.SetupSessionPrefix
 		}
@@ -120,6 +120,7 @@ func AuthRedisMiddleware(rdb *redis.Client) fiber.Handler {
 		c.Locals("userID", session.UserID)
 		c.Locals("sessionID", sessionID)
 		c.Locals("deviceID", hashedClientFingerprint)
+		c.Locals("userSession", session)
 
 		return c.Next()
 	}

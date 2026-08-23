@@ -23,16 +23,16 @@ func SeedPermissions(db *gorm.DB) error {
 
 	log.Info("[SEED] Rozpoczynam zasiewanie tabeli dostępnych uprawnień...")
 
-	permissions := []model.AvailablePermission{
+	permissionsList := []model.AvailablePermission{
 		// Moduł Systemowy
 		{
-			Key:         permissions.DocumentsRead,
+			Key:         permissions.SystemAdmin,
 			Department:  "SYSTEM",
 			Description: "Pełne uprawnienia administracyjne do całego systemu",
 			IsSpecial:   true,
 		},
 		{
-			Key:         permissions.DocumentsRead,
+			Key:         permissions.SystemManage,
 			Department:  "SYSTEM",
 			Description: "Zarządzanie konfiguracją i parametrami systemowymi",
 			IsSpecial:   true,
@@ -40,19 +40,19 @@ func SeedPermissions(db *gorm.DB) error {
 
 		// Moduł Użytkowników
 		{
-			Key:         permissions.DocumentsRead,
+			Key:         permissions.UsersRead,
 			Department:  "USERS",
 			Description: "Odczyt listy i szczegółów użytkowników",
 			IsSpecial:   false,
 		},
 		{
-			Key:         permissions.DocumentsRead,
+			Key:         permissions.UsersWrite,
 			Department:  "USERS",
 			Description: "Tworzenie oraz edycja kont użytkowników",
 			IsSpecial:   false,
 		},
 		{
-			Key:         permissions.DocumentsRead,
+			Key:         permissions.UsersDelete,
 			Department:  "USERS",
 			Description: "Trwałe usuwanie lub deaktywacja użytkowników",
 			IsSpecial:   true,
@@ -60,20 +60,20 @@ func SeedPermissions(db *gorm.DB) error {
 
 		// Moduł Raportów
 		{
-			Key:         permissions.DocumentsRead,
+			Key:         permissions.ReportsView,
 			Department:  "REPORTS",
 			Description: "Przeglądanie raportów i statystyk systemowych",
 			IsSpecial:   false,
 		},
 		{
-			Key:         permissions.DocumentsRead,
+			Key:         permissions.ReportsExport,
 			Department:  "REPORTS",
 			Description: "Eksport danych raportowych do plików zewnętrznych",
 			IsSpecial:   false,
 		},
 	}
 
-	for _, p := range permissions {
+	for _, p := range permissionsList {
 		if err := db.Create(&p).Error; err != nil {
 			return fmt.Errorf("failed to seed permission %s: %w", p.Key, err)
 		}

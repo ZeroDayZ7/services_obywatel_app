@@ -57,6 +57,50 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	return c.JSON(response)
 }
 
+// #region LOGIN STEP 2
+func (h *AuthHandler) LoginStep2(c *fiber.Ctx) error {
+	ctx, cancel := context.WithTimeout(c.UserContext(), 2*time.Second)
+	defer cancel()
+	log := shared.GetLogger()
+
+	body := c.Locals("validatedBody").(schemas.LoginStep2Request)
+	rc := reqctx.MustFromFiber(c)
+
+	fingerprint := rc.DeviceID
+	if fingerprint == "" {
+		return apperr.SendAppError(c, apperr.ErrInvalidDeviceFingerprint)
+	}
+
+	if rc.SessionID == "" {
+		log.WarnMap("LoginStep2: Brak SessionID w kontekście żądania", map[string]any{"user_id": body.UserID})
+		return apperr.SendAppError(c, apperr.ErrUnauthorized)
+	}
+
+	response, err := h.authService.AttemptLoginStep2(
+		ctx,
+		body.UserID,
+		rc.SessionID,
+		body.Signature,
+		fingerprint,
+		rc.IP,
+	)
+	if err != nil {
+		log.WarnObj("Login step 2 failed", map[string]any{
+			"user_id": body.UserID,
+			"err":     err.Error(),
+		})
+		return apperr.SendAppError(c, err)
+	}
+
+	log.InfoMap("Login step 2 successful", map[string]any{
+		"user_id": body.UserID,
+	})
+
+	return c.JSON(response)
+}
+
+// #endregion
+
 // #region VerifyDevice
 func (h *AuthHandler) VerifyDevice(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(c.UserContext(), 2*time.Second)
@@ -257,25 +301,6 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 	})
 
 	return c.Status(fiber.StatusCreated).JSON(response)
-}
-
-// #region GET ME
-func (h *AuthHandler) GetMe(c *fiber.Ctx) error {
-	ctx, cancel := context.WithTimeout(c.UserContext(), 2*time.Second)
-	defer cancel()
-
-	rc := reqctx.MustFromFiber(c)
-	if rc.UserID == nil {
-		return apperr.SendAppError(c, apperr.ErrUnauthorized)
-	}
-
-	// Wywołujemy serwis pobierający dane profilu / aktywnej sesji
-	userProfile, err := h.authService.GetProfile(ctx, *rc.UserID)
-	if err != nil {
-		return apperr.SendAppError(c, err)
-	}
-
-	return c.Status(fiber.StatusOK).JSON(userProfile)
 }
 
 // #region UNPAIR DEVICE

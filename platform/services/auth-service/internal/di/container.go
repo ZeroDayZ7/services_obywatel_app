@@ -12,6 +12,7 @@ type Container struct {
 	Repos          *Repositories
 	Services       *Services
 	Handlers       *Handlers
+	Consumers      *Consumers
 	Redis          *redis.Client
 	Cache          *redis.Cache
 	EventPublisher rabbitmq.EventPublisher
@@ -34,11 +35,13 @@ func NewContainer(
 	repos := NewRepositories(db)
 	services := NewServices(repos, cache, eventPublisher, cfg)
 	handlers := NewHandlers(services, cache, cfg)
+	consumers := NewConsumers(services)
 
 	return &Container{
 		Repos:          repos,
 		Services:       services,
 		Handlers:       handlers,
+		Consumers:      consumers,
 		Redis:          redisClient,
 		Cache:          cache,
 		EventPublisher: eventPublisher,

@@ -70,19 +70,6 @@ func (r *UserRepo) GetUserByEmail(ctx context.Context, email string) (*model.Use
 	return &u, nil
 }
 
-func (r *UserRepo) GetUserByEmailAndAgreement(ctx context.Context, email string, agreementNumber string) (*model.User, error) {
-	var u model.User
-	err := r.db.WithContext(ctx).
-		Joins("Agreement").
-		Where("users.email = ? AND \"Agreement\".\"agreement_number\" = ? AND \"Agreement\".\"status\" = ?",
-			email, agreementNumber, model.AgreementStatusActive).
-		First(&u).Error
-	if err != nil {
-		return nil, err
-	}
-	return &u, nil
-}
-
 // region EmailExists
 func (r *UserRepo) EmailExists(email string) (bool, error) {
 	var count int64
@@ -160,10 +147,9 @@ func (r *UserRepo) GetDeviceByFingerprint(ctx context.Context, userID uuid.UUID,
 }
 
 // region IncrementUserFailedLogin
-func (r *UserRepo) IncrementUserFailedLogin(userID uuid.UUID) (int8, error) {
+func (r *UserRepo) IncrementUserFailedLogin(ctx context.Context, userID uuid.UUID) (int8, error) {
 	var user model.User
-	// Wykonujemy update i pobieramy aktualną wartość w jednej operacji (RETURNING)
-	err := r.db.Model(&user).
+	err := r.db.WithContext(ctx).Model(&user).
 		Where("id = ?", userID).
 		Update("failed_login_attempts", gorm.Expr("failed_login_attempts + ?", 1)).
 		Select("failed_login_attempts").
@@ -184,8 +170,8 @@ func (r *UserRepo) LockUserTemporarily(userID uuid.UUID, duration time.Duration)
 }
 
 // region PermanentLock
-func (r *UserRepo) PermanentLock(userID uuid.UUID) error {
-	return r.db.Model(&model.User{}).
+func (r *UserRepo) PermanentLock(ctx context.Context, userID uuid.UUID) error {
+	return r.db.WithContext(ctx).Model(&model.User{}).
 		Where("id = ?", userID).
 		Updates(map[string]any{
 			"status":                model.StatusLocked,

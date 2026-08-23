@@ -7,7 +7,7 @@
 
 # Ignore binary outputs
 bin/*
-
+**/dev-card.json
 # Ignore logs
 logs/
 **/combined.txt

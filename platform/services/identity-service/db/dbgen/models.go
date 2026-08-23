@@ -5,27 +5,79 @@
 package dbgen
 
 import (
-	"github.com/jackc/pgx/v5/pgtype"
+	"time"
+
+	"github.com/google/uuid"
 )
 
 type Citizen struct {
-	UserID        pgtype.UUID        `json:"user_id"`
-	PeselHash     string             `json:"pesel_hash"`
-	EncryptedData []byte             `json:"encrypted_data"`
-	EncryptedDek  []byte             `json:"encrypted_dek"`
-	Nonce         []byte             `json:"nonce"`
-	KeyVersion    int32              `json:"key_version"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	UserID        uuid.UUID `json:"user_id"`
+	PeselHash     string    `json:"pesel_hash"`
+	EncryptedData []byte    `json:"encrypted_data"`
+	EncryptedDek  []byte    `json:"encrypted_dek"`
+	KeyVersion    int32     `json:"key_version"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 type CitizenAuditLog struct {
-	ID                  pgtype.UUID        `json:"id"`
-	UserID              pgtype.UUID        `json:"user_id"`
-	Action              string             `json:"action"`
-	ActorID             pgtype.UUID        `json:"actor_id"`
-	IpAddress           pgtype.Text        `json:"ip_address"`
-	PayloadHash         pgtype.Text        `json:"payload_hash"`
-	SyncedToGlobalAudit bool               `json:"synced_to_global_audit"`
-	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	ID                  uuid.UUID `json:"id"`
+	UserID              uuid.UUID `json:"user_id"`
+	Action              string    `json:"action"`
+	ActorID             uuid.UUID `json:"actor_id"`
+	IpAddress           string    `json:"ip_address"`
+	PayloadHash         string    `json:"payload_hash"`
+	PrevHash            string    `json:"prev_hash"`
+	Hash                string    `json:"hash"`
+	SyncedToGlobalAudit bool      `json:"synced_to_global_audit"`
+	CreatedAt           time.Time `json:"created_at"`
+}
+
+type OutboxMessage struct {
+	ID            uuid.UUID  `json:"id"`
+	AggregateType string     `json:"aggregate_type"`
+	AggregateID   uuid.UUID  `json:"aggregate_id"`
+	EventType     string     `json:"event_type"`
+	Payload       []byte     `json:"payload"`
+	Status        string     `json:"status"`
+	RetryCount    int16      `json:"retry_count"`
+	LastError     *string    `json:"last_error"`
+	ProcessedAt   *time.Time `json:"processed_at"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
+	DeletedAt     *time.Time `json:"deleted_at"`
+}
+
+type UserAgreement struct {
+	ID              uuid.UUID  `json:"id"`
+	UserID          uuid.UUID  `json:"user_id"`
+	AgreementNumber string     `json:"agreement_number"`
+	S3Key           string     `json:"s3_key"`
+	S3Bucket        string     `json:"s3_bucket"`
+	EncryptedDek    []byte     `json:"encrypted_dek"`
+	KeyVersion      int32      `json:"key_version"`
+	PeselEncrypted  []byte     `json:"pesel_encrypted"`
+	VerifiedPhone   string     `json:"verified_phone"`
+	Status          string     `json:"status"`
+	SignedAt        time.Time  `json:"signed_at"`
+	VerifiedAt      *time.Time `json:"verified_at"`
+	VerifiedVia     string     `json:"verified_via"`
+	CreatedAt       time.Time  `json:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
+	DeletedAt       *time.Time `json:"deleted_at"`
+}
+
+type UserPukCode struct {
+	ID              uuid.UUID  `json:"id"`
+	UserAgreementID uuid.UUID  `json:"user_agreement_id"`
+	UserID          uuid.UUID  `json:"user_id"`
+	PukHash         string     `json:"puk_hash"`
+	Status          string     `json:"status"`
+	FailedAttempts  int16      `json:"failed_attempts"`
+	MaxAttempts     int16      `json:"max_attempts"`
+	ExpiresAt       *time.Time `json:"expires_at"`
+	UsedAt          *time.Time `json:"used_at"`
+	CreatedAt       time.Time  `json:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
+	DeletedAt       *time.Time `json:"deleted_at"`
 }

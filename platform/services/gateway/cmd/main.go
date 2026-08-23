@@ -95,11 +95,30 @@ func main() {
 		}
 	}()
 
-	// 6. RabbitMQ event publisher
+	// =========================================================================
+	// 6. RabbitMQ Event Publisher
+	// =========================================================================
 	var eventPublisher rabbitmq.EventPublisher
 	if config.AppConfig.RabbitMQ.Enabled {
-		log.Info("RabbitMQ is ENABLED. Connecting...")
-		eventPublisher, err = rabbitmq.NewLivePublisher(config.AppConfig.RabbitMQ.GetURL())
+		log.Info("RabbitMQ is ENABLED. Fetching HMAC key for Gateway Publisher...")
+
+		var publisherHMACKey []byte
+		publisherHMACKey, _, err = kms.FetchSymmetricKeyWithVersion(
+			ctx,
+			kmsCfg,
+			"hmac-gateway-rabbitmq",
+			"HmacSha256",
+		)
+		if err != nil {
+			log.Error("❌ Nie udało się pobrać klucza HMAC RabbitMQ dla Gateway z KMS", "error", err)
+			os.Exit(1)
+		}
+
+		eventPublisher, err = rabbitmq.NewLivePublisher(
+			config.AppConfig.RabbitMQ.GetURL(),
+			config.AppConfig.Server.AppName,
+			publisherHMACKey,
+		)
 		if err != nil {
 			log.Error("RabbitMQ initialization failed", "error", err)
 			os.Exit(1)

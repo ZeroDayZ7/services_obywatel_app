@@ -26,6 +26,24 @@ func VerifyEd25519Signature(publicKeyBase64 string, message []byte, signatureBas
 
 //#endregion
 
+// #region VerifyEd25519SignatureHex
+// VerifyEd25519SignatureHex weryfikuje podpis dla klucza publicznego podanego w formacie Hex.
+func VerifyEd25519SignatureHex(publicKeyHex string, message []byte, signatureBase64 string) bool {
+	pubKey, err := hex.DecodeString(publicKeyHex)
+	if err != nil || len(pubKey) != ed25519.PublicKeySize {
+		return false
+	}
+
+	sig, err := base64.StdEncoding.DecodeString(signatureBase64)
+	if err != nil || len(sig) != ed25519.SignatureSize {
+		return false
+	}
+
+	return ed25519.Verify(pubKey, message, sig)
+}
+
+//#endregion
+
 // #region ComputeHMACSHA256
 func ComputeHMACSHA256(data []byte, key []byte) string {
 	h := hmac.New(sha256.New, key)
@@ -62,3 +80,5 @@ func HashSHA256(data string) string {
 	h := sha256.Sum256([]byte(data))
 	return hex.EncodeToString(h[:])
 }
+
+//#endregion

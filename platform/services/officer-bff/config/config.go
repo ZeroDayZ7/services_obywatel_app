@@ -11,7 +11,6 @@ import (
 )
 
 type BFFHMACConfig struct {
-	HeaderName string            `mapstructure:"HMAC_HEADER_NAME" validate:"required"`
 	TargetKeys map[string]string `mapstructure:"HMAC_TARGET_KEYS"`
 }
 
@@ -26,14 +25,13 @@ type Config struct {
 	AuthServiceURL        string               `mapstructure:"AUTH_SERVICE_URL" validate:"required"`
 	IdentityServiceURL    string               `mapstructure:"IDENTITY_SERVICE_URL" validate:"required"`
 	CitizenDocsServiceURL string               `mapstructure:"CITIZEN_DOCS_SERVICE_URL" validate:"required"`
+
+	AccessTokenTTL  time.Duration `mapstructure:"AUTH_ACCESS_TOKEN_TTL" validate:"required"`
+	RefreshTokenTTL time.Duration `mapstructure:"AUTH_REFRESH_TOKEN_TTL" validate:"required"`
 }
 
 func (c *Config) ToKMSServiceConfig() kms.Config {
-	return kms.Config{
-		Endpoint:      c.KMS.Endpoint,
-		ServiceName:   c.Server.AppName,
-		ServiceSecret: c.KMS.ServiceSecret,
-	}
+	return c.KMS.ToKMSServiceConfig(c.Server.AppName)
 }
 
 var AppConfig Config
@@ -43,6 +41,9 @@ func SetBFFDefaults() {
 	viper.SetRedisDefaults()
 	viper.SetKMSDefaults()
 	viper.SetGatewayHMACDefaults()
+
+	spfViper.SetDefault("AUTH_ACCESS_TOKEN_TTL", "15m")
+	spfViper.SetDefault("AUTH_REFRESH_TOKEN_TTL", "168h")
 
 	// Definiujemy, które klucze z KMS są potrzebne dla BFF
 	// 1. Klucz do weryfikacji przychodzącego ruchu z Gatewaya

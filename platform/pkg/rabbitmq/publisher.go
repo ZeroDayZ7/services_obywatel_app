@@ -2,16 +2,22 @@ package rabbitmq
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 
 	amqp "github.com/rabbitmq/amqp091-go"
+	"github.com/zerodayz7/platform/pkg/shared"
 )
 
 type RabbitMQPublisher struct {
-	conn *amqp.Connection
-	ch   *amqp.Channel
+	conn     *amqp.Connection
+	ch       *amqp.Channel
+	senderID string
+	hmacKey  []byte
 }
 
-func NewLivePublisher(url string) (*RabbitMQPublisher, error) {
+func NewLivePublisher(url string, senderID string, hmacKey []byte) (*RabbitMQPublisher, error) {
 	conn, err := amqp.Dial(url)
 	if err != nil {
 		return nil, err
@@ -21,44 +27,48 @@ func NewLivePublisher(url string) (*RabbitMQPublisher, error) {
 		_ = conn.Close()
 		return nil, err
 	}
-	return &RabbitMQPublisher{conn: conn, ch: ch}, nil
+	return &RabbitMQPublisher{
+		conn:     conn,
+		ch:       ch,
+		senderID: senderID,
+		hmacKey:  hmacKey,
+	}, nil
+}
+
+func ComputeHMAC(payload []byte, key []byte) string {
+	h := hmac.New(sha256.New, key)
+	h.Write(payload)
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 func (p *RabbitMQPublisher) Publish(ctx context.Context, routingKey string, payload []byte) error {
+	headers := amqp.Table{
+		"X-Sender-ID": p.senderID,
+	}
+
+	if len(p.hmacKey) > 0 {
+		headers["X-Signature"] = ComputeHMAC(payload, p.hmacKey)
+	}
+
 	return p.ch.PublishWithContext(ctx,
-		"amq.topic", // Default exchange
+		"amq.topic",
 		routingKey,
 		false,
 		false,
 		amqp.Publishing{
 			ContentType: "application/json",
+			Headers:     headers,
 			Body:        payload,
 		},
 	)
 }
 
-// Consume automatycznie deklaruje i konfiguruje kolejke, a nastepnie zwraca kanal z wiadomosciami
 func (p *RabbitMQPublisher) Consume(queueName string, routingKey string) (<-chan amqp.Delivery, error) {
-	// Deklarujemy trwała kolejke (durable: true)
 	q, err := p.ch.QueueDeclare(
 		queueName,
-		true,  // durable
-		false, // delete when unused
-		false, // exclusive
-		false, // no-wait
-		nil,   // arguments
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	// Poniewaz uzywamy default exchange "", powiazanie z routingKey jako nazwa kolejki
-	// nastepuje automatycznie, ale dla zachowania standardow zrobimy jawne bindowanie
-	// na wypadek, gdybys w przyszlosci zmienil exchange na amq.topic
-	err = p.ch.QueueBind(
-		q.Name,
-		routingKey,
-		"amq.topic", // exchange name (pusty dla default exchange)
+		true,
+		false,
+		false,
 		false,
 		nil,
 	)
@@ -66,8 +76,17 @@ func (p *RabbitMQPublisher) Consume(queueName string, routingKey string) (<-chan
 		return nil, err
 	}
 
-	// Ograniczamy pobieranie (Prefetch: 1), zeby jeden worker nie blokowal wiadomosci,
-	// gdy przetwarza ciezki task przez LLM (Pattern: Fair Dispatch)
+	err = p.ch.QueueBind(
+		q.Name,
+		routingKey,
+		"amq.topic",
+		false,
+		nil,
+	)
+	if err != nil {
+		return nil, err
+	}
+
 	err = p.ch.Qos(1, 0, false)
 	if err != nil {
 		return nil, err
@@ -75,13 +94,41 @@ func (p *RabbitMQPublisher) Consume(queueName string, routingKey string) (<-chan
 
 	return p.ch.Consume(
 		q.Name,
-		"",    // consumer tag
-		false, // auto-ack: FALSE - potwierdzamy recznie dopieru po przetworzeniu przez LLM!
-		false, // exclusive
-		false, // no-local
-		false, // no-wait
-		nil,   // args
+		"",
+		false,
+		false,
+		false,
+		false,
+		nil,
 	)
+}
+
+func (p *RabbitMQPublisher) Subscribe(ctx context.Context, queueName string, routingKey string, handler HandlerFunc) error {
+	log := shared.GetLogger()
+
+	msgs, err := p.Consume(queueName, routingKey)
+	if err != nil {
+		return err
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case d, ok := <-msgs:
+			if !ok {
+				return nil
+			}
+
+			if err := handler(ctx, d.Headers, d.Body); err != nil {
+				log.Error("[RABBITMQ] Błąd przetwarzania wiadomości", "queue", queueName, "error", err)
+				_ = d.Nack(false, false)
+				continue
+			}
+
+			_ = d.Ack(false)
+		}
+	}
 }
 
 func (p *RabbitMQPublisher) Close() error {

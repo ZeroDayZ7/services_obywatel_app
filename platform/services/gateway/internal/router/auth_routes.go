@@ -5,6 +5,7 @@ import (
 	pkgMiddleware "github.com/zerodayz7/platform/pkg/middleware"
 	"github.com/zerodayz7/platform/pkg/schemas"
 	"github.com/zerodayz7/platform/services/gateway/internal/di"
+	"github.com/zerodayz7/platform/services/gateway/internal/handlers"
 )
 
 const ServiceAuth = "auth-service"
@@ -25,7 +26,8 @@ func RegisterAuthRoutes(app *fiber.App, container *di.Container) {
 
 	// Trasy chronione
 	authSecure := app.Group("/auth")
-	authSecure.Get("/me", ReverseProxySecure(container, ServiceAuth, target))
+	authSecure.Get("/me", handlers.GetMeHandler)
+
 	authSecure.Post("/unpair-device", ReverseProxySecure(container, ServiceAuth, target))
 	authSecure.Post("/register-device", pkgMiddleware.ValidateBody[schemas.RegisterDeviceRequest](), ReverseProxySecure(container, ServiceAuth, target))
 	authSecure.Post("/logout", pkgMiddleware.ValidateBody[schemas.RefreshTokenRequest](), ReverseProxySecure(container, ServiceAuth, target))

@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-
-	"github.com/zerodayz7/platform/pkg/shared"
 )
 
 const (
@@ -62,6 +60,5 @@ func SignData(ctx context.Context, cfg Config, targetService string, algorithm s
 		return nil, 0, fmt.Errorf("kms: failed to decode signature base64: %w", err)
 	}
 
-	shared.GetLogger().Info(fmt.Sprintf("[KMS-CLIENT] ✅ Zdalnie podpisano dane kluczem '%s' [%s] (wersja %d)", targetService, out.Algorithm, out.KeyVersion))
 	return sigBytes, out.KeyVersion, nil
 }

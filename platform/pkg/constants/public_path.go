@@ -12,3 +12,9 @@ var PublicPaths = []string{
 	"/health",
 	"/api/v1/official/auth/login",
 }
+
+var DeviceVerifyPaths = []string{
+	"/auth/register-device",
+	"/auth/verify-device",
+	"/api/v1/official/auth/login/step2",
+}

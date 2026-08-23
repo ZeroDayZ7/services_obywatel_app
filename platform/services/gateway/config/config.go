@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2/middleware/session"
-	spfViper "github.com/spf13/viper" // import standardowego vipera do nadpisania mapy
+	spfViper "github.com/spf13/viper"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/pkg/viper"
 )
@@ -23,7 +23,6 @@ type JWTConfig struct {
 }
 
 type GatewayHMACConfig struct {
-	HeaderName string            `mapstructure:"HMAC_HEADER_NAME" validate:"required"`
 	TargetKeys map[string]string `mapstructure:"HMAC_TARGET_KEYS"`
 }
 
@@ -53,7 +52,6 @@ func SetGatewayDefaults() {
 	viper.SetSessionDefaults()
 	viper.SetGatewayHMACDefaults()
 
-	// Nadpisujemy HMAC_TARGET_KEYS pełną, lokalną mapą dla Gatewaya
 	spfViper.SetDefault("HMAC_TARGET_KEYS", map[string]string{
 		"auth-service":         "hmac-gateway-auth",
 		"identity-service":     "hmac-gateway-identity",

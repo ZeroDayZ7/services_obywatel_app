@@ -24,7 +24,6 @@ type UserRepository interface {
 	CreateUser(*model.User) error
 	GetByID(ctx context.Context, id uuid.UUID) (*model.User, error)
 	GetUserByEmail(ctx context.Context, email string) (*model.User, error)
-	GetUserByEmailAndAgreement(ctx context.Context, email string, agreementNumber string) (*model.User, error)
 	DeleteDevice(ctx context.Context, userID uuid.UUID, fingerprint string) error
 
 	EmailExists(string) (bool, error)
@@ -33,12 +32,15 @@ type UserRepository interface {
 	Update(ctx context.Context, user *model.User) error
 	SaveDevice(ctx context.Context, device *model.UserDevice) error
 
-	// Dopasuj te nazwy dokładnie do tego, co wywołujesz w AuthService
-
-	IncrementUserFailedLogin(userID uuid.UUID) (int8, error)
+	IncrementUserFailedLogin(ctx context.Context, userID uuid.UUID) (int8, error)
 	LockUserTemporarily(userID uuid.UUID, duration time.Duration) error
 	ResetFailedLoginAttempts(userID uuid.UUID) error
-	PermanentLock(userID uuid.UUID) error
+	PermanentLock(ctx context.Context, userID uuid.UUID) error
 
 	GetDeviceByFingerprint(ctx context.Context, userID uuid.UUID, fingerprint string) (*model.UserDevice, error)
+}
+
+type EmployeeRepository interface {
+	GetProfileByUserID(ctx context.Context, userID uuid.UUID) (*model.EmployeeProfile, error)
+	GetActiveCredentialByUserID(ctx context.Context, userID uuid.UUID) (*model.EmployeeCredential, error)
 }
