@@ -51,23 +51,20 @@ func LoadSecurityKeys(ctx context.Context, app *config.App, keyStore *httpserver
 		)
 	}
 
+	// 1. Zewnętrzni nadawcy (API Gateway, BFF)
 	for senderID, keyTarget := range app.Config.HMAC.TargetKeys {
 		loadKey(senderID, keyTarget)
 	}
 
+	// 2. Zaufani nadawcy RabbitMQ
 	for senderID, keyTarget := range app.Config.RabbitConsumers.TrustedSenders {
 		loadKey(senderID, keyTarget)
 	}
 
+	// 3. Klucze wewnętrzne serwisu pobierane bezpośrednio z konfiguracji
 	internalKeys := map[string]config.KeyTarget{
-		"pesel": {
-			TargetKey: "hmac-identity-pesel-index",
-			Algorithm: "HmacSha256",
-		},
-		"rabbitmq": {
-			TargetKey: "hmac-identity-rabbitmq",
-			Algorithm: "HmacSha256",
-		},
+		"pesel":      app.Config.HMAC.PeselKey,
+		"rabbitmq":   app.Config.HMAC.RabbitMQKey,
 		"audit":      app.Config.HMAC.AuditKey,
 		"agreements": app.Config.HMAC.AgreementsKey,
 	}

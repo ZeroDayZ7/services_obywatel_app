@@ -19,6 +19,8 @@ type IdentityHMACConfig struct {
 	TargetKeys    map[string]KeyTarget `mapstructure:"HMAC_TARGET_KEYS"`
 	AuditKey      KeyTarget            `mapstructure:"HMAC_AUDIT_KEY"`
 	AgreementsKey KeyTarget            `mapstructure:"AGREEMENTS_KMS_KEY"`
+	PeselKey      KeyTarget            `mapstructure:"HMAC_PESEL_KEY"`
+	RabbitMQKey   KeyTarget            `mapstructure:"HMAC_RABBITMQ_KEY"`
 }
 
 type RabbitMQConsumersConfig struct {
@@ -90,6 +92,16 @@ func LoadConfigGlobal() error {
 	spfViper.SetDefault("AGREEMENTS_KMS_KEY", KeyTarget{
 		TargetKey: "identity-agreements-key",
 		Algorithm: "AES256GCM",
+	})
+
+	spfViper.SetDefault("HMAC_PESEL_KEY", KeyTarget{
+		TargetKey: "hmac-identity-pesel-index",
+		Algorithm: "HmacSha256",
+	})
+
+	spfViper.SetDefault("HMAC_RABBITMQ_KEY", KeyTarget{
+		TargetKey: "hmac-identity-rabbitmq",
+		Algorithm: "HmacSha256",
 	})
 
 	spfViper.SetDefault("AUDIT_WORKER_BATCH_SIZE", 200)

@@ -30,29 +30,44 @@ func LoadSecurityKeys(ctx context.Context, app *config.Config, keyStore *httpser
 		log.Info("🛡️ [MODE: KMS] Tokeny będą podpisywane i weryfikowane zdalnie przez API KMS")
 	}
 
-	for senderID, targetKey := range app.HMAC.TargetKeys {
-		hmacKey, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, targetKey, 1)
+	loadKey := func(alias string, target config.KeyTarget) {
+		keyBytes, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, target.TargetKey, 1, target.Algorithm)
 		if err != nil {
-			return nil, err
+			log.Error("❌ Nie udało się pobrać klucza z KMS",
+				"alias", alias,
+				"target", target.TargetKey,
+				"algorithm", target.Algorithm,
+				"error", err,
+			)
+			return
 		}
-		keyStore.SetKey(senderID, hmacKey, uint32(version))
-		log.Info("✅ Klucz HMAC załadowany", "service", senderID, "version", version)
+
+		keyStore.SetKey(alias, keyBytes, uint32(version))
+		log.Info("✅ Klucz załadowany do KeyStore",
+			"alias", alias,
+			"target", target.TargetKey,
+			"algorithm", target.Algorithm,
+			"version", version,
+		)
 	}
 
-	for senderID, targetKey := range app.RabbitConsumers.TrustedSenders {
-		hmacKey, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, targetKey, 1)
-		if err != nil {
-			return nil, err
-		}
-		keyStore.SetKey(senderID, hmacKey, uint32(version))
-		log.Info("✅ Klucz HMAC Consumer RabbitMQ załadowany", "service", senderID, "version", version)
+	// 1. Zewnętrzni nadawcy (Gateway, BFF)
+	for senderID, keyTarget := range app.HMAC.TargetKeys {
+		loadKey(senderID, keyTarget)
 	}
 
-	rabbitHMACKey, rabbitKeyVersion, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, "hmac-auth-rabbitmq", 1)
+	// 2. Zaufani nadawcy RabbitMQ
+	for senderID, keyTarget := range app.RabbitConsumers.TrustedSenders {
+		loadKey(senderID, keyTarget)
+	}
+
+	// 3. Wewnętrzny klucz RabbitMQ dla tego serwisu
+	rabbitTarget := app.HMAC.RabbitMQKey
+	rabbitHMACKey, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, rabbitTarget.TargetKey, 1, rabbitTarget.Algorithm)
 	if err != nil {
 		return nil, err
 	}
-	log.Info("✅ Klucz HMAC dla RabbitMQ pobrany pomyślnie z KMS", "version", rabbitKeyVersion)
+	log.Info("✅ Klucz HMAC dla RabbitMQ pobrany pomyślnie z KMS", "target", rabbitTarget.TargetKey, "version", version)
 
 	return rabbitHMACKey, nil
 }

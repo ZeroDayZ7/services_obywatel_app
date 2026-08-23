@@ -18,9 +18,10 @@ import (
 	"github.com/zerodayz7/platform/services/gateway/internal/router"
 )
 
-// loadSecurityKeys obsługuje połączenie z KMS, health-check oraz pobieranie kluczy JWT i HMAC.
-func loadSecurityKeys(ctx context.Context, kmsCfg kms.Config, keyStore *hmac.GatewayKeyStore) []byte {
+// loadSecurityKeys obsługuje połączenie z KMS, health-check oraz pobieranie kluczy JWT, HMAC serwisów i opcjonalnie RabbitMQ.
+func loadSecurityKeys(ctx context.Context, appCfg *config.Config, keyStore *hmac.GatewayKeyStore) []byte {
 	log := shared.GetLogger()
+	kmsCfg := appCfg.ToKMSServiceConfig()
 
 	log.Info("🔍 Sprawdzanie stanu serwisu KMS...")
 	if err := kms.HealthCheck(ctx, kmsCfg); err != nil {
@@ -35,14 +36,14 @@ func loadSecurityKeys(ctx context.Context, kmsCfg kms.Config, keyStore *hmac.Gat
 		log.Error("❌ KMS Public Key fetch failed", "error", err)
 		os.Exit(1)
 	}
-	config.AppConfig.JWT.AccessPublicKey = pubKey
+	appCfg.JWT.AccessPublicKey = pubKey
 	log.Info("✅ KMS Public Key loaded successfully")
 
 	// 2. Pobranie dedykowanych kluczy HMAC dla poszczególnych mikrousług
-	for serviceID, targetKey := range config.AppConfig.HMAC.TargetKeys {
-		hmacKey, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, targetKey, 1)
+	for serviceID, target := range appCfg.HMAC.TargetKeys {
+		hmacKey, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, target.TargetKey, 1, target.Algorithm)
 		if err != nil {
-			log.Error("❌ Nie udało się pobrać klucza HMAC z KMS", "service", serviceID, "target_key", targetKey, "error", err)
+			log.Error("❌ Nie udało się pobrać klucza HMAC z KMS", "service", serviceID, "target_key", target.TargetKey, "error", err)
 			os.Exit(1)
 		}
 
@@ -50,17 +51,22 @@ func loadSecurityKeys(ctx context.Context, kmsCfg kms.Config, keyStore *hmac.Gat
 		log.Info("✅ Klucz HMAC załadowany", "service", serviceID, "version", version)
 	}
 
-	// 3. Pobranie klucza HMAC dla RabbitMQ Publishera w Gateway
-	log.Info("RabbitMQ jest ENABLED. Pobieranie klucza HMAC dla Gateway Publisher...")
-	publisherHMACKey, _, err := kms.FetchSymmetricKeyWithVersion(
-		ctx,
-		kmsCfg,
-		"hmac-gateway-rabbitmq",
-		1,
-	)
-	if err != nil {
-		log.Error("❌ Nie udało się pobrać klucza HMAC RabbitMQ dla Gateway z KMS", "error", err)
-		os.Exit(1)
+	// 3. Pobranie klucza HMAC dla RabbitMQ Publishera w Gateway (tylko jeśli RabbitMQ jest włączony)
+	var publisherHMACKey []byte
+	if appCfg.RabbitMQ.Enabled {
+		log.Info("RabbitMQ jest ENABLED. Pobieranie klucza HMAC dla Gateway Publisher...")
+		rabbitTarget := appCfg.HMAC.RabbitMQKey
+		publisherHMACKey, _, err = kms.FetchSymmetricKeyWithVersion(
+			ctx,
+			kmsCfg,
+			rabbitTarget.TargetKey,
+			1,
+			rabbitTarget.Algorithm,
+		)
+		if err != nil {
+			log.Error("❌ Nie udało się pobrać klucza HMAC RabbitMQ dla Gateway z KMS", "error", err)
+			os.Exit(1)
+		}
 	}
 
 	return publisherHMACKey
@@ -86,44 +92,10 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	kmsCfg := kms.Config{
-		Endpoint:      config.AppConfig.KMS.Endpoint,
-		ServiceName:   config.AppConfig.Server.AppName,
-		ServiceSecret: config.AppConfig.KMS.ServiceSecret,
-	}
-
 	// =========================================================================
-	// 2. KMS SETUP & FETCH KEYS (Wywołanie wydzielonej funkcji)
+	// 2. KMS SETUP & FETCH KEYS (Jedno czyste wywołanie)
 	// =========================================================================
-	var publisherHMACKey []byte
-	if config.AppConfig.RabbitMQ.Enabled {
-		publisherHMACKey = loadSecurityKeys(ctx, kmsCfg, keyStore)
-	} else {
-		log.Info("🔍 Sprawdzanie stanu serwisu KMS...")
-		if err := kms.HealthCheck(ctx, kmsCfg); err != nil {
-			log.Error("❌ KMS Health Check nie powiódł się", "error", err)
-			os.Exit(1)
-		}
-
-		log.Info("🔑 Pobieranie klucza publicznego JWT z KMS...")
-		pubKey, err := kms.FetchPublicKey(ctx, kmsCfg, "shared-jwt")
-		if err != nil {
-			log.Error("❌ KMS Public Key fetch failed", "error", err)
-			os.Exit(1)
-		}
-		config.AppConfig.JWT.AccessPublicKey = pubKey
-		log.Info("✅ KMS Public Key loaded successfully")
-
-		for serviceID, targetKey := range config.AppConfig.HMAC.TargetKeys {
-			hmacKey, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, targetKey, 1)
-			if err != nil {
-				log.Error("❌ Nie udało się pobrać klucza HMAC z KMS", "service", serviceID, "target_key", targetKey, "error", err)
-				os.Exit(1)
-			}
-			keyStore.SetKey(serviceID, hmacKey, uint32(version))
-			log.Info("✅ Klucz HMAC załadowany", "service", serviceID, "version", version)
-		}
-	}
+	publisherHMACKey := loadSecurityKeys(ctx, &config.AppConfig, keyStore)
 
 	// 4. Telemetry setup
 	if config.AppConfig.OTEL.Enabled {

@@ -7,9 +7,15 @@ import (
 
 	"github.com/gofiber/fiber/v2/middleware/session"
 	spfViper "github.com/spf13/viper"
+	"github.com/zerodayz7/platform/pkg/kms"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/pkg/viper"
 )
+
+type KeyTarget struct {
+	TargetKey string `mapstructure:"target_key"`
+	Algorithm string `mapstructure:"algorithm"`
+}
 
 type ProxyConfig struct {
 	MaxIdleConns        int           `mapstructure:"PROXY_MAX_IDLE_CONNS" validate:"min=1"`
@@ -23,7 +29,8 @@ type JWTConfig struct {
 }
 
 type GatewayHMACConfig struct {
-	TargetKeys map[string]string `mapstructure:"HMAC_TARGET_KEYS"`
+	TargetKeys  map[string]KeyTarget `mapstructure:"HMAC_TARGET_KEYS"`
+	RabbitMQKey KeyTarget            `mapstructure:"HMAC_RABBITMQ_KEY"`
 }
 
 type Config struct {
@@ -41,6 +48,10 @@ type Config struct {
 	Shutdown         time.Duration        `mapstructure:"SHUTDOWN_TIMEOUT" validate:"required"`
 }
 
+func (c *Config) ToKMSServiceConfig() kms.Config {
+	return c.KMS.ToKMSServiceConfig()
+}
+
 var (
 	AppConfig Config
 	Store     *session.Store
@@ -50,14 +61,34 @@ func SetGatewayDefaults() {
 	viper.SetBaseDefaults("gateway")
 	viper.SetRedisDefaults()
 	viper.SetSessionDefaults()
-	viper.SetGatewayHMACDefaults()
+	viper.SetKMSDefaults()
 
-	spfViper.SetDefault("HMAC_TARGET_KEYS", map[string]string{
-		"auth-service":         "hmac-gateway-auth",
-		"identity-service":     "hmac-gateway-identity",
-		"citizen-docs-service": "hmac-gateway-docs",
-		"messaging-service":    "hmac-gateway-messaging",
-		"officer-bff":          "hmac-gateway-officer-bff",
+	spfViper.SetDefault("HMAC_TARGET_KEYS", map[string]KeyTarget{
+		"auth-service": {
+			TargetKey: "hmac-gateway-auth",
+			Algorithm: "HmacSha256",
+		},
+		"identity-service": {
+			TargetKey: "hmac-gateway-identity",
+			Algorithm: "HmacSha256",
+		},
+		"citizen-docs-service": {
+			TargetKey: "hmac-gateway-docs",
+			Algorithm: "HmacSha256",
+		},
+		"messaging-service": {
+			TargetKey: "hmac-gateway-messaging",
+			Algorithm: "HmacSha256",
+		},
+		"officer-bff": {
+			TargetKey: "hmac-gateway-officer-bff",
+			Algorithm: "HmacSha256",
+		},
+	})
+
+	spfViper.SetDefault("HMAC_RABBITMQ_KEY", KeyTarget{
+		TargetKey: "hmac-gateway-rabbitmq",
+		Algorithm: "HmacSha256",
 	})
 }
 

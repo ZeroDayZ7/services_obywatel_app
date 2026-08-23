@@ -98,7 +98,28 @@ func NewSingleHostProxy(targetURL, targetPath, targetServiceID string, keyStore 
 // #region NewReverseProxy
 // NewReverseProxy tworzy zwykłe proxy przelotowe (np. dla GET /auth/me oraz Krok 1 logowania)
 func NewReverseProxy(authServiceURL, targetPath string, keyStore *httpserver.KeyStore) (http.HandlerFunc, error) {
-	return NewSingleHostProxy(authServiceURL, targetPath, "auth-service", keyStore)
+	log := shared.GetLogger()
+
+	target, err := url.Parse(authServiceURL)
+	if err != nil {
+		log.Error("Błąd parsowania authServiceURL w NewReverseProxy", "url", authServiceURL, "error", err)
+		return nil, err
+	}
+
+	proxy := &httputil.ReverseProxy{
+		Rewrite: func(pr *httputil.ProxyRequest) {
+			pr.SetURL(target)
+			pr.SetXForwarded()
+
+			// Jawne nadpisanie ścieżki docelowej w mikroserwisie
+			pr.Out.URL.Path = targetPath
+			pr.Out.URL.RawPath = targetPath
+
+			signInternalContext(pr.Out, keyStore, "auth-service")
+		},
+	}
+
+	return proxy.ServeHTTP, nil
 }
 
 // #endregion
@@ -120,6 +141,7 @@ func NewAuthTokenProxy(authServiceURL, targetPath string, keyStore *httpserver.K
 			pr.SetURL(target)
 			pr.SetXForwarded()
 
+			// Jawne nadpisanie ścieżki docelowej w mikroserwisie
 			pr.Out.URL.Path = targetPath
 			pr.Out.URL.RawPath = targetPath
 
@@ -144,7 +166,6 @@ func NewAuthTokenProxy(authServiceURL, targetPath string, keyStore *httpserver.K
 				return nil
 			}
 
-			// 1. Zapisujemy tokeny do bezpiecznych ciasteczek
 			if accessToken, ok := responseData["access_token"].(string); ok && accessToken != "" {
 				setAuthCookie(resp, "access_token", accessToken, accessTokenTTL, "/")
 			}
@@ -153,11 +174,9 @@ func NewAuthTokenProxy(authServiceURL, targetPath string, keyStore *httpserver.K
 				setAuthCookie(resp, "refresh_token", refreshToken, refreshTokenTTL, "/api/v1/official/auth/refresh")
 			}
 
-			// 2. Wycinamy tokeny z ciała odpowiedzi JSON dla przeglądarki
 			delete(responseData, "access_token")
 			delete(responseData, "refresh_token")
 
-			// 3. Serializujemy oczyszczoną odpowiedź
 			cleanedBody, err := json.Marshal(responseData)
 			if err != nil {
 				log.Error("Błąd marshalingu oczyszczonej odpowiedzi w proxy", "error", err)
@@ -165,7 +184,6 @@ func NewAuthTokenProxy(authServiceURL, targetPath string, keyStore *httpserver.K
 				return nil
 			}
 
-			// 4. Podmieniamy ciało odpowiedzi oraz aktualizujemy nagłówek Content-Length
 			resp.Body = io.NopCloser(bytes.NewReader(cleanedBody))
 			resp.ContentLength = int64(len(cleanedBody))
 			resp.Header.Set("Content-Length", strconv.Itoa(len(cleanedBody)))
@@ -195,6 +213,7 @@ func NewAuthLogoutProxy(authServiceURL, targetPath string, keyStore *httpserver.
 			pr.SetURL(target)
 			pr.SetXForwarded()
 
+			// Jawne nadpisanie ścieżki docelowej w mikroserwisie
 			pr.Out.URL.Path = targetPath
 			pr.Out.URL.RawPath = targetPath
 
