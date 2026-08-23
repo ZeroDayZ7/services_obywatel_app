@@ -7,7 +7,7 @@
     "**/logs/": true,
     "**/bin/": true,
     "**/backup/": true,
-    "**/templates/": true,
+    // "**/templates/": true,
     // "**/.env.example": true,
     "**/README.md": true,
     "**/LICENSE": true,

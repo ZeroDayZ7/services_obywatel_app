@@ -18,6 +18,8 @@ func NewRouter(c *di.Container) http.Handler {
 	mux.HandleFunc("POST /api/v1/citizens", c.CitizenHandler.Register)
 	mux.HandleFunc("GET /api/v1/citizens/{user_id}", c.CitizenHandler.GetByID)
 
+	mux.HandleFunc("GET /api/v1/agreements/{agreement_id}/download", c.CitizenHandler.DownloadAgreementPDF)
+
 	return applyGlobalMiddleware(mux, c)
 }
 

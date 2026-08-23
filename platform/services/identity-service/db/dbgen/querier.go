@@ -17,6 +17,7 @@ type Querier interface {
 	CreateUserAgreement(ctx context.Context, arg CreateUserAgreementParams) (UserAgreement, error)
 	CreateUserPukCode(ctx context.Context, arg CreateUserPukCodeParams) (UserPukCode, error)
 	FetchPendingOutboxMessages(ctx context.Context, limit int) ([]FetchPendingOutboxMessagesRow, error)
+	GetAgreementByID(ctx context.Context, id uuid.UUID) (UserAgreement, error)
 	GetAgreementByNumber(ctx context.Context, agreementNumber string) (UserAgreement, error)
 	GetAgreementByUserID(ctx context.Context, userID uuid.UUID) (UserAgreement, error)
 	GetCitizenByPeselHash(ctx context.Context, peselHash string) (GetCitizenByPeselHashRow, error)

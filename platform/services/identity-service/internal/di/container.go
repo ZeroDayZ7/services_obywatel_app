@@ -1,6 +1,8 @@
 package di
 
 import (
+	"fmt"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/zerodayz7/platform/pkg/envelope"
 	"github.com/zerodayz7/platform/pkg/httpserver"
@@ -46,11 +48,17 @@ func BuildContainer(
 
 	cryptor := envelope.NewEnvelopeCryptor(kmsCfg)
 
+	pdfGen, err := service.NewPDFGenerator()
+	if err != nil {
+		panic(fmt.Sprintf("critical error: failed to initialize PDF generator: %v", err))
+	}
+
 	// Serwisy
 	citizenSvc := service.NewCitizenService(
 		citizenRepo,
 		cryptor,
 		fileStorage,
+		pdfGen,
 		peselHmacKey,
 		"identity-citizen-data",
 		"identity-agreements-key",

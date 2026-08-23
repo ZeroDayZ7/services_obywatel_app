@@ -1,10 +1,3 @@
--- name: CreateUserAgreement :one
-INSERT INTO user_agreements (
-    id, user_id, agreement_number, pesel_encrypted, verified_phone, status, signed_at, verified_at, verified_via
-) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9
-) RETURNING *;
-
 -- name: GetAgreementByUserID :one
 SELECT * FROM user_agreements
 WHERE user_id = $1 AND deleted_at IS NULL LIMIT 1;
@@ -40,3 +33,14 @@ WHERE id = $1 AND deleted_at IS NULL;
 UPDATE user_puk_codes
 SET status = 'USED', used_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
 WHERE id = $1 AND deleted_at IS NULL;
+
+-- name: CreateUserAgreement :one
+INSERT INTO user_agreements (
+    id, user_id, agreement_number, s3_key, s3_bucket, encrypted_dek, key_version, pesel_encrypted, verified_phone, status, signed_at, verified_at, verified_via
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+) RETURNING *;
+
+-- name: GetAgreementByID :one
+SELECT * FROM user_agreements
+WHERE id = $1 AND deleted_at IS NULL LIMIT 1;

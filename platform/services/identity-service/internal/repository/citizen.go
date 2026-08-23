@@ -83,6 +83,10 @@ func (r *citizenRepository) CreateAgreement(ctx context.Context, agreement *mode
 		ID:              agreement.ID,
 		UserID:          agreement.UserID,
 		AgreementNumber: agreement.AgreementNumber,
+		S3Key:           agreement.S3Key,
+		S3Bucket:        agreement.S3Bucket,
+		EncryptedDek:    agreement.EncryptedDEK,
+		KeyVersion:      int32(agreement.KeyVersion),
 		PeselEncrypted:  agreement.PeselEncrypted,
 		VerifiedPhone:   agreement.VerifiedPhone,
 		Status:          string(agreement.Status),
@@ -209,6 +213,35 @@ func (r *citizenRepository) GetByPESELHash(ctx context.Context, peselHash string
 		EncryptedDEK:  row.EncryptedDek,
 		KeyVersion:    int(row.KeyVersion),
 		CreatedAt:     row.CreatedAt,
+	}, nil
+}
+
+func (r *citizenRepository) GetAgreementByID(ctx context.Context, agreementID uuid.UUID) (*model.UserAgreement, error) {
+	q := r.getQueries(ctx)
+	row, err := q.GetAgreementByID(ctx, agreementID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	return &model.UserAgreement{
+		ID:              row.ID,
+		UserID:          row.UserID,
+		AgreementNumber: row.AgreementNumber,
+		S3Key:           row.S3Key,
+		S3Bucket:        row.S3Bucket,
+		EncryptedDEK:    row.EncryptedDek,
+		KeyVersion:      int(row.KeyVersion),
+		PeselEncrypted:  row.PeselEncrypted,
+		VerifiedPhone:   row.VerifiedPhone,
+		Status:          model.AgreementStatus(row.Status),
+		SignedAt:        row.SignedAt,
+		VerifiedAt:      row.VerifiedAt,
+		VerifiedVia:     row.VerifiedVia,
+		CreatedAt:       row.CreatedAt,
+		UpdatedAt:       row.UpdatedAt,
 	}, nil
 }
 

@@ -19,6 +19,8 @@ type CitizenRepository interface {
 	CreateOutboxMessage(ctx context.Context, outbox *model.OutboxMessage) error
 	GetByID(ctx context.Context, userID uuid.UUID) (*model.Citizen, error)
 	GetByPESELHash(ctx context.Context, peselHash string) (*model.Citizen, error)
+
+	GetAgreementByID(ctx context.Context, agreementID uuid.UUID) (*model.UserAgreement, error)
 }
 
 type OutboxRepository interface {
