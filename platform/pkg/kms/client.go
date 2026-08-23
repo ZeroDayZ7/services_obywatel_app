@@ -41,6 +41,7 @@ func executeRequest(ctx context.Context, cfg Config, method, path string, body [
 
 	url := fmt.Sprintf("%s%s", cfg.Endpoint, path)
 
+	// Normalizacja ciała żądania
 	var reqBody io.Reader
 	if len(body) > 0 {
 		reqBody = bytes.NewBuffer(body)
@@ -79,12 +80,19 @@ func executeRequest(ctx context.Context, cfg Config, method, path string, body [
 }
 
 func signAndSetHeaders(req *http.Request, method, path string, body []byte, cfg Config) {
-	timestamp := time.Now().UTC().Format(time.RFC3339)
+	// 1. Obcinamy nanosekundy do pełnych sekund (eliminuje rozbieżności RFC3339 między Go a Rustem)
+	timestamp := time.Now().UTC().Truncate(time.Second).Format(time.RFC3339)
 	nonce := uuid.New().String()
+
+	// 2. Zagwarantowanie pustego plasterka bajtów dla SHA-256 (GET / puste body)
+	if len(body) == 0 {
+		body = []byte{}
+	}
 
 	bodyHash := sha256.Sum256(body)
 	bodyHashHex := hex.EncodeToString(bodyHash[:])
 
+	// 3. Ścisły format nagłówka podpisu zgodny z Axum AuthenticatedService
 	payloadToSign := fmt.Sprintf("%s:%s:%s:%s:%s", method, path, timestamp, nonce, bodyHashHex)
 
 	mac := hmac.New(sha256.New, []byte(cfg.ServiceSecret))

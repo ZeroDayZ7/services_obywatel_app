@@ -43,7 +43,7 @@ type Config struct {
 }
 
 func (c *Config) ToKMSServiceConfig() kms.Config {
-	return c.KMS.ToKMSServiceConfig(c.Server.AppName)
+	return c.KMS.ToKMSServiceConfig()
 }
 
 var (

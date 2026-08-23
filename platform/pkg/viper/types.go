@@ -93,7 +93,7 @@ type KMSConfig struct {
 }
 
 // #region ToKMSServiceConfig
-func (k KMSConfig) ToKMSServiceConfig(appName string) kms.Config {
+func (k KMSConfig) ToKMSServiceConfig() kms.Config {
 	return kms.Config{
 		Endpoint:      k.Endpoint,
 		ServiceName:   k.ServiceName,
