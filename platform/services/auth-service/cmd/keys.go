@@ -20,7 +20,8 @@ func LoadSecurityKeys(ctx context.Context, app *config.Config, keyStore *httpser
 
 	if app.JWT.SigningMode == "local" {
 		log.Info("🔑 [MODE: LOCAL] Pobieranie klucza prywatnego JWT z KMS do pamięci serwisu...")
-		privKey, err := kms.FetchAuthPrivateKey(ctx, kmsCfg, "shared-jwt")
+		// Usunięto zbędny argument "shared-jwt" (funkcja przyjmuje tylko ctx i cfg)
+		privKey, err := kms.FetchAuthPrivateKey(ctx, kmsCfg)
 		if err != nil {
 			return nil, err
 		}
@@ -31,24 +32,27 @@ func LoadSecurityKeys(ctx context.Context, app *config.Config, keyStore *httpser
 	}
 
 	for senderID, targetKey := range app.HMAC.TargetKeys {
-		hmacKey, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, targetKey, "HmacSha256")
+		// Poprawiono argumenty: FetchSymmetricKeyWithVersion oczekuje (ctx, cfg, purpose, version int)
+		// Załóżmy, że pobieramy domyślnie wersję 1 lub przekazujesz numer wersji z configu. Tutaj użyto wersji 1 jako przykładu.
+		hmacKey, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, targetKey, 1)
 		if err != nil {
 			return nil, err
 		}
-		keyStore.SetKey(senderID, hmacKey, version)
+		// Rzutowanie version (int) na uint32 wymagane przez SetKey
+		keyStore.SetKey(senderID, hmacKey, uint32(version))
 		log.Info("✅ Klucz HMAC załadowany", "service", senderID, "version", version)
 	}
 
 	for senderID, targetKey := range app.RabbitConsumers.TrustedSenders {
-		hmacKey, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, targetKey, "HmacSha256")
+		hmacKey, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, targetKey, 1)
 		if err != nil {
 			return nil, err
 		}
-		keyStore.SetKey(senderID, hmacKey, version)
+		keyStore.SetKey(senderID, hmacKey, uint32(version))
 		log.Info("✅ Klucz HMAC Consumer RabbitMQ załadowany", "service", senderID, "version", version)
 	}
 
-	rabbitHMACKey, rabbitKeyVersion, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, "hmac-auth-rabbitmq", "HmacSha256")
+	rabbitHMACKey, rabbitKeyVersion, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, "hmac-auth-rabbitmq", 1)
 	if err != nil {
 		return nil, err
 	}

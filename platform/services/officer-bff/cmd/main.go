@@ -42,13 +42,13 @@ func main() {
 
 	// 2a. Pobieranie kluczy HMAC w pętli dla wszystkich wymaganych relacji
 	for serviceID, targetKey := range config.AppConfig.HMAC.TargetKeys {
-		hmacKey, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, targetKey, "HmacSha256")
+		hmacKey, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, targetKey, 1)
 		if err != nil {
 			log.Error("❌ Nie udało się pobrać klucza HMAC z KMS", "service", serviceID, "target_key", targetKey, "error", err)
 			os.Exit(1)
 		}
 
-		keyStore.SetKey(serviceID, hmacKey, version)
+		keyStore.SetKey(serviceID, hmacKey, uint32(version))
 		log.Info("✅ Klucz HMAC załadowany", "service", serviceID, "version", version)
 	}
 

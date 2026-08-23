@@ -31,21 +31,21 @@ func LoadSecurityKeys(ctx context.Context, app *config.App, keyStore *httpserver
 
 	// 1. Klucze HTTP
 	for senderID, targetKey := range app.Config.HMAC.TargetKeys {
-		hmacKey, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, targetKey, "HmacSha256")
+		hmacKey, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, targetKey, 1)
 		if err != nil {
 			return err
 		}
-		keyStore.SetKey(senderID, hmacKey, version)
+		keyStore.SetKey(senderID, hmacKey, uint32(version))
 		log.Info("✅ Klucz HMAC HTTP załadowany", "service", senderID, "version", version)
 	}
 
 	// 2. Klucze RabbitMQ Consumer
 	for senderID, targetKey := range app.Config.RabbitConsumers.TrustedSenders {
-		hmacKey, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, targetKey, "HmacSha256")
+		hmacKey, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, targetKey, 1)
 		if err != nil {
 			return err
 		}
-		keyStore.SetKey(senderID, hmacKey, version)
+		keyStore.SetKey(senderID, hmacKey, uint32(version))
 		log.Info("✅ Klucz HMAC Consumer RabbitMQ załadowany", "service", senderID, "version", version)
 	}
 
@@ -57,11 +57,11 @@ func LoadSecurityKeys(ctx context.Context, app *config.App, keyStore *httpserver
 	}
 
 	for keyAlias, kmsTarget := range internalKeys {
-		key, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, kmsTarget, "HmacSha256")
+		key, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, kmsTarget, 1)
 		if err != nil {
 			return fmt.Errorf("failed to load %s key: %w", keyAlias, err)
 		}
-		keyStore.SetKey(keyAlias, key, version)
+		keyStore.SetKey(keyAlias, key, uint32(version))
 		log.Info("✅ Klucz wewnętrzny załadowany", "alias", keyAlias, "version", version)
 	}
 
@@ -118,7 +118,7 @@ func main() {
 	}()
 
 	// =========================================================================
-	// INICJALIZACJA S3 STORAGE (NOWY KOD)
+	// INICJALIZACJA S3 STORAGE
 	// =========================================================================
 	var fileStorage storage.StorageClient
 
