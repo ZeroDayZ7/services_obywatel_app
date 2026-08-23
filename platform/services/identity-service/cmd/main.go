@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -20,13 +19,7 @@ import (
 	"github.com/zerodayz7/services/identity-service/internal/worker"
 )
 
-func symmetricKeyAlgorithmForTarget(target string) string {
-	if strings.HasPrefix(target, "hmac-") || strings.Contains(target, "-hmac") || strings.Contains(target, "-index") {
-		return "HmacSha256"
-	}
-	return "AES256GCM"
-}
-
+// #region LoadSecurityKeys
 func LoadSecurityKeys(ctx context.Context, app *config.App, keyStore *httpserver.KeyStore) {
 	log := shared.GetLogger()
 	kmsCfg := app.Config.ToKMSServiceConfig()
@@ -37,14 +30,13 @@ func LoadSecurityKeys(ctx context.Context, app *config.App, keyStore *httpserver
 		os.Exit(1)
 	}
 
-	loadKey := func(alias, targetKey string) {
-		algorithm := symmetricKeyAlgorithmForTarget(targetKey)
-		keyBytes, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, targetKey, 1, algorithm)
+	loadKey := func(alias string, target config.KeyTarget) {
+		keyBytes, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, target.TargetKey, 1, target.Algorithm)
 		if err != nil {
 			log.Error("❌ Nie udało się pobrać klucza z KMS",
 				"alias", alias,
-				"target", targetKey,
-				"algorithm", algorithm,
+				"target", target.TargetKey,
+				"algorithm", target.Algorithm,
 				"error", err,
 			)
 			os.Exit(1)
@@ -53,27 +45,35 @@ func LoadSecurityKeys(ctx context.Context, app *config.App, keyStore *httpserver
 		keyStore.SetKey(alias, keyBytes, uint32(version))
 		log.Info("✅ Klucz załadowany do KeyStore",
 			"alias", alias,
-			"target", targetKey,
-			"algorithm", algorithm,
+			"target", target.TargetKey,
+			"algorithm", target.Algorithm,
 			"version", version,
 		)
 	}
 
-	for senderID, targetKey := range app.Config.HMAC.TargetKeys {
-		loadKey(senderID, targetKey)
+	for senderID, keyTarget := range app.Config.HMAC.TargetKeys {
+		loadKey(senderID, keyTarget)
 	}
 
-	for senderID, targetKey := range app.Config.RabbitConsumers.TrustedSenders {
-		loadKey(senderID, targetKey)
+	for senderID, keyTarget := range app.Config.RabbitConsumers.TrustedSenders {
+		loadKey(senderID, keyTarget)
 	}
 
-	internalKeys := map[string]string{
-		"pesel":    "identity-pesel-blind-index",
-		"rabbitmq": "hmac-identity-rabbitmq",
-		"audit":    "identity-audit-hmac",
+	internalKeys := map[string]config.KeyTarget{
+		"pesel": {
+			TargetKey: "hmac-identity-pesel-index",
+			Algorithm: "HmacSha256",
+		},
+		"rabbitmq": {
+			TargetKey: "hmac-identity-rabbitmq",
+			Algorithm: "HmacSha256",
+		},
+		"audit":      app.Config.HMAC.AuditKey,
+		"agreements": app.Config.HMAC.AgreementsKey,
 	}
-	for alias, targetKey := range internalKeys {
-		loadKey(alias, targetKey)
+
+	for alias, keyTarget := range internalKeys {
+		loadKey(alias, keyTarget)
 	}
 
 	if _, _, ok := keyStore.GetKey("rabbitmq"); !ok {
@@ -82,6 +82,7 @@ func LoadSecurityKeys(ctx context.Context, app *config.App, keyStore *httpserver
 	}
 }
 
+// #region main
 func main() {
 	log := shared.GetLogger()
 
