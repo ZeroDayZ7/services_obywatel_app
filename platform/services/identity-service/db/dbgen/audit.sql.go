@@ -81,7 +81,7 @@ type GetUnsyncedAuditLogsRow struct {
 	CreatedAt   time.Time `json:"created_at"`
 }
 
-func (q *Queries) GetUnsyncedAuditLogs(ctx context.Context, limit int32) ([]GetUnsyncedAuditLogsRow, error) {
+func (q *Queries) GetUnsyncedAuditLogs(ctx context.Context, limit int) ([]GetUnsyncedAuditLogsRow, error) {
 	rows, err := q.db.Query(ctx, getUnsyncedAuditLogs, limit)
 	if err != nil {
 		return nil, err

@@ -68,7 +68,7 @@ func (r *citizenRepository) Create(ctx context.Context, citizen *model.Citizen) 
 		PeselHash:     citizen.PESELHash,
 		EncryptedData: citizen.EncryptedData,
 		EncryptedDek:  citizen.EncryptedDEK,
-		KeyVersion:    citizen.KeyVersion,
+		KeyVersion:    int32(citizen.KeyVersion),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to insert citizen: %w", err)
@@ -187,7 +187,7 @@ func (r *citizenRepository) GetByID(ctx context.Context, userID uuid.UUID) (*mod
 		PESELHash:     row.PeselHash,
 		EncryptedData: row.EncryptedData,
 		EncryptedDEK:  row.EncryptedDek,
-		KeyVersion:    row.KeyVersion,
+		KeyVersion:    int(row.KeyVersion),
 		CreatedAt:     row.CreatedAt,
 	}, nil
 }
@@ -207,7 +207,7 @@ func (r *citizenRepository) GetByPESELHash(ctx context.Context, peselHash string
 		PESELHash:     row.PeselHash,
 		EncryptedData: row.EncryptedData,
 		EncryptedDEK:  row.EncryptedDek,
-		KeyVersion:    row.KeyVersion,
+		KeyVersion:    int(row.KeyVersion),
 		CreatedAt:     row.CreatedAt,
 	}, nil
 }

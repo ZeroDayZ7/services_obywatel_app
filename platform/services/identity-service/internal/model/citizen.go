@@ -34,7 +34,7 @@ type Citizen struct {
 	PESELHash     string    `db:"pesel_hash" json:"pesel_hash"`
 	EncryptedData []byte    `db:"encrypted_data" json:"-"`
 	EncryptedDEK  []byte    `db:"encrypted_dek" json:"-"`
-	KeyVersion    int32     `db:"key_version" json:"key_version"`
+	KeyVersion    int       `db:"key_version" json:"key_version"`
 	CreatedAt     time.Time `db:"created_at" json:"created_at"`
 	UpdatedAt     time.Time `db:"updated_at" json:"updated_at"`
 }

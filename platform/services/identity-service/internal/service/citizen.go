@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
@@ -16,6 +17,7 @@ import (
 	"github.com/zerodayz7/platform/pkg/rabbitmq"
 	"github.com/zerodayz7/platform/pkg/security"
 	"github.com/zerodayz7/platform/pkg/shared"
+	"github.com/zerodayz7/platform/pkg/storage"
 	"github.com/zerodayz7/services/identity-service/internal/model"
 	"github.com/zerodayz7/services/identity-service/internal/repository"
 )
@@ -26,28 +28,35 @@ type CitizenService interface {
 }
 
 type citizenService struct {
-	repo       repository.CitizenRepository
-	cryptor    *envelope.EnvelopeCryptor
-	hmacSecret []byte
-	keyAlias   string
+	repo               repository.CitizenRepository
+	cryptor            *envelope.EnvelopeCryptor
+	storage            storage.StorageClient
+	hmacSecret         []byte
+	keyAlias           string
+	agreementsKeyAlias string
 }
 
 func NewCitizenService(
 	repo repository.CitizenRepository,
 	cryptor *envelope.EnvelopeCryptor,
+	storage storage.StorageClient,
 	hmacSecret []byte,
 	keyAlias string,
+	agreementsKeyAlias string,
 ) CitizenService {
 	return &citizenService{
-		repo:       repo,
-		cryptor:    cryptor,
-		hmacSecret: hmacSecret,
-		keyAlias:   keyAlias,
+		repo:               repo,
+		cryptor:            cryptor,
+		storage:            storage,
+		hmacSecret:         hmacSecret,
+		keyAlias:           keyAlias,
+		agreementsKeyAlias: agreementsKeyAlias,
 	}
 }
 
 // #region RegisterCitizen
 func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.CitizenPayload) (*model.RegisterCitizenResponse, error) {
+	log := shared.GetLogger()
 	peselHash := s.hashPESEL(payload.PESEL)
 
 	existingCitizen, err := s.repo.GetByPESELHash(ctx, peselHash)
@@ -93,7 +102,7 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 		PESELHash:     peselHash,
 		EncryptedData: encryptedPayload.EncryptedData,
 		EncryptedDEK:  encryptedPayload.EncryptedDEK,
-		KeyVersion:    1,
+		KeyVersion:    encryptedPayload.KeyVersion,
 	}
 
 	agreementID := shared.NewUUIDv7()
@@ -142,7 +151,6 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 		PayloadHash: payloadHash,
 	}
 
-	log := shared.GetLogger()
 	log.DebugObj("Created audit log", auditLog)
 
 	eventPayload, err := json.Marshal(map[string]any{
@@ -246,6 +254,41 @@ func (s *citizenService) GetCitizenByID(ctx context.Context, userID uuid.UUID) (
 	}
 
 	return &payload, nil
+}
+
+func (s *citizenService) GenerateAndSaveAgreement(ctx context.Context, userID uuid.UUID, pdfBytes []byte) (*model.UserAgreement, error) {
+	encryptedPayload, err := s.cryptor.Seal(ctx, s.agreementsKeyAlias, pdfBytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encrypt agreement pdf: %w", err)
+	}
+
+	// 2. Generujemy unikalną ścieżkę w S3
+	agreementID := shared.NewUUIDv7()
+
+	// Ścieżka: agreements/users/{user_id}/{agreement_v7_id}.pdf.enc
+	filename := fmt.Sprintf("agreements/users/%s/%s.pdf.enc", userID.String(), agreementID.String())
+
+	// 3. Wysyłamy ZASZYFROWANE bajty do S3
+	reader := bytes.NewReader(encryptedPayload.EncryptedData)
+	s3Key, err := s.storage.Upload(ctx, filename, reader, int64(len(encryptedPayload.EncryptedData)), "application/octet-stream")
+	if err != nil {
+		return nil, fmt.Errorf("failed to upload encrypted agreement to S3: %w", err)
+	}
+
+	// 4. Budujemy obiekt do zapisu w bazie danych
+	agreement := &model.UserAgreement{
+		ID:           shared.NewUUIDv7(),
+		UserID:       userID,
+		S3Key:        s3Key,
+		S3Bucket:     "citizens-data",
+		EncryptedDEK: encryptedPayload.EncryptedDEK,
+		KeyVersion:   encryptedPayload.KeyVersion,
+		Status:       model.AgreementStatusPending,
+		SignedAt:     time.Now(),
+	}
+
+	// 5. Zapisujemy w repozytorium...
+	return agreement, nil
 }
 
 // #region hashPESEL

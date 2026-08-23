@@ -6,6 +6,7 @@ import (
 	"github.com/zerodayz7/platform/pkg/httpserver"
 	"github.com/zerodayz7/platform/pkg/kms"
 	"github.com/zerodayz7/platform/pkg/rabbitmq"
+	"github.com/zerodayz7/platform/pkg/storage"
 	"github.com/zerodayz7/services/identity-service/config"
 	"github.com/zerodayz7/services/identity-service/internal/handler"
 	"github.com/zerodayz7/services/identity-service/internal/repository"
@@ -19,6 +20,7 @@ type Container struct {
 	CitizenHandler *handler.CitizenHandler
 	KeyStore       *httpserver.KeyStore
 	OutboxRepo     repository.OutboxRepository
+	Storage        storage.StorageClient
 }
 
 func BuildContainer(
@@ -26,6 +28,7 @@ func BuildContainer(
 	eventPublisher rabbitmq.EventPublisher,
 	kmsCfg kms.Config,
 	keyStore *httpserver.KeyStore,
+	fileStorage storage.StorageClient,
 ) *Container {
 	peselHmacKey, _, ok := keyStore.GetKey("pesel")
 	if !ok {
@@ -47,8 +50,10 @@ func BuildContainer(
 	citizenSvc := service.NewCitizenService(
 		citizenRepo,
 		cryptor,
+		fileStorage,
 		peselHmacKey,
 		"identity-citizen-data",
+		"identity-agreements-key",
 	)
 
 	// Handlery
@@ -61,5 +66,6 @@ func BuildContainer(
 		CitizenHandler: citizenHdl,
 		KeyStore:       keyStore,
 		OutboxRepo:     outboxRepo,
+		Storage:        fileStorage,
 	}
 }

@@ -22,7 +22,7 @@ type CitizenRepository interface {
 }
 
 type OutboxRepository interface {
-	FetchPendingMessages(ctx context.Context, limit int32) ([]model.OutboxMessage, error)
+	FetchPendingMessages(ctx context.Context, limit int) ([]model.OutboxMessage, error)
 	MarkAsSent(ctx context.Context, id uuid.UUID) error
 	MarkAsFailed(ctx context.Context, id uuid.UUID, maxRetries int16, lastErr string) error
 }

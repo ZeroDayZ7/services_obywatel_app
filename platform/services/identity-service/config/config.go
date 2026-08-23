@@ -24,6 +24,7 @@ type Config struct {
 	Database        viper.DBConfig          `mapstructure:",squash"`
 	Redis           viper.RedisConfig       `mapstructure:",squash"`
 	RabbitMQ        viper.RabbitMQConfig    `mapstructure:",squash"`
+	S3              viper.S3Config          `mapstructure:",squash"`
 	HMAC            IdentityHMACConfig      `mapstructure:",squash"`
 	RabbitConsumers RabbitMQConsumersConfig `mapstructure:",squash"`
 	KMS             viper.KMSConfig         `mapstructure:",squash"`
@@ -43,6 +44,7 @@ func LoadConfigGlobal() error {
 	viper.SetDBDefaults()
 	viper.SetRedisDefaults()
 	viper.SetKMSDefaults()
+	viper.SetS3Defaults()
 
 	// Domyślne mapowanie nadawców ruchu HTTP na nazwy kluczy w KMS
 	spfViper.SetDefault("HMAC_TARGET_KEYS", map[string]string{
@@ -56,6 +58,8 @@ func LoadConfigGlobal() error {
 	})
 
 	spfViper.SetDefault("HMAC_AUDIT_KEY", "identity-audit-hmac")
+
+	spfViper.SetDefault("AGREEMENTS_KMS_KEY", "identity-agreements-key")
 
 	if err := viper.InitConfig(&AppConfig, "identity_service"); err != nil {
 		return fmt.Errorf("failed to initialize identity_service config: %w", err)

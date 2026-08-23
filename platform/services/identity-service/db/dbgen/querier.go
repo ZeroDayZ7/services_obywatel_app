@@ -16,14 +16,14 @@ type Querier interface {
 	CreateOutboxMessage(ctx context.Context, arg CreateOutboxMessageParams) (OutboxMessage, error)
 	CreateUserAgreement(ctx context.Context, arg CreateUserAgreementParams) (UserAgreement, error)
 	CreateUserPukCode(ctx context.Context, arg CreateUserPukCodeParams) (UserPukCode, error)
-	FetchPendingOutboxMessages(ctx context.Context, limit int32) ([]FetchPendingOutboxMessagesRow, error)
+	FetchPendingOutboxMessages(ctx context.Context, limit int) ([]FetchPendingOutboxMessagesRow, error)
 	GetAgreementByNumber(ctx context.Context, agreementNumber string) (UserAgreement, error)
 	GetAgreementByUserID(ctx context.Context, userID uuid.UUID) (UserAgreement, error)
 	GetCitizenByPeselHash(ctx context.Context, peselHash string) (GetCitizenByPeselHashRow, error)
 	GetCitizenByUserID(ctx context.Context, userID uuid.UUID) (GetCitizenByUserIDRow, error)
 	GetLastAuditLog(ctx context.Context) (GetLastAuditLogRow, error)
 	GetPukCodeByUserID(ctx context.Context, userID uuid.UUID) (UserPukCode, error)
-	GetUnsyncedAuditLogs(ctx context.Context, limit int32) ([]GetUnsyncedAuditLogsRow, error)
+	GetUnsyncedAuditLogs(ctx context.Context, limit int) ([]GetUnsyncedAuditLogsRow, error)
 	IncrementPukFailedAttempts(ctx context.Context, id uuid.UUID) error
 	MarkAuditLogsAsSynced(ctx context.Context, dollar_1 []uuid.UUID) error
 	MarkOutboxMessageAsFailed(ctx context.Context, arg MarkOutboxMessageAsFailedParams) error

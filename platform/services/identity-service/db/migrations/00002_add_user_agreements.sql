@@ -4,6 +4,17 @@ CREATE TABLE IF NOT EXISTS user_agreements (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL UNIQUE REFERENCES citizens(user_id) ON DELETE CASCADE,
     agreement_number VARCHAR(64) NOT NULL UNIQUE,
+
+    -- Lokalizacja pliku w MinIO/S3
+    s3_key VARCHAR(255) NOT NULL,
+    s3_bucket VARCHAR(100) NOT NULL,
+
+    -- Bezpieczeństwo i Kryptografia (Envelope Encryption)
+    -- Plik PDF w S3 jest zaszyfrowany, a jego DEK trafia tutaj:
+    encrypted_dek BYTEA NOT NULL,
+    key_version INT NOT NULL DEFAULT 1,
+
+    -- Dane umowy i status
     pesel_encrypted BYTEA NOT NULL,
     verified_phone VARCHAR(20) NOT NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'PENDING',

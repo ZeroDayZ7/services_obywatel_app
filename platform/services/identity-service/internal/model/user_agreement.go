@@ -28,6 +28,10 @@ type UserAgreement struct {
 	ID              uuid.UUID       `db:"id" json:"id"`
 	UserID          uuid.UUID       `db:"user_id" json:"user_id"`
 	AgreementNumber string          `db:"agreement_number" json:"agreement_number"`
+	S3Key           string          `db:"s3_key" json:"s3_key"`
+	S3Bucket        string          `db:"s3_bucket" json:"s3_bucket"`
+	EncryptedDEK    []byte          `db:"encrypted_dek" json:"-"`
+	KeyVersion      int             `db:"key_version" json:"key_version"`
 	PeselEncrypted  []byte          `db:"pesel_encrypted" json:"-"`
 	VerifiedPhone   string          `db:"verified_phone" json:"verified_phone,omitempty"`
 	Status          AgreementStatus `db:"status" json:"status"`

@@ -72,7 +72,7 @@ type FetchPendingOutboxMessagesRow struct {
 	RetryCount    int16     `json:"retry_count"`
 }
 
-func (q *Queries) FetchPendingOutboxMessages(ctx context.Context, limit int32) ([]FetchPendingOutboxMessagesRow, error) {
+func (q *Queries) FetchPendingOutboxMessages(ctx context.Context, limit int) ([]FetchPendingOutboxMessagesRow, error) {
 	rows, err := q.db.Query(ctx, fetchPendingOutboxMessages, limit)
 	if err != nil {
 		return nil, err

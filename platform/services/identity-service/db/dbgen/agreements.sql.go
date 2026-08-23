@@ -17,7 +17,7 @@ INSERT INTO user_agreements (
     id, user_id, agreement_number, pesel_encrypted, verified_phone, status, signed_at, verified_at, verified_via
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9
-) RETURNING id, user_id, agreement_number, pesel_encrypted, verified_phone, status, signed_at, verified_at, verified_via, created_at, updated_at, deleted_at
+) RETURNING id, user_id, agreement_number, s3_key, s3_bucket, encrypted_dek, key_version, pesel_encrypted, verified_phone, status, signed_at, verified_at, verified_via, created_at, updated_at, deleted_at
 `
 
 type CreateUserAgreementParams struct {
@@ -49,6 +49,10 @@ func (q *Queries) CreateUserAgreement(ctx context.Context, arg CreateUserAgreeme
 		&i.ID,
 		&i.UserID,
 		&i.AgreementNumber,
+		&i.S3Key,
+		&i.S3Bucket,
+		&i.EncryptedDek,
+		&i.KeyVersion,
 		&i.PeselEncrypted,
 		&i.VerifiedPhone,
 		&i.Status,
@@ -111,7 +115,7 @@ func (q *Queries) CreateUserPukCode(ctx context.Context, arg CreateUserPukCodePa
 }
 
 const getAgreementByNumber = `-- name: GetAgreementByNumber :one
-SELECT id, user_id, agreement_number, pesel_encrypted, verified_phone, status, signed_at, verified_at, verified_via, created_at, updated_at, deleted_at FROM user_agreements
+SELECT id, user_id, agreement_number, s3_key, s3_bucket, encrypted_dek, key_version, pesel_encrypted, verified_phone, status, signed_at, verified_at, verified_via, created_at, updated_at, deleted_at FROM user_agreements
 WHERE agreement_number = $1 AND deleted_at IS NULL LIMIT 1
 `
 
@@ -122,6 +126,10 @@ func (q *Queries) GetAgreementByNumber(ctx context.Context, agreementNumber stri
 		&i.ID,
 		&i.UserID,
 		&i.AgreementNumber,
+		&i.S3Key,
+		&i.S3Bucket,
+		&i.EncryptedDek,
+		&i.KeyVersion,
 		&i.PeselEncrypted,
 		&i.VerifiedPhone,
 		&i.Status,
@@ -136,7 +144,7 @@ func (q *Queries) GetAgreementByNumber(ctx context.Context, agreementNumber stri
 }
 
 const getAgreementByUserID = `-- name: GetAgreementByUserID :one
-SELECT id, user_id, agreement_number, pesel_encrypted, verified_phone, status, signed_at, verified_at, verified_via, created_at, updated_at, deleted_at FROM user_agreements
+SELECT id, user_id, agreement_number, s3_key, s3_bucket, encrypted_dek, key_version, pesel_encrypted, verified_phone, status, signed_at, verified_at, verified_via, created_at, updated_at, deleted_at FROM user_agreements
 WHERE user_id = $1 AND deleted_at IS NULL LIMIT 1
 `
 
@@ -147,6 +155,10 @@ func (q *Queries) GetAgreementByUserID(ctx context.Context, userID uuid.UUID) (U
 		&i.ID,
 		&i.UserID,
 		&i.AgreementNumber,
+		&i.S3Key,
+		&i.S3Bucket,
+		&i.EncryptedDek,
+		&i.KeyVersion,
 		&i.PeselEncrypted,
 		&i.VerifiedPhone,
 		&i.Status,

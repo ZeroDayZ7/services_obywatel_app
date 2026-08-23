@@ -11,6 +11,7 @@ import (
 	"github.com/zerodayz7/platform/pkg/kms"
 	"github.com/zerodayz7/platform/pkg/rabbitmq"
 	"github.com/zerodayz7/platform/pkg/shared"
+	"github.com/zerodayz7/platform/pkg/storage"
 	"github.com/zerodayz7/services/identity-service/config"
 	"github.com/zerodayz7/services/identity-service/internal/di"
 	"github.com/zerodayz7/services/identity-service/internal/router"
@@ -110,8 +111,32 @@ func main() {
 		}
 	}()
 
-	// Tworzenie kontenera z przekazaniem całego KeyStore
-	container := di.BuildContainer(app, eventPublisher, app.Config.ToKMSServiceConfig(), keyStore)
+	// =========================================================================
+	// INICJALIZACJA S3 STORAGE (NOWY KOD)
+	// =========================================================================
+	var fileStorage storage.StorageClient
+
+	if app.Config.S3.Enabled {
+		log.Info("S3 Storage is ENABLED. Connecting...")
+		s3, err := storage.NewS3Storage(
+			app.Config.S3.Endpoint,
+			app.Config.S3.AccessKey,
+			app.Config.S3.SecretKey,
+			app.Config.S3.Bucket,
+			app.Config.S3.UseSSL,
+		)
+		if err != nil {
+			log.Error("❌ S3 initialization failed", "error", err)
+			os.Exit(1)
+		}
+		fileStorage = s3
+	} else {
+		log.Warn("S3 Storage is DISABLED. Using No-Op storage.")
+		fileStorage = &storage.NoOpStorage{}
+	}
+
+	// Tworzenie kontenera z przekazaniem fileStorage
+	container := di.BuildContainer(app, eventPublisher, app.Config.ToKMSServiceConfig(), keyStore, fileStorage)
 
 	r := router.NewRouter(container)
 	server := &http.Server{

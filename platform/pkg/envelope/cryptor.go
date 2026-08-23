@@ -11,6 +11,7 @@ import (
 type EncryptedPayload struct {
 	EncryptedData []byte // Zaszyfrowane dane dokumentu
 	EncryptedDEK  []byte // Zaszyfrowany klucz DEK
+	KeyVersion    int    // Wersja klucza KEK z KMS
 }
 
 type EnvelopeCryptor struct {
@@ -39,8 +40,8 @@ func (e *EnvelopeCryptor) Seal(ctx context.Context, keyAlias string, plaintext [
 		return nil, fmt.Errorf("envelope: failed to encrypt payload: %w", err)
 	}
 
-	// 3. Zaszyfruj DEK w KMS
-	encryptedDEK, err := kms.EncryptDEK(ctx, e.kmsCfg, keyAlias, dek)
+	// 3. Zaszyfruj DEK w KMS i pobierz wersję klucza
+	encryptedDEK, keyVersion, err := kms.EncryptDEK(ctx, e.kmsCfg, keyAlias, dek)
 	if err != nil {
 		return nil, fmt.Errorf("envelope: failed to encrypt DEK via KMS: %w", err)
 	}
@@ -48,6 +49,7 @@ func (e *EnvelopeCryptor) Seal(ctx context.Context, keyAlias string, plaintext [
 	return &EncryptedPayload{
 		EncryptedData: encryptedData,
 		EncryptedDEK:  encryptedDEK,
+		KeyVersion:    keyVersion,
 	}, nil
 }
 
