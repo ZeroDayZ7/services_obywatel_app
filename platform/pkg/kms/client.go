@@ -7,6 +7,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
@@ -57,10 +58,10 @@ type getPrivateKeyRequest struct {
 }
 
 type privateKeyResponse struct {
-	ServiceID       string `json:"service_id"`
-	Algorithm       string `json:"algorithm"`
-	Version         int    `json:"version"`
-	PrivateKeyBytes []byte `json:"private_key_bytes"`
+	ServiceID     string `json:"service_id"`
+	Algorithm     string `json:"algorithm"`
+	Version       int    `json:"version"`
+	PrivateKeyB64 string `json:"private_key_b64"`
 }
 
 type publicKeyResponse struct {
@@ -82,7 +83,7 @@ type symmetricKeyResponse struct {
 	ServiceID string `json:"service_id"`
 	Algorithm string `json:"algorithm"`
 	Version   int    `json:"version"`
-	KeyBytes  []byte `json:"key_bytes"`
+	KeyB64    string `json:"key_b64"`
 }
 
 var defaultHTTPClient = &http.Client{
@@ -102,7 +103,7 @@ func getHTTPClient(cfg Config) *http.Client {
 	return defaultHTTPClient
 }
 
-// #region getHTTPClient
+// #region executeRequest
 func executeRequest(ctx context.Context, cfg Config, method, path string, body []byte, sign bool) ([]byte, error) {
 	timeout := cfg.Timeout
 	if timeout == 0 {
@@ -191,18 +192,23 @@ func FetchAuthPrivateKey(ctx context.Context, cfg Config, targetService string) 
 		return nil, fmt.Errorf("kms: failed to decode response JSON: %w", err)
 	}
 
-	if len(out.PrivateKeyBytes) == 0 {
-		return nil, fmt.Errorf("kms: private_key_bytes is empty in KMS response payload")
+	if out.PrivateKeyB64 == "" {
+		return nil, fmt.Errorf("kms: private_key_b64 is empty in KMS response payload")
+	}
+
+	rawBytes, err := base64.StdEncoding.DecodeString(out.PrivateKeyB64)
+	if err != nil {
+		return nil, fmt.Errorf("kms: failed to decode base64 private key: %w", err)
 	}
 
 	var privKey ed25519.PrivateKey
-	switch len(out.PrivateKeyBytes) {
+	switch len(rawBytes) {
 	case ed25519.SeedSize:
-		privKey = ed25519.NewKeyFromSeed(out.PrivateKeyBytes)
+		privKey = ed25519.NewKeyFromSeed(rawBytes)
 	case ed25519.PrivateKeySize:
-		privKey = ed25519.PrivateKey(out.PrivateKeyBytes)
+		privKey = ed25519.PrivateKey(rawBytes)
 	default:
-		return nil, fmt.Errorf("kms: invalid private key bytes length: %d (expected 32 or 64)", len(out.PrivateKeyBytes))
+		return nil, fmt.Errorf("kms: invalid private key bytes length: %d (expected 32 or 64)", len(rawBytes))
 	}
 
 	return privKey, nil
@@ -271,11 +277,16 @@ func FetchSymmetricKeyWithVersion(ctx context.Context, cfg Config, targetService
 		return nil, 0, fmt.Errorf("kms: failed to decode response JSON: %w", err)
 	}
 
-	if len(out.KeyBytes) == 0 {
-		return nil, 0, fmt.Errorf("kms: key_bytes is empty in KMS response payload")
+	if out.KeyB64 == "" {
+		return nil, 0, fmt.Errorf("kms: key_b64 is empty in KMS response payload")
 	}
 
-	return out.KeyBytes, uint32(out.Version), nil
+	rawKeyBytes, err := base64.StdEncoding.DecodeString(out.KeyB64)
+	if err != nil {
+		return nil, 0, fmt.Errorf("kms: failed to decode base64 symmetric key: %w", err)
+	}
+
+	return rawKeyBytes, uint32(out.Version), nil
 }
 
 // #region FetchSymmetricKey

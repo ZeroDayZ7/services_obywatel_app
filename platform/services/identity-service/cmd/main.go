@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/zerodayz7/platform/pkg/httpserver"
@@ -15,6 +17,7 @@ import (
 	"github.com/zerodayz7/services/identity-service/config"
 	"github.com/zerodayz7/services/identity-service/internal/di"
 	"github.com/zerodayz7/services/identity-service/internal/router"
+	"github.com/zerodayz7/services/identity-service/internal/worker"
 )
 
 func LoadSecurityKeys(ctx context.Context, app *config.App, keyStore *httpserver.KeyStore) error {
@@ -73,10 +76,13 @@ func main() {
 
 	keyStore := httpserver.NewKeyStore()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	securityCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	if err := LoadSecurityKeys(ctx, app, keyStore); err != nil {
+	if err := LoadSecurityKeys(securityCtx, app, keyStore); err != nil {
 		log.Error("❌ Nie udało się załadować kluczy z KMS", "error", err)
 		os.Exit(1)
 	}
@@ -137,6 +143,24 @@ func main() {
 
 	// Tworzenie kontenera z przekazaniem fileStorage
 	container := di.BuildContainer(app, eventPublisher, app.Config.ToKMSServiceConfig(), keyStore, fileStorage)
+
+	auditWorker := worker.NewAuditWorker(app.DB, eventPublisher, worker.AuditWorkerConfig{
+		BatchSize:     app.Config.AuditWorker.BatchSize,
+		Interval:      app.Config.AuditWorker.Interval,
+		MaxRetries:    app.Config.AuditWorker.MaxRetries,
+		BackoffBase:   app.Config.AuditWorker.BackoffBase,
+		BackoffMax:    app.Config.AuditWorker.BackoffMax,
+		Concurrency:   app.Config.AuditWorker.Concurrency,
+		RoutingKey:    app.Config.AuditWorker.RoutingKey,
+		SourceService: app.Config.AuditWorker.SourceService,
+	})
+
+	log.Info("🚀 Uruchamianie Audit Workera w tle...",
+		"batch_size", app.Config.AuditWorker.BatchSize,
+		"interval", app.Config.AuditWorker.Interval,
+	)
+
+	go auditWorker.Start(ctx)
 
 	r := router.NewRouter(container)
 	server := &http.Server{
