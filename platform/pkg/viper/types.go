@@ -87,6 +87,7 @@ type RabbitMQConfig struct {
 // #region KMSConfig
 type KMSConfig struct {
 	Endpoint      string        `mapstructure:"KMS_ENDPOINT" validate:"required,url"`
+	ServiceName   string        `mapstructure:"KMS_SERVICE_NAME" validate:"required"`
 	ServiceSecret string        `mapstructure:"KMS_SERVICE_SECRET" validate:"required,min=32"`
 	Timeout       time.Duration `mapstructure:"KMS_TIMEOUT" validate:"required"`
 }
@@ -95,7 +96,7 @@ type KMSConfig struct {
 func (k KMSConfig) ToKMSServiceConfig(appName string) kms.Config {
 	return kms.Config{
 		Endpoint:      k.Endpoint,
-		ServiceName:   appName,
+		ServiceName:   k.ServiceName,
 		ServiceSecret: k.ServiceSecret,
 		Timeout:       k.Timeout,
 	}

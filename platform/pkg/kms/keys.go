@@ -17,7 +17,7 @@ func CheckHealth(ctx context.Context, cfg Config) error {
 	return err
 }
 
-// FetchPublicKey pobiera klucz publiczny. Obsługuje warianty wywołania z 3 lub 4 parametrami poprzez wartosci domyslne.
+// FetchPublicKey pobiera klucz publiczny.
 func FetchPublicKey(ctx context.Context, cfg Config, targetService string, algorithm ...string) (ed25519.PublicKey, error) {
 	if targetService == "" {
 		targetService = cfg.ServiceName
@@ -62,65 +62,36 @@ func FetchPublicKey(ctx context.Context, cfg Config, targetService string, algor
 	return pubKey, nil
 }
 
-// FetchAuthPrivateKey pobiera klucz prywatny Ed25519 do podpisywania tokenów/materiału autoryzacyjnego.
-func FetchAuthPrivateKey(ctx context.Context, cfg Config) (ed25519.PrivateKey, error) {
-	bodyBytes, err := executeRequest(ctx, cfg, http.MethodGet, EndpointAuthPrivate, nil, true)
-	if err != nil {
-		return nil, fmt.Errorf("kms: failed fetching auth private key: %w", err)
-	}
-
-	var out PrivateKeyResponse
-	if err := json.Unmarshal(bodyBytes, &out); err != nil {
-		return nil, fmt.Errorf("kms: failed to decode private key response JSON: %w", err)
-	}
-
-	block, _ := pem.Decode([]byte(out.PrivateKeyPEM))
-	if block == nil {
-		return nil, fmt.Errorf("kms: failed to decode PEM block containing private key")
-	}
-
-	parsedKey, err := x509.ParsePKCS8PrivateKey(block.Bytes)
-	if err != nil {
-		return nil, fmt.Errorf("kms: failed to parse PKCS8 private key: %w", err)
-	}
-
-	privKey, ok := parsedKey.(ed25519.PrivateKey)
-	if !ok {
-		return nil, fmt.Errorf("kms: parsed key is not of type ed25519.PrivateKey (got %T)", parsedKey)
-	}
-
-	return privKey, nil
+// FetchSymmetricKey pobiera klucz symetryczny dla wskazanego serwisu/celu.
+func FetchSymmetricKey(ctx context.Context, cfg Config, serviceID string, algorithm ...string) ([]byte, error) {
+	rawKey, _, err := fetchSymmetricKeyInternal(ctx, cfg, serviceID, algorithm...)
+	return rawKey, err
 }
 
-// FetchSymmetricKey pobiera najnowszą wersję klucza symetrycznego dla danego celu (purpose).
-func FetchSymmetricKey(ctx context.Context, cfg Config, purpose string) ([]byte, error) {
-	path := fmt.Sprintf(EndpointSymmetric, purpose)
-
-	bodyBytes, err := executeRequest(ctx, cfg, http.MethodGet, path, nil, true)
-	if err != nil {
-		return nil, fmt.Errorf("kms: failed fetching symmetric key for purpose %s: %w", purpose, err)
-	}
-
-	var out SymmetricKeyResponse
-	if err := json.Unmarshal(bodyBytes, &out); err != nil {
-		return nil, fmt.Errorf("kms: failed to decode symmetric key response JSON: %w", err)
-	}
-
-	rawKey, err := base64.StdEncoding.DecodeString(out.KeyBase64)
-	if err != nil {
-		return nil, fmt.Errorf("kms: failed to decode base64 symmetric key: %w", err)
-	}
-
-	return rawKey, nil
+// FetchSymmetricKeyWithVersion zachowuje wsteczną kompatybilność z wywołaniami przesyłającymi wersję (np. version=1).
+func FetchSymmetricKeyWithVersion(ctx context.Context, cfg Config, serviceID string, version int, algorithm ...string) ([]byte, int, error) {
+	return fetchSymmetricKeyInternal(ctx, cfg, serviceID, algorithm...)
 }
 
-// FetchSymmetricKeyWithVersion pobiera konkretną wersję klucza symetrycznego. Zwraca bajty klucza oraz wersję.
-func FetchSymmetricKeyWithVersion(ctx context.Context, cfg Config, purpose string, version int) ([]byte, int, error) {
-	path := fmt.Sprintf(EndpointSymmetricWithVersion, purpose, version)
+func fetchSymmetricKeyInternal(ctx context.Context, cfg Config, serviceID string, algorithm ...string) ([]byte, int, error) {
+	algo := "AES256GCM"
+	if len(algorithm) > 0 && algorithm[0] != "" {
+		algo = algorithm[0]
+	}
 
-	bodyBytes, err := executeRequest(ctx, cfg, http.MethodGet, path, nil, true)
+	reqPayload := SymmetricKeyRequest{
+		ServiceID: serviceID,
+		Algorithm: algo,
+	}
+
+	reqBody, err := json.Marshal(reqPayload)
 	if err != nil {
-		return nil, 0, fmt.Errorf("kms: failed fetching symmetric key for purpose %s version %d: %w", purpose, version, err)
+		return nil, 0, fmt.Errorf("kms: failed to marshal symmetric key request: %w", err)
+	}
+
+	bodyBytes, err := executeRequest(ctx, cfg, http.MethodPost, EndpointSymmetric, reqBody, true)
+	if err != nil {
+		return nil, 0, fmt.Errorf("kms: failed fetching symmetric key for service %s: %w", serviceID, err)
 	}
 
 	var out SymmetricKeyResponse
@@ -128,7 +99,7 @@ func FetchSymmetricKeyWithVersion(ctx context.Context, cfg Config, purpose strin
 		return nil, 0, fmt.Errorf("kms: failed to decode symmetric key response JSON: %w", err)
 	}
 
-	rawKey, err := base64.StdEncoding.DecodeString(out.KeyBase64)
+	rawKey, err := base64.StdEncoding.DecodeString(out.KeyB64)
 	if err != nil {
 		return nil, 0, fmt.Errorf("kms: failed to decode base64 symmetric key: %w", err)
 	}

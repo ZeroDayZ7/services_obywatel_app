@@ -1,4 +1,3 @@
-// platform/services/auth-service/config/config.go
 package config
 
 import (
@@ -14,11 +13,11 @@ import (
 )
 
 type JWTConfig struct {
-	SigningMode      string             `mapstructure:"JWT_SIGNING_MODE"`
-	KeyID            string             `mapstructure:"JWT_KEY_ID"`
-	AccessTTL        time.Duration      `mapstructure:"JWT_ACCESS_TTL" validate:"required"`
-	RefreshTTL       time.Duration      `mapstructure:"JWT_REFRESH_TTL" validate:"required"`
-	AccessPrivateKey ed25519.PrivateKey `mapstructure:"-"`
+	SigningMode     string            `mapstructure:"JWT_SIGNING_MODE"`
+	KeyID           string            `mapstructure:"JWT_KEY_ID"`
+	AccessTTL       time.Duration     `mapstructure:"JWT_ACCESS_TTL" validate:"required"`
+	RefreshTTL      time.Duration     `mapstructure:"JWT_REFRESH_TTL" validate:"required"`
+	AccessPublicKey ed25519.PublicKey `mapstructure:"-"`
 }
 
 type AuthHMACConfig struct {
@@ -59,7 +58,6 @@ func LoadConfigGlobal() error {
 	viper.SetRedisDefaults()
 	viper.SetKMSDefaults()
 
-	// Domyślne mapowanie nadawców ruchu na nazwy kluczy w KMS
 	spfViper.SetDefault("HMAC_TARGET_KEYS", map[string]string{
 		"gateway":     "hmac-gateway-auth",
 		"officer-bff": "hmac-bff-auth",

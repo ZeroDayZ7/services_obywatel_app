@@ -19,26 +19,22 @@ func LoadSecurityKeys(ctx context.Context, app *config.Config, keyStore *httpser
 	}
 
 	if app.JWT.SigningMode == "local" {
-		log.Info("🔑 [MODE: LOCAL] Pobieranie klucza prywatnego JWT z KMS do pamięci serwisu...")
-		// Usunięto zbędny argument "shared-jwt" (funkcja przyjmuje tylko ctx i cfg)
-		privKey, err := kms.FetchAuthPrivateKey(ctx, kmsCfg)
+		log.Info("🔑 [MODE: LOCAL] Pobieranie klucza publicznego JWT z KMS do weryfikacji...")
+		pubKey, err := kms.FetchPublicKey(ctx, kmsCfg, "shared-jwt")
 		if err != nil {
 			return nil, err
 		}
-		app.JWT.AccessPrivateKey = privKey
-		log.Info("✅ Pomyślnie pobrano i załadowano klucz prywatny JWT do pamięci")
+		app.JWT.AccessPublicKey = pubKey
+		log.Info("✅ Pomyślnie załadowano klucz publiczny JWT do pamięci")
 	} else {
-		log.Info("🛡️ [MODE: KMS] Tokeny będą podpisywane zdalnie przez API KMS")
+		log.Info("🛡️ [MODE: KMS] Tokeny będą podpisywane i weryfikowane zdalnie przez API KMS")
 	}
 
 	for senderID, targetKey := range app.HMAC.TargetKeys {
-		// Poprawiono argumenty: FetchSymmetricKeyWithVersion oczekuje (ctx, cfg, purpose, version int)
-		// Załóżmy, że pobieramy domyślnie wersję 1 lub przekazujesz numer wersji z configu. Tutaj użyto wersji 1 jako przykładu.
 		hmacKey, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, targetKey, 1)
 		if err != nil {
 			return nil, err
 		}
-		// Rzutowanie version (int) na uint32 wymagane przez SetKey
 		keyStore.SetKey(senderID, hmacKey, uint32(version))
 		log.Info("✅ Klucz HMAC załadowany", "service", senderID, "version", version)
 	}

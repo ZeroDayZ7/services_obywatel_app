@@ -8,12 +8,10 @@ import (
 const (
 	DefaultTimeout = 5 * time.Second
 
-	EndpointHealth               = "/health"
-	EndpointGenerate             = "/api/v1/keys/generate"
-	EndpointPublic               = "/api/v1/keys/public/%s/%s"
-	EndpointAuthPrivate          = "/api/v1/keys/private/auth"
-	EndpointSymmetric            = "/api/v1/keys/symmetric/%s"
-	EndpointSymmetricWithVersion = "/api/v1/keys/symmetric/%s/v/%d"
+	EndpointHealth    = "/health"
+	EndpointGenerate  = "/api/v1/keys/generate"
+	EndpointPublic    = "/api/v1/keys/public/%s/%s"
+	EndpointSymmetric = "/api/v1/keys/symmetric"
 
 	HeaderServiceName   = "X-Service-Name"
 	HeaderTimestamp     = "X-Timestamp"

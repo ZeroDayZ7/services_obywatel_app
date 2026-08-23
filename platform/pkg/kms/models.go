@@ -12,19 +12,16 @@ type KeyResponse struct {
 	CreatedAt    time.Time `json:"created_at,omitempty"`
 }
 
-type PrivateKeyResponse struct {
-	ID            string `json:"id"`
-	ServiceID     string `json:"service_id"`
-	Algorithm     string `json:"algorithm"`
-	PrivateKeyPEM string `json:"private_key_pem"`
+type SymmetricKeyRequest struct {
+	ServiceID string `json:"service_id"`
+	Algorithm string `json:"algorithm"`
 }
 
 type SymmetricKeyResponse struct {
-	ID        string `json:"id"`
 	ServiceID string `json:"service_id"`
-	Purpose   string `json:"purpose"`
-	KeyBase64 string `json:"key_base64"`
+	Algorithm string `json:"algorithm"`
 	Version   int    `json:"version"`
+	KeyB64    string `json:"key_b64"`
 }
 
 type GenerateKeyRequest struct {

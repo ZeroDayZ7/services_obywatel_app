@@ -1094,18 +1094,9 @@ func (s *authService) CreateAccessToken(ctx context.Context, userID uuid.UUID, f
 		"scope": constants.ScopeAccess.String(),
 	}
 
-	var token string
-	var err error
-
-	switch s.cfg.JWT.SigningMode {
-	case "kms":
-		token, err = security.GenerateJWTViaKMS(ctx, s.cfg.ToKMSServiceConfig(), "shared-jwt", claims, s.cfg.JWT.AccessTTL)
-	default: // "local"
-		token, err = security.GenerateJWTLocal(claims, s.cfg.JWT.AccessTTL, s.cfg.JWT.AccessPrivateKey)
-	}
-
+	token, err := security.GenerateJWTViaKMS(ctx, s.cfg.ToKMSServiceConfig(), "shared-jwt", claims, s.cfg.JWT.AccessTTL)
 	if err != nil {
-		return "", "", fmt.Errorf("auth: failed to generate access token (%s): %w", s.cfg.JWT.SigningMode, err)
+		return "", "", fmt.Errorf("auth: failed to generate access token via KMS: %w", err)
 	}
 
 	return token, sessionID, nil
@@ -1121,21 +1112,11 @@ func (s *authService) CreateSetupToken(ctx context.Context, userID uuid.UUID, fi
 		"scope": constants.ScopeDeviceVerify.String(),
 	}
 
-	var token string
-	var err error
-
-	// Używamy tego samego mechanizmu co przy AccessTokenie (z możliwością osobnego TTL w przyszłości)
 	setupTTL := 15 * time.Minute
 
-	switch s.cfg.JWT.SigningMode {
-	case "kms":
-		token, err = security.GenerateJWTViaKMS(ctx, s.cfg.ToKMSServiceConfig(), "shared-jwt", claims, setupTTL)
-	default: // "local"
-		token, err = security.GenerateJWTLocal(claims, setupTTL, s.cfg.JWT.AccessPrivateKey)
-	}
-
+	token, err := security.GenerateJWTViaKMS(ctx, s.cfg.ToKMSServiceConfig(), "shared-jwt", claims, setupTTL)
 	if err != nil {
-		return "", "", fmt.Errorf("auth: failed to generate setup token (%s): %w", s.cfg.JWT.SigningMode, err)
+		return "", "", fmt.Errorf("auth: failed to generate setup token via KMS: %w", err)
 	}
 
 	return token, sessionID, nil
