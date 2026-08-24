@@ -2,13 +2,10 @@ package repository
 
 import (
 	"context"
-	"errors"
 
 	"github.com/google/uuid"
 	"github.com/zerodayz7/services/identity-service/internal/model"
 )
-
-var ErrCitizenAlreadyExists = errors.New("citizen already exists")
 
 type CitizenRepository interface {
 	WithinTx(ctx context.Context, fn func(ctx context.Context) error) error
