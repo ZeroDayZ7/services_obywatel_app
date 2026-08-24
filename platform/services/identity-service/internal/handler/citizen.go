@@ -32,7 +32,7 @@ func (h *CitizenHandler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Diagnostyka: wypisanie zdekodowanego payloadu w konsoli
-	log.DebugJSON("Otrzymany payload w CitizenHandler.Register", payload)
+	// log.DebugJSON("Otrzymany payload w CitizenHandler.Register", payload)
 
 	citizen, err := h.svc.RegisterCitizen(r.Context(), payload)
 	if err != nil {

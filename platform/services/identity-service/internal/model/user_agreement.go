@@ -31,7 +31,6 @@ type UserAgreement struct {
 	S3Key           string          `db:"s3_key" json:"s3_key"`
 	S3Bucket        string          `db:"s3_bucket" json:"s3_bucket"`
 	EncryptedDEK    []byte          `db:"encrypted_dek" json:"-"`
-	KeyVersion      int             `db:"key_version" json:"key_version"`
 	EncryptedEmail  []byte          `db:"encrypted_email" json:"-"`
 	EncryptedPhone  []byte          `db:"encrypted_phone" json:"-"`
 	Status          AgreementStatus `db:"status" json:"status"`

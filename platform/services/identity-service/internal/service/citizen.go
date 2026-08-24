@@ -76,21 +76,21 @@ func NewCitizenService(
 // #region RegisterCitizen
 func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.CitizenPayload) (*model.RegisterCitizenResponse, error) {
 	log := shared.GetLogger()
-	log.Debug("🔍 Przed obliczeniem haszy",
-		"pesel_raw_len", len(payload.PESEL),
-		"email_raw_len", len(payload.Email),
-		"phone_raw_len", len(payload.PhoneNumber),
-	)
+	// log.Debug("🔍 Przed obliczeniem haszy",
+	// 	"pesel_raw_len", len(payload.PESEL),
+	// 	"email_raw_len", len(payload.Email),
+	// 	"phone_raw_len", len(payload.PhoneNumber),
+	// )
 
 	peselHash := hex.EncodeToString(reqctx.ComputeMAC([]byte(payload.PESEL), s.hmacPeselSecret))
 	emailHash := hex.EncodeToString(reqctx.ComputeMAC([]byte(payload.Email), s.hmacEmailSecret))
 	phoneHash := hex.EncodeToString(reqctx.ComputeMAC([]byte(payload.PhoneNumber), s.hmacPhoneSecret))
 
-	log.Debug("✅ Po obliczeniu haszy",
-		"pesel_hash", peselHash,
-		"email_hash", emailHash,
-		"phone_hash", phoneHash,
-	)
+	// log.Debug("✅ Po obliczeniu haszy",
+	// 	"pesel_hash", peselHash,
+	// 	"email_hash", emailHash,
+	// 	"phone_hash", phoneHash,
+	// )
 
 	existingCitizen, err := s.repo.GetByPESELHash(ctx, peselHash)
 	if err != nil {
@@ -155,7 +155,11 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 
 	actorID := reqctx.GetUserID(ctx)
 	if actorID == uuid.Nil {
-		actorID = userID
+		return nil, &apperr.AppError{
+			Code:    "UNAUTHORIZED",
+			Type:    apperr.Unauthorized,
+			Message: "Brak identyfikatora pracownika wykonującego operację.",
+		}
 	}
 
 	citizen := &model.Citizen{
@@ -227,7 +231,7 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 		InstitutionID:   institutionIDStr,
 	}
 
-	log.DebugJSON("Pełny payload danych do generowania umowy PDF", templateData)
+	// log.DebugJSON("Pełny payload danych do generowania umowy PDF", templateData)
 
 	pdfBytes, err := s.pdfGen.GenerateAgreementPDF(ctx, templateData)
 	if err != nil {
@@ -287,7 +291,6 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 		S3Key:           s3Key,
 		S3Bucket:        s3Bucket,
 		EncryptedDEK:    pdfEncryptedPayload.EncryptedDEK,
-		KeyVersion:      pdfEncryptedPayload.KeyVersion,
 		EncryptedEmail:  emailEncryptedPayload.EncryptedData,
 		EncryptedPhone:  phoneEncryptedPayload.EncryptedData,
 		Status:          model.AgreementStatusActive,
@@ -330,7 +333,7 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 		PayloadHash: payloadHash,
 	}
 
-	log.DebugObj("Created audit log", auditLog)
+	// log.DebugObj("Created audit log", auditLog)
 
 	eventPayload, err := json.Marshal(map[string]any{
 		"user_id":          citizen.UserID,
@@ -460,7 +463,6 @@ func (s *citizenService) GenerateAndSaveAgreement(ctx context.Context, userID uu
 		S3Key:        s3Key,
 		S3Bucket:     "citizens-data",
 		EncryptedDEK: encryptedPayload.EncryptedDEK,
-		KeyVersion:   encryptedPayload.KeyVersion,
 		Status:       model.AgreementStatusPending,
 		SignedAt:     time.Now(),
 	}
