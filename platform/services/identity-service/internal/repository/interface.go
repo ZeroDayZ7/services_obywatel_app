@@ -18,7 +18,10 @@ type CitizenRepository interface {
 	CreateAuditLog(ctx context.Context, audit *model.CitizenAuditLog) error
 	CreateOutboxMessage(ctx context.Context, outbox *model.OutboxMessage) error
 	GetByID(ctx context.Context, userID uuid.UUID) (*model.Citizen, error)
+
 	GetByPESELHash(ctx context.Context, peselHash string) (*model.Citizen, error)
+	GetByEmailHash(ctx context.Context, emailHash string) (*model.Citizen, error)
+	GetByPhoneHash(ctx context.Context, phoneHash string) (*model.Citizen, error)
 
 	GetAgreementByID(ctx context.Context, agreementID uuid.UUID) (*model.UserAgreement, error)
 }

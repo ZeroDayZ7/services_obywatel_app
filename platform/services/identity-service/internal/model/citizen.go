@@ -31,7 +31,11 @@ type CitizenPayload struct {
 
 type Citizen struct {
 	UserID        uuid.UUID `db:"user_id" json:"user_id"`
+	
 	PESELHash     string    `db:"pesel_hash" json:"pesel_hash"`
+	EmailHash     string    `db:"email_hash" json:"email_hash"`
+	PhoneHash     string    `db:"phone_hash" json:"phone_hash"`
+
 	EncryptedData []byte    `db:"encrypted_data" json:"-"`
 	EncryptedDEK  []byte    `db:"encrypted_dek" json:"-"`
 	KeyVersion    int       `db:"key_version" json:"key_version"`

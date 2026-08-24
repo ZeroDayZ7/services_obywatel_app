@@ -8,11 +8,14 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Citizen struct {
 	UserID        uuid.UUID `json:"user_id"`
 	PeselHash     string    `json:"pesel_hash"`
+	EmailHash     string    `json:"email_hash"`
+	PhoneHash     string    `json:"phone_hash"`
 	EncryptedData []byte    `json:"encrypted_data"`
 	EncryptedDek  []byte    `json:"encrypted_dek"`
 	KeyVersion    int32     `json:"key_version"`
@@ -21,16 +24,22 @@ type Citizen struct {
 }
 
 type CitizenAuditLog struct {
-	ID                  uuid.UUID `json:"id"`
-	UserID              uuid.UUID `json:"user_id"`
-	Action              string    `json:"action"`
-	ActorID             uuid.UUID `json:"actor_id"`
-	IpAddress           string    `json:"ip_address"`
-	PayloadHash         string    `json:"payload_hash"`
-	PrevHash            string    `json:"prev_hash"`
-	Hash                string    `json:"hash"`
-	SyncedToGlobalAudit bool      `json:"synced_to_global_audit"`
-	CreatedAt           time.Time `json:"created_at"`
+	ID                  uuid.UUID          `json:"id"`
+	UserID              uuid.UUID          `json:"user_id"`
+	Action              string             `json:"action"`
+	ActorID             uuid.UUID          `json:"actor_id"`
+	IpAddress           string             `json:"ip_address"`
+	PayloadHash         string             `json:"payload_hash"`
+	PrevHash            string             `json:"prev_hash"`
+	Hash                string             `json:"hash"`
+	SyncedToGlobalAudit bool               `json:"synced_to_global_audit"`
+	CreatedAt           time.Time          `json:"created_at"`
+	SyncState           string             `json:"sync_state"`
+	RetryCount          int32              `json:"retry_count"`
+	LastError           *string            `json:"last_error"`
+	ProcessingStartedAt pgtype.Timestamptz `json:"processing_started_at"`
+	ProcessedAt         pgtype.Timestamptz `json:"processed_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
 }
 
 type OutboxMessage struct {
@@ -56,8 +65,8 @@ type UserAgreement struct {
 	S3Bucket        string     `json:"s3_bucket"`
 	EncryptedDek    []byte     `json:"encrypted_dek"`
 	KeyVersion      int32      `json:"key_version"`
-	PeselEncrypted  []byte     `json:"pesel_encrypted"`
-	VerifiedPhone   string     `json:"verified_phone"`
+	EncryptedEmail  []byte     `json:"encrypted_email"`
+	EncryptedPhone  []byte     `json:"encrypted_phone"`
 	Status          string     `json:"status"`
 	SignedAt        time.Time  `json:"signed_at"`
 	VerifiedAt      *time.Time `json:"verified_at"`

@@ -3,7 +3,6 @@ package service
 import (
 	"bytes"
 	"context"
-	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -33,9 +32,14 @@ type citizenService struct {
 	cryptor            *envelope.EnvelopeCryptor
 	storage            storage.StorageClient
 	pdfGen             PDFGenerator
-	hmacSecret         []byte
-	keyAlias           string
-	agreementsKeyAlias string
+	hmacPeselSecret    []byte
+	hmacPhoneSecret    []byte
+	hmacEmailSecret    []byte
+	hmacPukSecret      []byte
+	dataKeyAlias       string // Klucz do głównego payloadu obywatela
+	agreementsKeyAlias string // Klucz do umów PDF
+	phoneKeyAlias      string // <- NOWE: Klucz KMS do szyfrowania telefonu (2FA)
+	emailKeyAlias      string // <- NOWE: Klucz KMS do szyfrowania e-maila (2FA)
 }
 
 func NewCitizenService(
@@ -43,25 +47,40 @@ func NewCitizenService(
 	cryptor *envelope.EnvelopeCryptor,
 	storage storage.StorageClient,
 	pdfGen PDFGenerator,
-	hmacSecret []byte,
-	keyAlias string,
+	hmacPeselSecret []byte,
+	hmacPhoneSecret []byte,
+	hmacEmailSecret []byte,
+	hmacPukSecret []byte,
+	dataKeyAlias string,
 	agreementsKeyAlias string,
+	phoneKeyAlias string,
+	emailKeyAlias string,
 ) CitizenService {
 	return &citizenService{
 		repo:               repo,
 		cryptor:            cryptor,
 		storage:            storage,
 		pdfGen:             pdfGen,
-		hmacSecret:         hmacSecret,
-		keyAlias:           keyAlias,
+		hmacPeselSecret:    hmacPeselSecret,
+		hmacPhoneSecret:    hmacPhoneSecret,
+		hmacEmailSecret:    hmacEmailSecret,
+		hmacPukSecret:      hmacPukSecret,
+		dataKeyAlias:       dataKeyAlias,
 		agreementsKeyAlias: agreementsKeyAlias,
+		phoneKeyAlias:      phoneKeyAlias,
+		emailKeyAlias:      emailKeyAlias,
 	}
 }
 
 // #region RegisterCitizen
 func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.CitizenPayload) (*model.RegisterCitizenResponse, error) {
 	log := shared.GetLogger()
-	peselHash := s.hashPESEL(payload.PESEL)
+
+	peselHash := hex.EncodeToString(reqctx.ComputeMAC([]byte(payload.PESEL), s.hmacPeselSecret))
+
+	emailHash := hex.EncodeToString(reqctx.ComputeMAC([]byte(payload.Email), s.hmacEmailSecret))
+
+	phoneHash := hex.EncodeToString(reqctx.ComputeMAC([]byte(payload.PhoneNumber), s.hmacPhoneSecret))
 
 	existingCitizen, err := s.repo.GetByPESELHash(ctx, peselHash)
 	if err != nil {
@@ -92,12 +111,34 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 	}
 
 	// 1. Szyfrowanie danych wrażliwych obywatela
-	encryptedPayload, err := s.cryptor.Seal(ctx, s.keyAlias, plaintextBytes)
+	encryptedPayload, err := s.cryptor.Seal(ctx, s.dataKeyAlias, plaintextBytes)
 	if err != nil {
 		return nil, &apperr.AppError{
 			Code:    "ENCRYPTION_FAILED",
 			Type:    apperr.Internal,
 			Message: "Błąd szyfrowania danych wrażliwych.",
+			Err:     err,
+		}
+	}
+
+	// 2. Niezależne szyfrowanie numeru telefonu (do 2FA)
+	phoneEncryptedPayload, err := s.cryptor.Seal(ctx, s.phoneKeyAlias, []byte(payload.PhoneNumber))
+	if err != nil {
+		return nil, &apperr.AppError{
+			Code:    "PHONE_ENCRYPTION_FAILED",
+			Type:    apperr.Internal,
+			Message: "Błąd szyfrowania numeru telefonu.",
+			Err:     err,
+		}
+	}
+
+	// 3. Niezależne szyfrowanie adresu e-mail (do 2FA / powiadomień)
+	emailEncryptedPayload, err := s.cryptor.Seal(ctx, s.emailKeyAlias, []byte(payload.Email))
+	if err != nil {
+		return nil, &apperr.AppError{
+			Code:    "EMAIL_ENCRYPTION_FAILED",
+			Type:    apperr.Internal,
+			Message: "Błąd szyfrowania adresu e-mail.",
 			Err:     err,
 		}
 	}
@@ -110,6 +151,8 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 	citizen := &model.Citizen{
 		UserID:        userID,
 		PESELHash:     peselHash,
+		EmailHash:     emailHash,
+		PhoneHash:     phoneHash,
 		EncryptedData: encryptedPayload.EncryptedData,
 		EncryptedDEK:  encryptedPayload.EncryptedDEK,
 		KeyVersion:    encryptedPayload.KeyVersion,
@@ -189,7 +232,7 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 	}
 
 	// 3. Szyfrowanie pliku PDF umowy (Envelope Encryption)
-	pdfEncryptedPayload, err := s.cryptor.Seal(ctx, s.keyAlias, pdfBytes)
+	pdfEncryptedPayload, err := s.cryptor.Seal(ctx, s.agreementsKeyAlias, pdfBytes)
 	if err != nil {
 		return nil, &apperr.AppError{
 			Code:    "PDF_ENCRYPTION_FAILED",
@@ -236,8 +279,8 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 		S3Bucket:        s3Bucket,
 		EncryptedDEK:    pdfEncryptedPayload.EncryptedDEK,
 		KeyVersion:      pdfEncryptedPayload.KeyVersion,
-		PeselEncrypted:  encryptedPayload.EncryptedData,
-		VerifiedPhone:   payload.PhoneNumber,
+		EncryptedEmail:  emailEncryptedPayload.EncryptedData,
+		EncryptedPhone:  phoneEncryptedPayload.EncryptedData,
 		Status:          model.AgreementStatusActive,
 		SignedAt:        now,
 		VerifiedVia:     "SYSTEM",
@@ -252,7 +295,9 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 			Err:     err,
 		}
 	}
-	pukHash := s.hashPESEL(rawPUK)
+
+	pukHash := hex.EncodeToString(reqctx.ComputeMAC([]byte(rawPUK), s.hmacPukSecret))
+
 	puk := &model.UserPukCode{
 		ID:              shared.NewUUIDv7(),
 		UserAgreementID: agreementID,
@@ -362,7 +407,7 @@ func (s *citizenService) GetCitizenByID(ctx context.Context, userID uuid.UUID) (
 		EncryptedDEK:  citizen.EncryptedDEK,
 	}
 
-	plaintext, err := s.cryptor.Unseal(ctx, s.keyAlias, encPayload)
+	plaintext, err := s.cryptor.Unseal(ctx, s.dataKeyAlias, encPayload)
 	if err != nil {
 		return nil, &apperr.AppError{
 			Code:    "DECRYPTION_FAILED",
@@ -455,7 +500,7 @@ func (s *citizenService) DownloadAgreementPDF(ctx context.Context, agreementID u
 		KeyVersion:    agreement.KeyVersion,
 	}
 
-	decryptedPdf, err := s.cryptor.Unseal(ctx, s.keyAlias, encPayload)
+	decryptedPdf, err := s.cryptor.Unseal(ctx, s.agreementsKeyAlias, encPayload)
 	if err != nil {
 		return nil, &apperr.AppError{
 			Code:    "DECRYPTION_FAILED",
@@ -466,11 +511,4 @@ func (s *citizenService) DownloadAgreementPDF(ctx context.Context, agreementID u
 	}
 
 	return decryptedPdf, nil
-}
-
-// #region hashPESEL
-func (s *citizenService) hashPESEL(pesel string) string {
-	h := hmac.New(sha256.New, s.hmacSecret)
-	h.Write([]byte(pesel))
-	return hex.EncodeToString(h.Sum(nil))
 }

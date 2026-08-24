@@ -38,6 +38,12 @@ sql:
           - column: "citizens.updated_at"
             go_type: "time.Time"
 
+          - column: "citizens.email_hash"
+            go_type: "string"
+
+          - column: "citizens.phone_hash"
+            go_type: "string"
+
           # citizen_audit_logs
           - column: "citizen_audit_logs.created_at"
             go_type: "time.Time"

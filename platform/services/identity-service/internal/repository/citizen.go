@@ -87,8 +87,8 @@ func (r *citizenRepository) CreateAgreement(ctx context.Context, agreement *mode
 		S3Bucket:        agreement.S3Bucket,
 		EncryptedDek:    agreement.EncryptedDEK,
 		KeyVersion:      int32(agreement.KeyVersion),
-		PeselEncrypted:  agreement.PeselEncrypted,
-		VerifiedPhone:   agreement.VerifiedPhone,
+		EncryptedEmail:  agreement.EncryptedEmail,
+		EncryptedPhone:  agreement.EncryptedPhone,
 		Status:          string(agreement.Status),
 		SignedAt:        agreement.SignedAt,
 		VerifiedAt:      agreement.VerifiedAt,
@@ -196,6 +196,7 @@ func (r *citizenRepository) GetByID(ctx context.Context, userID uuid.UUID) (*mod
 	}, nil
 }
 
+// #region GetByPESELHash
 func (r *citizenRepository) GetByPESELHash(ctx context.Context, peselHash string) (*model.Citizen, error) {
 	q := r.getQueries(ctx)
 	row, err := q.GetCitizenByPeselHash(ctx, peselHash)
@@ -209,6 +210,8 @@ func (r *citizenRepository) GetByPESELHash(ctx context.Context, peselHash string
 	return &model.Citizen{
 		UserID:        row.UserID,
 		PESELHash:     row.PeselHash,
+		EmailHash:     row.EmailHash.String,
+		PhoneHash:     row.PhoneHash.String,
 		EncryptedData: row.EncryptedData,
 		EncryptedDEK:  row.EncryptedDek,
 		KeyVersion:    int(row.KeyVersion),
@@ -216,6 +219,55 @@ func (r *citizenRepository) GetByPESELHash(ctx context.Context, peselHash string
 	}, nil
 }
 
+// #endregion GetByPESELHash
+
+// #region GetByEmailHash
+func (r *citizenRepository) GetByEmailHash(ctx context.Context, emailHash string) (*model.Citizen, error) {
+	q := r.getQueries(ctx)
+	row, err := q.GetCitizenByEmailHash(ctx, emailHash)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	return &model.Citizen{
+		UserID:        row.UserID,
+		PESELHash:     row.PeselHash,
+		EmailHash:     row.EmailHash.String,
+		PhoneHash:     row.PhoneHash.String,
+		EncryptedData: row.EncryptedData,
+		EncryptedDEK:  row.EncryptedDek,
+		KeyVersion:    int(row.KeyVersion),
+		CreatedAt:     row.CreatedAt,
+	}, nil
+}
+
+// #region GetByPhoneHash
+func (r *citizenRepository) GetByPhoneHash(ctx context.Context, phoneHash string) (*model.Citizen, error) {
+	q := r.getQueries(ctx)
+	row, err := q.GetCitizenByPhoneHash(ctx, phoneHash)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	return &model.Citizen{
+		UserID:        row.UserID,
+		PESELHash:     row.PeselHash,
+		EmailHash:     row.EmailHash.String,
+		PhoneHash:     row.PhoneHash.String,
+		EncryptedData: row.EncryptedData,
+		EncryptedDEK:  row.EncryptedDek,
+		KeyVersion:    int(row.KeyVersion),
+		CreatedAt:     row.CreatedAt,
+	}, nil
+}
+
+// #region GetAgreementByID
 func (r *citizenRepository) GetAgreementByID(ctx context.Context, agreementID uuid.UUID) (*model.UserAgreement, error) {
 	q := r.getQueries(ctx)
 	row, err := q.GetAgreementByID(ctx, agreementID)
@@ -234,14 +286,14 @@ func (r *citizenRepository) GetAgreementByID(ctx context.Context, agreementID uu
 		S3Bucket:        row.S3Bucket,
 		EncryptedDEK:    row.EncryptedDek,
 		KeyVersion:      int(row.KeyVersion),
-		PeselEncrypted:  row.PeselEncrypted,
-		VerifiedPhone:   row.VerifiedPhone,
+		EncryptedEmail:  row.EncryptedEmail, // <- Zmienione z PeselEncrypted
+		EncryptedPhone:  row.EncryptedPhone, // <- Zmienione z VerifiedPhone
 		Status:          model.AgreementStatus(row.Status),
 		SignedAt:        row.SignedAt,
-		VerifiedAt:      row.VerifiedAt,
+		VerifiedAt:      row.VerifiedAt.Time, // Uwaga na pgtype.Timestamp (zależy jak sqlc generuje)
 		VerifiedVia:     row.VerifiedVia,
-		CreatedAt:       row.CreatedAt,
-		UpdatedAt:       row.UpdatedAt,
+		CreatedAt:       row.CreatedAt.Time,
+		UpdatedAt:       row.UpdatedAt.Time,
 	}, nil
 }
 

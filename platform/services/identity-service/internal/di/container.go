@@ -32,14 +32,30 @@ func BuildContainer(
 	keyStore *httpserver.KeyStore,
 	fileStorage storage.StorageClient,
 ) *Container {
-	peselHmacKey, _, ok := keyStore.GetKey("pesel")
+	// 1. Klucze HMAC do bezpiecznego hashowania (indeksowania) danych
+	hmacPeselSecret, _, ok := keyStore.GetKey("pesel")
 	if !ok {
-		panic("critical error: missing 'pesel' key in KeyStore")
+		panic("critical error: missing 'pesel' hmac key in KeyStore")
+	}
+
+	hmacPhoneSecret, _, ok := keyStore.GetKey("phone")
+	if !ok {
+		panic("critical error: missing 'phone' hmac key in KeyStore")
+	}
+
+	hmacEmailSecret, _, ok := keyStore.GetKey("email")
+	if !ok {
+		panic("critical error: missing 'email' hmac key in KeyStore")
 	}
 
 	auditHmacKey, _, ok := keyStore.GetKey("audit")
 	if !ok {
 		panic("critical error: missing 'audit' key in KeyStore")
+	}
+
+	hmacPukSecret, _, ok := keyStore.GetKey("puk")
+	if !ok {
+		panic("critical error: missing 'puk' hmac key in KeyStore")
 	}
 
 	// Repozytoria
@@ -53,15 +69,20 @@ func BuildContainer(
 		panic(fmt.Sprintf("critical error: failed to initialize PDF generator: %v", err))
 	}
 
-	// Serwisy
+	// 2. Przekazanie osobnych kluczy HMAC do serwisu obywatela
 	citizenSvc := service.NewCitizenService(
 		citizenRepo,
 		cryptor,
 		fileStorage,
 		pdfGen,
-		peselHmacKey,
-		"identity-citizen-data",
+		hmacPeselSecret,
+		hmacPhoneSecret,
+		hmacEmailSecret,
+		hmacPukSecret,
+		"identity-citizen-key",
 		"identity-agreements-key",
+		"identity-phone-key",
+		"identity-email-key",
 	)
 
 	// Handlery
