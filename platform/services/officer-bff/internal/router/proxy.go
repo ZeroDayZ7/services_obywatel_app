@@ -50,7 +50,6 @@ func signInternalContext(req *http.Request, keyStore *httpserver.KeyStore, targe
 }
 
 // #region NewSingleHostProxy
-// NewSingleHostProxy tworzy proste proxy kierujące żądanie na sztywno pod zdefiniowaną ścieżkę docelową
 func NewSingleHostProxy(targetURL, targetPath, targetServiceID string, keyStore *httpserver.KeyStore) (http.HandlerFunc, error) {
 	log := shared.GetLogger()
 
@@ -65,9 +64,23 @@ func NewSingleHostProxy(targetURL, targetPath, targetServiceID string, keyStore 
 			pr.SetURL(target)
 			pr.SetXForwarded()
 
-			// Jawnie ustawiamy docelową ścieżkę, bez żadnego dłubania w stringach
+			// Jawnie ustawiamy docelową ścieżkę
 			pr.Out.URL.Path = targetPath
 			pr.Out.URL.RawPath = targetPath
+
+			// Kluczowe dla POST/PUT: Jeśli istnieje body, musimy je zbuforować i sklonować,
+			// aby ReverseProxy nie "pochłonęło" strumienia przed wysłaniem do serwisu docelowego.
+			if pr.In.Body != nil {
+				bodyBytes, err := io.ReadAll(pr.In.Body)
+				if err == nil && len(bodyBytes) > 0 {
+					// Odtwarzamy body dla wejścia (żeby middleware w BFF mogło go ewentualnie odczytać)
+					pr.In.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+					// Ustawiamy body dla żądania wychodzącego do identity-service
+					pr.Out.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+					pr.Out.ContentLength = int64(len(bodyBytes))
+					pr.Out.Header.Set("Content-Length", strconv.Itoa(len(bodyBytes)))
+				}
+			}
 
 			signInternalContext(pr.Out, keyStore, targetServiceID)
 		},

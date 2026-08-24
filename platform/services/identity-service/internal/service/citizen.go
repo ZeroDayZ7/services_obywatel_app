@@ -153,9 +153,7 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 		DocumentHash:    documentHash,
 	}
 
-	// Diagnostyka: logujemy wybrane dane wejściowe trafiające do generatora PDF
-	log.Debug("[DEBUG] Generowanie PDF dla umowy %s | Obywatel: %s %s (PESEL: ***), Tel: %s",
-		agreementNumber, payload.FirstName, payload.LastName, payload.PhoneNumber)
+	log.DebugJSON("Pełny payload danych do generowania umowy PDF", templateData)
 
 	pdfBytes, err := s.pdfGen.GenerateAgreementPDF(ctx, templateData)
 	if err != nil {
@@ -365,6 +363,7 @@ func (s *citizenService) GetCitizenByID(ctx context.Context, userID uuid.UUID) (
 	return &payload, nil
 }
 
+// #region GenerateAndSaveAgreement
 func (s *citizenService) GenerateAndSaveAgreement(ctx context.Context, userID uuid.UUID, pdfBytes []byte) (*model.UserAgreement, error) {
 	encryptedPayload, err := s.cryptor.Seal(ctx, s.agreementsKeyAlias, pdfBytes)
 	if err != nil {
@@ -400,6 +399,7 @@ func (s *citizenService) GenerateAndSaveAgreement(ctx context.Context, userID uu
 	return agreement, nil
 }
 
+// #region DownloadAgreementPDF
 func (s *citizenService) DownloadAgreementPDF(ctx context.Context, agreementID uuid.UUID) ([]byte, error) {
 	// log := shared.GetLogger()
 	agreement, err := s.repo.GetAgreementByID(ctx, agreementID)

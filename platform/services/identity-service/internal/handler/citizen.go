@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	apperr "github.com/zerodayz7/platform/pkg/errors"
 	"github.com/zerodayz7/platform/pkg/httpserver"
+	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/services/identity-service/internal/model"
 	"github.com/zerodayz7/services/identity-service/internal/service"
 )
@@ -22,11 +23,16 @@ func NewCitizenHandler(svc service.CitizenService) *CitizenHandler {
 
 // #region Register
 func (h *CitizenHandler) Register(w http.ResponseWriter, r *http.Request) {
+	log := shared.GetLogger()
 	var payload model.CitizenPayload
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		log.Error("Błąd dekodowania JSON w Register", "error", err)
 		httpserver.SendError(w, r, apperr.ErrInvalidJSON)
 		return
 	}
+
+	// Diagnostyka: wypisanie zdekodowanego payloadu w konsoli
+	log.DebugJSON("Otrzymany payload w CitizenHandler.Register", payload)
 
 	citizen, err := h.svc.RegisterCitizen(r.Context(), payload)
 	if err != nil {

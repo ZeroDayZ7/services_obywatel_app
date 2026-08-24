@@ -29,7 +29,6 @@
             position: relative;
         }
 
-        /* Top Brand Strip - Subtle */
         .brand-bar {
             height: 4px;
             background: linear-gradient(90deg, #cbd5e1 0%, #0284c7 50%, #38bdf8 100%);
@@ -37,7 +36,6 @@
             border-radius: 2px;
         }
 
-        /* Header Layout */
         .header-table {
             width: 100%;
             border-collapse: collapse;
@@ -95,7 +93,6 @@
             margin-top: 2px;
         }
 
-        /* Metadata Banner - Light */
         .meta-container {
             display: flex;
             background-color: #f8fafc;
@@ -128,7 +125,6 @@
             font-family: 'Courier New', Courier, monospace;
         }
 
-        /* Section Layout */
         .section {
             margin-bottom: 12px;
         }
@@ -159,7 +155,6 @@
             margin-right: 6px;
         }
 
-        /* Data Grid */
         .grid-table {
             width: 100%;
             border-collapse: collapse;
@@ -198,7 +193,6 @@
             font-weight: 600;
         }
 
-        /* Notice Box - Light */
         .notice-box {
             background-color: #f8fafc;
             border: 1px solid #e2e8f0;
@@ -219,7 +213,6 @@
             color: #0f172a;
         }
 
-        /* Crypto Stamp Pro - Light & Clean */
         .crypto-stamp {
             border: 1px solid #cbd5e1;
             background-color: #f8fafc;
@@ -267,7 +260,6 @@
             word-break: break-all;
         }
 
-        /* Footer */
         .footer-table {
             width: 100%;
             margin-top: 15px;
@@ -334,12 +326,20 @@
 
         <table class="grid-table">
             <tr>
+                <td class="grid-label">Imię i Nazwisko</td>
+                <td class="grid-value">{{.FirstName}} {{if .SecondName}}{{.SecondName}} {{end}}{{.LastName}}</td>
+            </tr>
+            <tr>
                 <td class="grid-label">Numer PESEL</td>
                 <td class="grid-value">{{.PESEL}}</td>
             </tr>
             <tr>
                 <td class="grid-label">Adres e-mail</td>
                 <td class="grid-value">{{.Email}}</td>
+            </tr>
+            <tr>
+                <td class="grid-label">Numer telefonu</td>
+                <td class="grid-value">{{.PhoneNumber}}</td>
             </tr>
             <tr>
                 <td class="grid-label">Adres zameldowania / zamieszkania</td>
