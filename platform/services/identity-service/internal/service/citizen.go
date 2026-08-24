@@ -137,7 +137,6 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 	reqCtx, ok := reqctx.FromContext(ctx)
 
 	officerName := "System Automatyczny"
-	officerID := actorID.String()
 	departmentIDStr := "-"
 	institutionIDStr := "-"
 
@@ -171,7 +170,7 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 		KeyVersion:      int(encryptedPayload.KeyVersion),
 		DocumentHash:    documentHash,
 		OfficerName:     officerName,
-		OfficerID:       officerID,
+		OfficerID:       actorID.String(),
 		DepartmentID:    departmentIDStr,
 		InstitutionID:   institutionIDStr,
 	}
