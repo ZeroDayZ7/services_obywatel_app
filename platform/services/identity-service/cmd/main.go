@@ -105,6 +105,25 @@ func main() {
 
 	go auditWorker.Start(ctx)
 
+	// Initialize and optionally start Registration Worker (sends user registration events to auth)
+	registrationWorker := worker.NewRegistrationWorker(app.DB, eventPublisher, worker.RegistrationWorkerConfig{
+		Enabled:     app.Config.RegistrationWorker.Enabled,
+		BatchSize:   app.Config.RegistrationWorker.BatchSize,
+		Interval:    app.Config.RegistrationWorker.Interval,
+		MaxRetries:  app.Config.RegistrationWorker.MaxRetries,
+		BackoffBase: app.Config.RegistrationWorker.BackoffBase,
+		BackoffMax:  app.Config.RegistrationWorker.BackoffMax,
+		Concurrency: app.Config.RegistrationWorker.Concurrency,
+		RoutingKey:  app.Config.RegistrationWorker.RoutingKey,
+	})
+
+	if app.Config.RegistrationWorker.Enabled {
+		log.Info("🚀 Uruchamianie Registration Workera w tle...")
+		go registrationWorker.Start(ctx)
+	} else {
+		log.Warn("⚠️ Registration Worker jest wyłączony (Enabled=false).")
+	}
+
 	r := router.NewRouter(container)
 	server := &http.Server{
 		Addr:         ":" + app.Config.Server.Port,

@@ -31,6 +31,7 @@ type RabbitMQConsumersConfig struct {
 }
 
 type AuditWorkerConfig struct {
+	Enabled       bool          `mapstructure:"AUDIT_WORKER_ENABLED"`
 	BatchSize     int           `mapstructure:"AUDIT_WORKER_BATCH_SIZE" validate:"min=1"`
 	Interval      time.Duration `mapstructure:"AUDIT_WORKER_INTERVAL"`
 	MaxRetries    int           `mapstructure:"AUDIT_WORKER_MAX_RETRIES" validate:"min=0"`
@@ -39,6 +40,17 @@ type AuditWorkerConfig struct {
 	Concurrency   int           `mapstructure:"AUDIT_WORKER_CONCURRENCY" validate:"min=1"`
 	RoutingKey    string        `mapstructure:"AUDIT_WORKER_ROUTING_KEY"`
 	SourceService string        `mapstructure:"AUDIT_WORKER_SOURCE_SERVICE"`
+}
+
+type RegistrationWorkerConfig struct {
+	Enabled     bool          `mapstructure:"REGISTRATION_WORKER_ENABLED"`
+	BatchSize   int           `mapstructure:"REGISTRATION_WORKER_BATCH_SIZE" validate:"min=1"`
+	Interval    time.Duration `mapstructure:"REGISTRATION_WORKER_INTERVAL"`
+	MaxRetries  int           `mapstructure:"REGISTRATION_WORKER_MAX_RETRIES" validate:"min=0"`
+	BackoffBase time.Duration `mapstructure:"REGISTRATION_WORKER_BACKOFF_BASE"`
+	BackoffMax  time.Duration `mapstructure:"REGISTRATION_WORKER_BACKOFF_MAX"`
+	Concurrency int           `mapstructure:"REGISTRATION_WORKER_CONCURRENCY" validate:"min=1"`
+	RoutingKey  string        `mapstructure:"REGISTRATION_WORKER_ROUTING_KEY"`
 }
 
 type Config struct {
@@ -52,6 +64,7 @@ type Config struct {
 	KMS             viper.KMSConfig         `mapstructure:",squash"`
 	OTEL            viper.OTELConfig        `mapstructure:",squash"`
 	AuditWorker     AuditWorkerConfig       `mapstructure:",squash"`
+	RegistrationWorker RegistrationWorkerConfig `mapstructure:",squash"`
 	Shutdown        time.Duration           `mapstructure:"SHUTDOWN_TIMEOUT" validate:"required"`
 }
 
@@ -130,6 +143,17 @@ func LoadConfigGlobal() error {
 	spfViper.SetDefault("AUDIT_WORKER_CONCURRENCY", 1)
 	spfViper.SetDefault("AUDIT_WORKER_ROUTING_KEY", "audit.log.created")
 	spfViper.SetDefault("AUDIT_WORKER_SOURCE_SERVICE", "identity-service")
+	spfViper.SetDefault("AUDIT_WORKER_ENABLED", true)
+
+	// Registration worker defaults
+	spfViper.SetDefault("REGISTRATION_WORKER_ENABLED", true)
+	spfViper.SetDefault("REGISTRATION_WORKER_BATCH_SIZE", 100)
+	spfViper.SetDefault("REGISTRATION_WORKER_INTERVAL", "2s")
+	spfViper.SetDefault("REGISTRATION_WORKER_MAX_RETRIES", 5)
+	spfViper.SetDefault("REGISTRATION_WORKER_BACKOFF_BASE", "1s")
+	spfViper.SetDefault("REGISTRATION_WORKER_BACKOFF_MAX", "30s")
+	spfViper.SetDefault("REGISTRATION_WORKER_CONCURRENCY", 2)
+	spfViper.SetDefault("REGISTRATION_WORKER_ROUTING_KEY", "auth.register")
 
 	if err := viper.InitConfig(&AppConfig, "identity_service"); err != nil {
 		return fmt.Errorf("failed to initialize identity_service config: %w", err)
