@@ -4,6 +4,7 @@ import (
 	"context"
 
 	amqp "github.com/rabbitmq/amqp091-go"
+	"github.com/zerodayz7/platform/pkg/httpserver"
 )
 
 type NoOpPublisher struct{}
@@ -21,6 +22,17 @@ func (p *NoOpPublisher) Consume(queueName string, routingKey string) (<-chan amq
 }
 
 func (p *NoOpPublisher) Subscribe(ctx context.Context, queueName string, routingKey string, handler HandlerFunc) error {
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+func (p *NoOpPublisher) SubscribeWithAuth(
+	ctx context.Context,
+	queueName string,
+	routingKey string,
+	keyStore *httpserver.KeyStore,
+	handler HandlerFunc,
+) error {
 	<-ctx.Done()
 	return ctx.Err()
 }

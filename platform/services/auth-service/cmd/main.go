@@ -113,10 +113,11 @@ func main() {
 		)
 
 		go func() {
-			err := eventPublisher.Subscribe(
+			err := eventPublisher.SubscribeWithAuth(
 				consumerCtx,
 				rabbitmq.QueueAuthCitizen,
 				rabbitmq.TopicCitizenCreated,
+				container.KeyStore,
 				container.Consumers.CitizenConsumer.HandleCitizenCreated,
 			)
 			if err != nil && consumerCtx.Err() == nil {

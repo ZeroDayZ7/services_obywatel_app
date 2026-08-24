@@ -92,12 +92,20 @@ func LoadConfigGlobal() error {
 			Algorithm: "HmacSha256",
 		},
 	})
-
+	// Słownik zaufanych zewnętrznych nadawców dla obecnego serwisu (w tym pliku: identity-service
 	spfViper.SetDefault("RABBITMQ_TRUSTED_SENDERS", map[string]KeyTarget{
 		"auth-service": {
 			TargetKey: "hmac-auth-rabbitmq",
 			Algorithm: "HmacSha256",
 		},
+	})
+
+	// To jest własny, wewnętrzny klucz nadawczy obecnego serwisu (identity-service),
+	// którym on sam podpina wysyłane przez siebie wiadomości
+	// HMAC_RABBITMQ_KEY to: hmac-auth-rabbitmq. (Auth stawia tę pieczątkę na swoich listach).
+	spfViper.SetDefault("HMAC_RABBITMQ_KEY", KeyTarget{
+		TargetKey: "hmac-identity-rabbitmq",
+		Algorithm: "HmacSha256",
 	})
 
 	spfViper.SetDefault("HMAC_AUDIT_KEY", KeyTarget{
@@ -130,11 +138,6 @@ func LoadConfigGlobal() error {
 		Algorithm: "HmacSha256",
 	})
 
-	spfViper.SetDefault("HMAC_RABBITMQ_KEY", KeyTarget{
-		TargetKey: "hmac-identity-rabbitmq",
-		Algorithm: "HmacSha256",
-	})
-
 	spfViper.SetDefault("AUDIT_WORKER_ENABLED", true)
 	spfViper.SetDefault("AUDIT_WORKER_BATCH_SIZE", 200)
 	spfViper.SetDefault("AUDIT_WORKER_INTERVAL", "2s")
@@ -155,10 +158,10 @@ func LoadConfigGlobal() error {
 	spfViper.SetDefault("REGISTRATION_WORKER_CONCURRENCY", 2)
 	spfViper.SetDefault("REGISTRATION_WORKER_ROUTING_KEY", "auth.register")
 
-	if err := viper.InitConfig(&AppConfig, "identity_service"); err != nil {
-		return fmt.Errorf("failed to initialize identity_service config: %w", err)
+	if err := viper.InitConfig(&AppConfig, "identity-service"); err != nil {
+		return fmt.Errorf("failed to initialize identity-service config: %w", err)
 	}
 
-	log.Info("Identity_service configuration loaded successfully")
+	log.Info("Identity-service configuration loaded successfully")
 	return nil
 }
