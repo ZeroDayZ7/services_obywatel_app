@@ -1,4 +1,3 @@
-// platform/services/auth-service/config/config.go
 package config
 
 import (
@@ -13,20 +12,26 @@ import (
 	"github.com/zerodayz7/platform/pkg/viper"
 )
 
+type KeyTarget struct {
+	TargetKey string `mapstructure:"target_key"`
+	Algorithm string `mapstructure:"algorithm"`
+}
+
 type JWTConfig struct {
-	SigningMode      string             `mapstructure:"JWT_SIGNING_MODE"`
-	KeyID            string             `mapstructure:"JWT_KEY_ID"`
-	AccessTTL        time.Duration      `mapstructure:"JWT_ACCESS_TTL" validate:"required"`
-	RefreshTTL       time.Duration      `mapstructure:"JWT_REFRESH_TTL" validate:"required"`
-	AccessPrivateKey ed25519.PrivateKey `mapstructure:"-"`
+	SigningMode     string            `mapstructure:"JWT_SIGNING_MODE"`
+	KeyID           string            `mapstructure:"JWT_KEY_ID"`
+	AccessTTL       time.Duration     `mapstructure:"JWT_ACCESS_TTL" validate:"required"`
+	RefreshTTL      time.Duration     `mapstructure:"JWT_REFRESH_TTL" validate:"required"`
+	AccessPublicKey ed25519.PublicKey `mapstructure:"-"`
 }
 
 type AuthHMACConfig struct {
-	TargetKeys map[string]string `mapstructure:"HMAC_TARGET_KEYS"`
+	TargetKeys  map[string]KeyTarget `mapstructure:"HMAC_TARGET_KEYS"`
+	RabbitMQKey KeyTarget            `mapstructure:"HMAC_RABBITMQ_KEY"`
 }
 
 type RabbitMQConsumersConfig struct {
-	TrustedSenders map[string]string `mapstructure:"RABBITMQ_TRUSTED_SENDERS"`
+	TrustedSenders map[string]KeyTarget `mapstructure:"RABBITMQ_TRUSTED_SENDERS"`
 }
 
 type Config struct {
@@ -44,7 +49,7 @@ type Config struct {
 }
 
 func (c *Config) ToKMSServiceConfig() kms.Config {
-	return c.KMS.ToKMSServiceConfig(c.Server.AppName)
+	return c.KMS.ToKMSServiceConfig()
 }
 
 var (
@@ -59,14 +64,27 @@ func LoadConfigGlobal() error {
 	viper.SetRedisDefaults()
 	viper.SetKMSDefaults()
 
-	// Domyślne mapowanie nadawców ruchu na nazwy kluczy w KMS
-	spfViper.SetDefault("HMAC_TARGET_KEYS", map[string]string{
-		"gateway":     "hmac-gateway-auth",
-		"officer-bff": "hmac-bff-auth",
+	spfViper.SetDefault("HMAC_TARGET_KEYS", map[string]KeyTarget{
+		"gateway": {
+			TargetKey: "hmac-gateway-auth",
+			Algorithm: "HmacSha256",
+		},
+		"officer-bff": {
+			TargetKey: "hmac-bff-auth",
+			Algorithm: "HmacSha256",
+		},
 	})
 
-	spfViper.SetDefault("RABBITMQ_TRUSTED_SENDERS", map[string]string{
-		"identity-service": "hmac-identity-rabbitmq",
+	spfViper.SetDefault("RABBITMQ_TRUSTED_SENDERS", map[string]KeyTarget{
+		"identity-service": {
+			TargetKey: "hmac-identity-rabbitmq",
+			Algorithm: "HmacSha256",
+		},
+	})
+
+	spfViper.SetDefault("HMAC_RABBITMQ_KEY", KeyTarget{
+		TargetKey: "hmac-auth-rabbitmq",
+		Algorithm: "HmacSha256",
 	})
 
 	if err := viper.InitConfig(&AppConfig, "auth-service"); err != nil {

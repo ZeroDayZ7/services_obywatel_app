@@ -50,8 +50,8 @@ func main() {
 	// =========================================================================
 	bootLog.Info("🔑 Pobieranie klucza 'hmac-gateway-docs' z KMS...")
 
-	// DODANO czwarty parametr: "HmacSha256" (zamiast domyślnego "AES256GCM")
-	internalHMACKey, err := kms.FetchSymmetricKey(ctx, kmsCfg, "hmac-gateway-docs", "HmacSha256")
+	// Poprawiono wywołanie: FetchSymmetricKey przyjmuje tylko ctx, cfg i purpose
+	internalHMACKey, err := kms.FetchSymmetricKey(ctx, kmsCfg, "hmac-gateway-docs")
 	if err != nil {
 		bootLog.Fatal("❌ Nie udało się pobrać klucza HMAC z KMS", "error", err)
 	}

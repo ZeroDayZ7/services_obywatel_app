@@ -11,7 +11,6 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/zerodayz7/platform/pkg/constants"
@@ -51,7 +50,6 @@ func signInternalContext(req *http.Request, keyStore *httpserver.KeyStore, targe
 }
 
 // #region NewSingleHostProxy
-// NewSingleHostProxy tworzy proxy, które zachowuje dynamiczną końcówkę ścieżki (np. ID i akcję)
 func NewSingleHostProxy(targetURL, targetPath, targetServiceID string, keyStore *httpserver.KeyStore) (http.HandlerFunc, error) {
 	log := shared.GetLogger()
 
@@ -66,25 +64,23 @@ func NewSingleHostProxy(targetURL, targetPath, targetServiceID string, keyStore 
 			pr.SetURL(target)
 			pr.SetXForwarded()
 
-			// 1. Pobieramy oryginalną ścieżkę z żądania przychodzącego do BFF
-			originalPath := pr.In.URL.Path // np. /api/v1/official/agreements/01a02c7f-.../download
+			// Jawnie ustawiamy docelową ścieżkę
+			pr.Out.URL.Path = targetPath
+			pr.Out.URL.RawPath = targetPath
 
-			// 2. Usuwamy prefiks BFF (/api/v1/official)
-			trimmed := strings.TrimPrefix(originalPath, "/api/v1/official") // np. /agreements/01a02c7f-.../download
-
-			// 3. Określamy, jaki zasób obsługujemy (np. /agreements lub /citizens) na podstawie trimmed
-			var suffix string
-			if strings.HasPrefix(trimmed, "/agreements") {
-				suffix = strings.TrimPrefix(trimmed, "/agreements")
-			} else if strings.HasPrefix(trimmed, "/citizens") {
-				suffix = strings.TrimPrefix(trimmed, "/citizens")
-			} else {
-				suffix = trimmed
+			// Kluczowe dla POST/PUT: Jeśli istnieje body, musimy je zbuforować i sklonować,
+			// aby ReverseProxy nie "pochłonęło" strumienia przed wysłaniem do serwisu docelowego.
+			if pr.In.Body != nil {
+				bodyBytes, err := io.ReadAll(pr.In.Body)
+				if err == nil && len(bodyBytes) > 0 {
+					// Odtwarzamy body dla wejścia (żeby middleware w BFF mogło go ewentualnie odczytać)
+					pr.In.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+					// Ustawiamy body dla żądania wychodzącego do identity-service
+					pr.Out.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+					pr.Out.ContentLength = int64(len(bodyBytes))
+					pr.Out.Header.Set("Content-Length", strconv.Itoa(len(bodyBytes)))
+				}
 			}
-
-			// 4. Składamy docelową ścieżkę dla mikroserwisu (np. /api/v1/agreements + /{id}/download)
-			pr.Out.URL.Path = targetPath + suffix
-			pr.Out.URL.RawPath = pr.Out.URL.Path
 
 			signInternalContext(pr.Out, keyStore, targetServiceID)
 		},
@@ -98,7 +94,28 @@ func NewSingleHostProxy(targetURL, targetPath, targetServiceID string, keyStore 
 // #region NewReverseProxy
 // NewReverseProxy tworzy zwykłe proxy przelotowe (np. dla GET /auth/me oraz Krok 1 logowania)
 func NewReverseProxy(authServiceURL, targetPath string, keyStore *httpserver.KeyStore) (http.HandlerFunc, error) {
-	return NewSingleHostProxy(authServiceURL, targetPath, "auth-service", keyStore)
+	log := shared.GetLogger()
+
+	target, err := url.Parse(authServiceURL)
+	if err != nil {
+		log.Error("Błąd parsowania authServiceURL w NewReverseProxy", "url", authServiceURL, "error", err)
+		return nil, err
+	}
+
+	proxy := &httputil.ReverseProxy{
+		Rewrite: func(pr *httputil.ProxyRequest) {
+			pr.SetURL(target)
+			pr.SetXForwarded()
+
+			// Jawne nadpisanie ścieżki docelowej w mikroserwisie
+			pr.Out.URL.Path = targetPath
+			pr.Out.URL.RawPath = targetPath
+
+			signInternalContext(pr.Out, keyStore, "auth-service")
+		},
+	}
+
+	return proxy.ServeHTTP, nil
 }
 
 // #endregion
@@ -120,6 +137,7 @@ func NewAuthTokenProxy(authServiceURL, targetPath string, keyStore *httpserver.K
 			pr.SetURL(target)
 			pr.SetXForwarded()
 
+			// Jawne nadpisanie ścieżki docelowej w mikroserwisie
 			pr.Out.URL.Path = targetPath
 			pr.Out.URL.RawPath = targetPath
 
@@ -144,7 +162,6 @@ func NewAuthTokenProxy(authServiceURL, targetPath string, keyStore *httpserver.K
 				return nil
 			}
 
-			// 1. Zapisujemy tokeny do bezpiecznych ciasteczek
 			if accessToken, ok := responseData["access_token"].(string); ok && accessToken != "" {
 				setAuthCookie(resp, "access_token", accessToken, accessTokenTTL, "/")
 			}
@@ -153,11 +170,9 @@ func NewAuthTokenProxy(authServiceURL, targetPath string, keyStore *httpserver.K
 				setAuthCookie(resp, "refresh_token", refreshToken, refreshTokenTTL, "/api/v1/official/auth/refresh")
 			}
 
-			// 2. Wycinamy tokeny z ciała odpowiedzi JSON dla przeglądarki
 			delete(responseData, "access_token")
 			delete(responseData, "refresh_token")
 
-			// 3. Serializujemy oczyszczoną odpowiedź
 			cleanedBody, err := json.Marshal(responseData)
 			if err != nil {
 				log.Error("Błąd marshalingu oczyszczonej odpowiedzi w proxy", "error", err)
@@ -165,7 +180,6 @@ func NewAuthTokenProxy(authServiceURL, targetPath string, keyStore *httpserver.K
 				return nil
 			}
 
-			// 4. Podmieniamy ciało odpowiedzi oraz aktualizujemy nagłówek Content-Length
 			resp.Body = io.NopCloser(bytes.NewReader(cleanedBody))
 			resp.ContentLength = int64(len(cleanedBody))
 			resp.Header.Set("Content-Length", strconv.Itoa(len(cleanedBody)))
@@ -195,6 +209,7 @@ func NewAuthLogoutProxy(authServiceURL, targetPath string, keyStore *httpserver.
 			pr.SetURL(target)
 			pr.SetXForwarded()
 
+			// Jawne nadpisanie ścieżki docelowej w mikroserwisie
 			pr.Out.URL.Path = targetPath
 			pr.Out.URL.RawPath = targetPath
 

@@ -15,18 +15,18 @@ const (
 )
 
 type CitizenPayload struct {
-	FirstName   string  `json:"first_name"`
-	SecondName  *string `json:"second_name,omitempty"`
-	LastName    string  `json:"last_name"`
+	FirstName   string  `json:"firstName"`
+	SecondName  *string `json:"secondName,omitempty"`
+	LastName    string  `json:"lastName"`
 	PESEL       string  `json:"pesel"`
 	Email       string  `json:"email"`
-	PhoneNumber string  `json:"phone_number"`
+	PhoneNumber string  `json:"phoneNumber"`
 
 	City        string  `json:"city"`
 	Street      string  `json:"street"`
-	HouseNumber string  `json:"house_number"`
-	FlatNumber  *string `json:"flat_number,omitempty"`
-	PostalCode  string  `json:"postal_code"`
+	HouseNumber string  `json:"houseNumber"`
+	FlatNumber  *string `json:"flatNumber,omitempty"`
+	PostalCode  string  `json:"postalCode"`
 }
 
 type Citizen struct {

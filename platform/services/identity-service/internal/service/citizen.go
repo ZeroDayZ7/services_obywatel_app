@@ -102,6 +102,11 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 		}
 	}
 
+	actorID := reqctx.GetUserID(ctx)
+	if actorID == uuid.Nil {
+		actorID = userID
+	}
+
 	citizen := &model.Citizen{
 		UserID:        userID,
 		PESELHash:     peselHash,
@@ -114,27 +119,67 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 	now := time.Now().UTC()
 	agreementNumber := shared.GenerateAgreementNumber(now)
 
-	// 2. Generowanie dokumentu PDF z szablonu HTML
-	flatNum := ""
-	if payload.FlatNumber != nil {
-		flatNum = *payload.FlatNumber
+	var secondNamePtr *string
+	if payload.SecondName != nil && *payload.SecondName != "" {
+		secondNamePtr = payload.SecondName
 	}
 
-	pdfBytes, err := s.pdfGen.GenerateAgreementPDF(ctx, AgreementTemplateData{
+	var flatNumPtr *string
+	if payload.FlatNumber != nil && *payload.FlatNumber != "" {
+		flatNumPtr = payload.FlatNumber
+	}
+
+	// Najpierw generujemy wstępny PDF lub potrzebujemy hasha
+	// Obliczamy hash dokumentu (np. z zaszyfrowanego payloadu danych lub samej struktury)
+	docHashBytes := sha256.Sum256(plaintextBytes)
+	documentHash := hex.EncodeToString(docHashBytes[:])
+
+	reqCtx, ok := reqctx.FromContext(ctx)
+
+	officerName := "System Automatyczny"
+	departmentIDStr := "-"
+	institutionIDStr := "-"
+
+	if ok && reqCtx != nil && reqCtx.Role == "OFFICER" {
+		if reqCtx.Username != "" {
+			officerName = reqCtx.Username
+		}
+		if reqCtx.DepartmentID != nil {
+			departmentIDStr = reqCtx.DepartmentID.String()
+		}
+		if reqCtx.InstitutionID != nil {
+			institutionIDStr = reqCtx.InstitutionID.String()
+		}
+	}
+
+	templateData := AgreementTemplateData{
 		AgreementID:     agreementID.String(),
 		AgreementNumber: agreementNumber,
 		FirstName:       payload.FirstName,
+		SecondName:      secondNamePtr,
 		LastName:        payload.LastName,
 		PESEL:           payload.PESEL,
+		Email:           payload.Email,
 		Street:          payload.Street,
 		HouseNumber:     payload.HouseNumber,
-		FlatNumber:      flatNum,
+		FlatNumber:      flatNumPtr,
 		PostalCode:      payload.PostalCode,
 		City:            payload.City,
 		PhoneNumber:     payload.PhoneNumber,
 		SignedAt:        now.Format("02.01.2006 15:04"),
-	})
+		KeyVersion:      int(encryptedPayload.KeyVersion),
+		DocumentHash:    documentHash,
+		OfficerName:     officerName,
+		OfficerID:       actorID.String(),
+		DepartmentID:    departmentIDStr,
+		InstitutionID:   institutionIDStr,
+	}
+
+	log.DebugJSON("Pełny payload danych do generowania umowy PDF", templateData)
+
+	pdfBytes, err := s.pdfGen.GenerateAgreementPDF(ctx, templateData)
 	if err != nil {
+		log.Debug("[ERROR] PDF Generation failed: %v", err)
 		return nil, &apperr.AppError{
 			Code:    "PDF_GENERATION_FAILED",
 			Type:    apperr.Internal,
@@ -226,7 +271,7 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 		ID:          shared.NewUUIDv7(),
 		UserID:      userID,
 		Action:      model.ActionCitizenRegistered,
-		ActorID:     userID,
+		ActorID:     actorID,
 		IPAddress:   clientIP,
 		PayloadHash: payloadHash,
 	}
@@ -340,6 +385,7 @@ func (s *citizenService) GetCitizenByID(ctx context.Context, userID uuid.UUID) (
 	return &payload, nil
 }
 
+// #region GenerateAndSaveAgreement
 func (s *citizenService) GenerateAndSaveAgreement(ctx context.Context, userID uuid.UUID, pdfBytes []byte) (*model.UserAgreement, error) {
 	encryptedPayload, err := s.cryptor.Seal(ctx, s.agreementsKeyAlias, pdfBytes)
 	if err != nil {
@@ -375,7 +421,9 @@ func (s *citizenService) GenerateAndSaveAgreement(ctx context.Context, userID uu
 	return agreement, nil
 }
 
+// #region DownloadAgreementPDF
 func (s *citizenService) DownloadAgreementPDF(ctx context.Context, agreementID uuid.UUID) ([]byte, error) {
+	// log := shared.GetLogger()
 	agreement, err := s.repo.GetAgreementByID(ctx, agreementID)
 	if err != nil {
 		return nil, &apperr.AppError{
@@ -404,6 +452,7 @@ func (s *citizenService) DownloadAgreementPDF(ctx context.Context, agreementID u
 	encPayload := envelope.EncryptedPayload{
 		EncryptedData: encryptedPdfBytes,
 		EncryptedDEK:  agreement.EncryptedDEK,
+		KeyVersion:    agreement.KeyVersion,
 	}
 
 	decryptedPdf, err := s.cryptor.Unseal(ctx, s.keyAlias, encPayload)

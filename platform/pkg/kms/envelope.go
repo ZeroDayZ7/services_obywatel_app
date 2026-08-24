@@ -1,3 +1,5 @@
+// cmdr: kms\envelope.go
+
 package kms
 
 import (
@@ -20,12 +22,13 @@ type encryptRequest struct {
 type encryptResponse struct {
 	KeyAlias   string `json:"key_alias"`
 	Ciphertext []byte `json:"ciphertext"`
-	KeyVersion int    `json:"key_version"`
+	KeyVersion int    `json:"master_key_version"`
 }
 
 type decryptRequest struct {
-	KeyAlias   string `json:"key_alias"`
-	Ciphertext []byte `json:"ciphertext"`
+	KeyAlias         string `json:"key_alias"`
+	Ciphertext       []byte `json:"ciphertext"`
+	MasterKeyVersion int    `json:"master_key_version"`
 }
 
 type decryptResponse struct {
@@ -47,6 +50,8 @@ func EncryptDEK(ctx context.Context, cfg Config, keyAlias string, plaintextDEK [
 		return nil, 0, fmt.Errorf("kms: encrypt request failed: %w", err)
 	}
 
+	defer ZeroBytes(bodyBytes)
+
 	var out encryptResponse
 	if err := json.Unmarshal(bodyBytes, &out); err != nil {
 		return nil, 0, fmt.Errorf("kms: failed to unmarshal encrypt response: %w", err)
@@ -56,10 +61,11 @@ func EncryptDEK(ctx context.Context, cfg Config, keyAlias string, plaintextDEK [
 }
 
 // #region DecryptDEK
-func DecryptDEK(ctx context.Context, cfg Config, keyAlias string, encryptedDEK []byte) ([]byte, error) {
+func DecryptDEK(ctx context.Context, cfg Config, keyAlias string, encryptedDEK []byte, masterKeyVersion int) ([]byte, error) {
 	reqBody, err := json.Marshal(decryptRequest{
-		KeyAlias:   keyAlias,
-		Ciphertext: encryptedDEK,
+		KeyAlias:         keyAlias,
+		Ciphertext:       encryptedDEK,
+		MasterKeyVersion: masterKeyVersion, // <-- Przekazujemy wersję pobraną z bazy
 	})
 	if err != nil {
 		return nil, fmt.Errorf("kms: failed to marshal decrypt request: %w", err)
@@ -69,6 +75,8 @@ func DecryptDEK(ctx context.Context, cfg Config, keyAlias string, encryptedDEK [
 	if err != nil {
 		return nil, fmt.Errorf("kms: decrypt request failed: %w", err)
 	}
+
+	defer ZeroBytes(bodyBytes)
 
 	var out decryptResponse
 	if err := json.Unmarshal(bodyBytes, &out); err != nil {

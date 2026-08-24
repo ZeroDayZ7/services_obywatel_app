@@ -100,6 +100,19 @@ func ContextBuilder(container *di.Container) fiber.Handler {
 		reqCtx.SessionID = sid
 		reqCtx.Role = sessionData.Role
 		reqCtx.Permissions = sessionData.Permissions
+		reqCtx.Username = sessionData.Username
+
+		if sessionData.InstitutionID != "" {
+			if parsedInst, err := uuid.Parse(sessionData.InstitutionID); err == nil {
+				reqCtx.InstitutionID = &parsedInst
+			}
+		}
+
+		if sessionData.DepartmentID != "" {
+			if parsedDept, err := uuid.Parse(sessionData.DepartmentID); err == nil {
+				reqCtx.DepartmentID = &parsedDept
+			}
+		}
 
 		c.Locals("requestContext", reqCtx)
 

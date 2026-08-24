@@ -2,9 +2,10 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/zerodayz7/platform/pkg/httpserver"
@@ -15,56 +16,70 @@ import (
 	"github.com/zerodayz7/services/identity-service/config"
 	"github.com/zerodayz7/services/identity-service/internal/di"
 	"github.com/zerodayz7/services/identity-service/internal/router"
+	"github.com/zerodayz7/services/identity-service/internal/worker"
 )
 
-func LoadSecurityKeys(ctx context.Context, app *config.App, keyStore *httpserver.KeyStore) error {
+// #region LoadSecurityKeys
+func LoadSecurityKeys(ctx context.Context, app *config.App, keyStore *httpserver.KeyStore) {
 	log := shared.GetLogger()
 	kmsCfg := app.Config.ToKMSServiceConfig()
 
 	log.Info("🔍 Sprawdzanie stanu serwisu KMS...")
 	if err := kms.HealthCheck(ctx, kmsCfg); err != nil {
-		return err
+		log.Error("❌ KMS jest niedostępny podczas inicjalizacji", "error", err)
+		os.Exit(1)
 	}
 
-	// 1. Klucze HTTP
-	for senderID, targetKey := range app.Config.HMAC.TargetKeys {
-		hmacKey, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, targetKey, "HmacSha256")
+	loadKey := func(alias string, target config.KeyTarget) {
+		keyBytes, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, target.TargetKey, 1, target.Algorithm)
 		if err != nil {
-			return err
+			log.Error("❌ Nie udało się pobrać klucza z KMS",
+				"alias", alias,
+				"target", target.TargetKey,
+				"algorithm", target.Algorithm,
+				"error", err,
+			)
+			os.Exit(1)
 		}
-		keyStore.SetKey(senderID, hmacKey, version)
-		log.Info("✅ Klucz HMAC HTTP załadowany", "service", senderID, "version", version)
+
+		keyStore.SetKey(alias, keyBytes, uint32(version))
+		log.Info("✅ Klucz załadowany do KeyStore",
+			"alias", alias,
+			"target", target.TargetKey,
+			"algorithm", target.Algorithm,
+			"version", version,
+		)
 	}
 
-	// 2. Klucze RabbitMQ Consumer
-	for senderID, targetKey := range app.Config.RabbitConsumers.TrustedSenders {
-		hmacKey, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, targetKey, "HmacSha256")
-		if err != nil {
-			return err
-		}
-		keyStore.SetKey(senderID, hmacKey, version)
-		log.Info("✅ Klucz HMAC Consumer RabbitMQ załadowany", "service", senderID, "version", version)
+	// 1. Zewnętrzni nadawcy (API Gateway, BFF)
+	for senderID, keyTarget := range app.Config.HMAC.TargetKeys {
+		loadKey(senderID, keyTarget)
 	}
 
-	// 3. Klucze wewnętrzne serwisu (PESEL, RabbitMQ Publisher, Audyt)
-	internalKeys := map[string]string{
-		"pesel":    "identity-pesel-blind-index",
-		"rabbitmq": "hmac-identity-rabbitmq",
-		"audit":    "identity-audit-hmac",
+	// 2. Zaufani nadawcy RabbitMQ
+	for senderID, keyTarget := range app.Config.RabbitConsumers.TrustedSenders {
+		loadKey(senderID, keyTarget)
 	}
 
-	for keyAlias, kmsTarget := range internalKeys {
-		key, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, kmsTarget, "HmacSha256")
-		if err != nil {
-			return fmt.Errorf("failed to load %s key: %w", keyAlias, err)
-		}
-		keyStore.SetKey(keyAlias, key, version)
-		log.Info("✅ Klucz wewnętrzny załadowany", "alias", keyAlias, "version", version)
+	// 3. Klucze wewnętrzne serwisu pobierane bezpośrednio z konfiguracji
+	internalKeys := map[string]config.KeyTarget{
+		"pesel":      app.Config.HMAC.PeselKey,
+		"rabbitmq":   app.Config.HMAC.RabbitMQKey,
+		"audit":      app.Config.HMAC.AuditKey,
+		"agreements": app.Config.HMAC.AgreementsKey,
 	}
 
-	return nil
+	for alias, keyTarget := range internalKeys {
+		loadKey(alias, keyTarget)
+	}
+
+	if _, _, ok := keyStore.GetKey("rabbitmq"); !ok {
+		log.Error("❌ Brak klucza RabbitMQ w KeyStore po załadowaniu z KMS")
+		os.Exit(1)
+	}
 }
 
+// #region main
 func main() {
 	log := shared.GetLogger()
 
@@ -73,13 +88,13 @@ func main() {
 
 	keyStore := httpserver.NewKeyStore()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	securityCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	if err := LoadSecurityKeys(ctx, app, keyStore); err != nil {
-		log.Error("❌ Nie udało się załadować kluczy z KMS", "error", err)
-		os.Exit(1)
-	}
+	LoadSecurityKeys(securityCtx, app, keyStore)
 
 	// Pobranie klucza do podpisywania zdarzeń wychodzących w RabbitMQ z KeyStore
 	rabbitHMACKey, _, ok := keyStore.GetKey("rabbitmq")
@@ -90,6 +105,7 @@ func main() {
 
 	var err error
 	var eventPublisher rabbitmq.EventPublisher
+
 	if app.Config.RabbitMQ.Enabled {
 		log.Info("RabbitMQ is ENABLED. Connecting...")
 		eventPublisher, err = rabbitmq.NewLivePublisher(
@@ -112,7 +128,7 @@ func main() {
 	}()
 
 	// =========================================================================
-	// INICJALIZACJA S3 STORAGE (NOWY KOD)
+	// INICJALIZACJA S3 STORAGE
 	// =========================================================================
 	var fileStorage storage.StorageClient
 
@@ -135,8 +151,25 @@ func main() {
 		fileStorage = &storage.NoOpStorage{}
 	}
 
-	// Tworzenie kontenera z przekazaniem fileStorage
 	container := di.BuildContainer(app, eventPublisher, app.Config.ToKMSServiceConfig(), keyStore, fileStorage)
+
+	auditWorker := worker.NewAuditWorker(app.DB, eventPublisher, worker.AuditWorkerConfig{
+		BatchSize:     app.Config.AuditWorker.BatchSize,
+		Interval:      app.Config.AuditWorker.Interval,
+		MaxRetries:    app.Config.AuditWorker.MaxRetries,
+		BackoffBase:   app.Config.AuditWorker.BackoffBase,
+		BackoffMax:    app.Config.AuditWorker.BackoffMax,
+		Concurrency:   app.Config.AuditWorker.Concurrency,
+		RoutingKey:    app.Config.AuditWorker.RoutingKey,
+		SourceService: app.Config.AuditWorker.SourceService,
+	})
+
+	log.Info("🚀 Uruchamianie Audit Workera w tle...",
+		"batch_size", app.Config.AuditWorker.BatchSize,
+		"interval", app.Config.AuditWorker.Interval,
+	)
+
+	go auditWorker.Start(ctx)
 
 	r := router.NewRouter(container)
 	server := &http.Server{

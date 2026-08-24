@@ -10,13 +10,32 @@ import (
 	"github.com/zerodayz7/platform/pkg/viper"
 )
 
+type KeyTarget struct {
+	TargetKey string `mapstructure:"target_key"`
+	Algorithm string `mapstructure:"algorithm"`
+}
+
 type IdentityHMACConfig struct {
-	TargetKeys map[string]string `mapstructure:"HMAC_TARGET_KEYS"`
-	AuditKey   string            `mapstructure:"HMAC_AUDIT_KEY"`
+	TargetKeys    map[string]KeyTarget `mapstructure:"HMAC_TARGET_KEYS"`
+	AuditKey      KeyTarget            `mapstructure:"HMAC_AUDIT_KEY"`
+	AgreementsKey KeyTarget            `mapstructure:"AGREEMENTS_KMS_KEY"`
+	PeselKey      KeyTarget            `mapstructure:"HMAC_PESEL_KEY"`
+	RabbitMQKey   KeyTarget            `mapstructure:"HMAC_RABBITMQ_KEY"`
 }
 
 type RabbitMQConsumersConfig struct {
-	TrustedSenders map[string]string `mapstructure:"RABBITMQ_TRUSTED_SENDERS"`
+	TrustedSenders map[string]KeyTarget `mapstructure:"RABBITMQ_TRUSTED_SENDERS"`
+}
+
+type AuditWorkerConfig struct {
+	BatchSize     int           `mapstructure:"AUDIT_WORKER_BATCH_SIZE" validate:"min=1"`
+	Interval      time.Duration `mapstructure:"AUDIT_WORKER_INTERVAL"`
+	MaxRetries    int           `mapstructure:"AUDIT_WORKER_MAX_RETRIES" validate:"min=0"`
+	BackoffBase   time.Duration `mapstructure:"AUDIT_WORKER_BACKOFF_BASE"`
+	BackoffMax    time.Duration `mapstructure:"AUDIT_WORKER_BACKOFF_MAX"`
+	Concurrency   int           `mapstructure:"AUDIT_WORKER_CONCURRENCY" validate:"min=1"`
+	RoutingKey    string        `mapstructure:"AUDIT_WORKER_ROUTING_KEY"`
+	SourceService string        `mapstructure:"AUDIT_WORKER_SOURCE_SERVICE"`
 }
 
 type Config struct {
@@ -29,11 +48,12 @@ type Config struct {
 	RabbitConsumers RabbitMQConsumersConfig `mapstructure:",squash"`
 	KMS             viper.KMSConfig         `mapstructure:",squash"`
 	OTEL            viper.OTELConfig        `mapstructure:",squash"`
+	AuditWorker     AuditWorkerConfig       `mapstructure:",squash"`
 	Shutdown        time.Duration           `mapstructure:"SHUTDOWN_TIMEOUT" validate:"required"`
 }
 
 func (c *Config) ToKMSServiceConfig() kms.Config {
-	return c.KMS.ToKMSServiceConfig(c.Server.AppName)
+	return c.KMS.ToKMSServiceConfig()
 }
 
 var AppConfig Config
@@ -46,20 +66,52 @@ func LoadConfigGlobal() error {
 	viper.SetKMSDefaults()
 	viper.SetS3Defaults()
 
-	// Domyślne mapowanie nadawców ruchu HTTP na nazwy kluczy w KMS
-	spfViper.SetDefault("HMAC_TARGET_KEYS", map[string]string{
-		"gateway":     "hmac-gateway-identity",
-		"officer-bff": "hmac-bff-identity",
+	spfViper.SetDefault("HMAC_TARGET_KEYS", map[string]KeyTarget{
+		"gateway": {
+			TargetKey: "hmac-gateway-identity",
+			Algorithm: "HmacSha256",
+		},
+		"officer-bff": {
+			TargetKey: "hmac-bff-identity",
+			Algorithm: "HmacSha256",
+		},
 	})
 
-	// Domyślne mapowanie zaufanych nadawców zdarzeń z RabbitMQ (jeśli istnieją)
-	spfViper.SetDefault("RABBITMQ_TRUSTED_SENDERS", map[string]string{
-		"auth-service": "hmac-auth-rabbitmq",
+	spfViper.SetDefault("RABBITMQ_TRUSTED_SENDERS", map[string]KeyTarget{
+		"auth-service": {
+			TargetKey: "hmac-auth-rabbitmq",
+			Algorithm: "HmacSha256",
+		},
 	})
 
-	spfViper.SetDefault("HMAC_AUDIT_KEY", "identity-audit-hmac")
+	spfViper.SetDefault("HMAC_AUDIT_KEY", KeyTarget{
+		TargetKey: "hmac-identity-audit",
+		Algorithm: "HmacSha256",
+	})
 
-	spfViper.SetDefault("AGREEMENTS_KMS_KEY", "identity-agreements-key")
+	spfViper.SetDefault("AGREEMENTS_KMS_KEY", KeyTarget{
+		TargetKey: "identity-agreements-key",
+		Algorithm: "AES256GCM",
+	})
+
+	spfViper.SetDefault("HMAC_PESEL_KEY", KeyTarget{
+		TargetKey: "hmac-identity-pesel-index",
+		Algorithm: "HmacSha256",
+	})
+
+	spfViper.SetDefault("HMAC_RABBITMQ_KEY", KeyTarget{
+		TargetKey: "hmac-identity-rabbitmq",
+		Algorithm: "HmacSha256",
+	})
+
+	spfViper.SetDefault("AUDIT_WORKER_BATCH_SIZE", 200)
+	spfViper.SetDefault("AUDIT_WORKER_INTERVAL", "2s")
+	spfViper.SetDefault("AUDIT_WORKER_MAX_RETRIES", 10)
+	spfViper.SetDefault("AUDIT_WORKER_BACKOFF_BASE", "1s")
+	spfViper.SetDefault("AUDIT_WORKER_BACKOFF_MAX", "60s")
+	spfViper.SetDefault("AUDIT_WORKER_CONCURRENCY", 1)
+	spfViper.SetDefault("AUDIT_WORKER_ROUTING_KEY", "audit.log.created")
+	spfViper.SetDefault("AUDIT_WORKER_SOURCE_SERVICE", "identity-service")
 
 	if err := viper.InitConfig(&AppConfig, "identity_service"); err != nil {
 		return fmt.Errorf("failed to initialize identity_service config: %w", err)

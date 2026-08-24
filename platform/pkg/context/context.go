@@ -18,6 +18,10 @@ type RequestContext struct {
 	Permissions []string
 	RiskScore   int
 	Challenge   string
+
+	InstitutionID *uuid.UUID
+	DepartmentID  *uuid.UUID
+	Username      string
 }
 
 func FromContext(ctx context.Context) (*RequestContext, bool) {
@@ -30,4 +34,11 @@ func GetIP(ctx context.Context) string {
 		return reqCtx.IP
 	}
 	return ""
+}
+
+func GetUserID(ctx context.Context) uuid.UUID {
+	if reqCtx, ok := FromContext(ctx); ok && reqCtx != nil && reqCtx.UserID != nil {
+		return *reqCtx.UserID
+	}
+	return uuid.Nil
 }

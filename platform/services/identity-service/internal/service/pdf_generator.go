@@ -20,15 +20,24 @@ type AgreementTemplateData struct {
 	AgreementID     string
 	AgreementNumber string
 	FirstName       string
+	SecondName      *string
 	LastName        string
 	PESEL           string
+	Email           string
+	PhoneNumber     string // <-- Dodane
 	Street          string
 	HouseNumber     string
-	FlatNumber      string
+	FlatNumber      *string
 	PostalCode      string
 	City            string
-	PhoneNumber     string
 	SignedAt        string
+	KeyVersion      int
+	DocumentHash    string
+
+	OfficerName   string
+	OfficerID     string
+	DepartmentID  string
+	InstitutionID string
 }
 
 type PDFGenerator interface {
@@ -49,16 +58,12 @@ func NewPDFGenerator() (PDFGenerator, error) {
 }
 
 func (g *pdfGenerator) GenerateAgreementPDF(ctx context.Context, data AgreementTemplateData) ([]byte, error) {
-	// 1. Renderowanie HTML w pamięci RAM
 	var htmlBuf bytes.Buffer
 	if err := g.tmpl.Execute(&htmlBuf, data); err != nil {
 		return nil, fmt.Errorf("pdf_gen: failed to execute template: %w", err)
 	}
 
-	// 2. Uruchomienie lokalnego Chrome/Edge bez pobierania z sieci
 	chromePath := `C:\Program Files\Google\Chrome\Application\chrome.exe`
-	// Jeśli chcesz użyć Edge, zamień na:
-	// chromePath := `C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`
 
 	u := launcher.New().
 		Bin(chromePath).

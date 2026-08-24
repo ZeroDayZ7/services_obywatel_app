@@ -7,7 +7,6 @@ import (
 )
 
 func registerOfficialRoutes(mux *http.ServeMux, c *di.Container) {
-	// 1. Istniejące proxy do rejestracji obywatela
 	registerProxy, err := NewSingleHostProxy(
 		c.Config.IdentityServiceURL,
 		"/api/v1/citizens",
@@ -19,17 +18,20 @@ func registerOfficialRoutes(mux *http.ServeMux, c *di.Container) {
 	}
 	mux.HandleFunc("POST /api/v1/official/citizens/register", registerProxy)
 
-	// 2. NOWE PROXY: Przelotowe dla umów (pobieranie/odszyfrowywanie PDF)
-	agreementProxy, err := NewSingleHostProxy(
-		c.Config.IdentityServiceURL,
-		"/api/v1/agreements/",
-		"identity-service",
-		c.KeyStore,
-	)
-	if err != nil {
-		panic("failed to create agreement download proxy: " + err.Error())
-	}
+	mux.HandleFunc("GET /api/v1/official/agreements/{agreement_id}/download", func(w http.ResponseWriter, r *http.Request) {
+		agreementID := r.PathValue("agreement_id")
 
-	// Rejestrujemy pod ścieżką, pod którą frontend będzie pytał BFF
-	mux.HandleFunc("GET /api/v1/official/agreements/{agreement_id}/download", agreementProxy)
+		agreementProxy, err := NewSingleHostProxy(
+			c.Config.IdentityServiceURL,
+			"/api/v1/agreements/"+agreementID+"/download",
+			"identity-service",
+			c.KeyStore,
+		)
+		if err != nil {
+			http.Error(w, "failed to create agreement download proxy", http.StatusInternalServerError)
+			return
+		}
+
+		agreementProxy(w, r)
+	})
 }

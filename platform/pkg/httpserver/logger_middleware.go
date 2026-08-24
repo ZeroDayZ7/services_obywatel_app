@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"go.uber.org/zap"
@@ -76,6 +77,18 @@ func LoggerMiddleware(logger LoggerInterface) func(http.Handler) http.Handler {
 				bodyToLog = "empty body"
 			}
 
+			// Przygotowanie ResBody z filtrowaniem danych binarnych (np. PDF)
+			var resBodyToLog string
+			contentType := interceptor.Header().Get("Content-Type")
+
+			if strings.Contains(contentType, "application/pdf") ||
+				strings.Contains(r.URL.Path, "/download") ||
+				bytes.HasPrefix(interceptor.body.Bytes(), []byte("%PDF")) {
+				resBodyToLog = "[BINARY DATA - PDF OMITTED IN LOGS]"
+			} else {
+				resBodyToLog = interceptor.body.String()
+			}
+
 			if method, ok := logger.(interface {
 				DebugRequest(msg string, method, path string, status int, latency string, body any)
 			}); ok {
@@ -86,10 +99,10 @@ func LoggerMiddleware(logger LoggerInterface) func(http.Handler) http.Handler {
 					interceptor.statusCode,
 					latency.String(),
 					map[string]any{
-						"IP":      clientIP,
-						"Headers": r.Header,
+						// "IP":      clientIP,
+						// "Headers": r.Header,
 						"ReqBody": bodyToLog,
-						"ResBody": interceptor.body.String(),
+						"ResBody": resBodyToLog,
 					},
 				)
 			}
