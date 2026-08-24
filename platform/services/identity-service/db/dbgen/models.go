@@ -18,7 +18,6 @@ type Citizen struct {
 	PhoneHash     string    `json:"phone_hash"`
 	EncryptedData []byte    `json:"encrypted_data"`
 	EncryptedDek  []byte    `json:"encrypted_dek"`
-	KeyVersion    int32     `json:"key_version"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
 }
@@ -64,7 +63,6 @@ type UserAgreement struct {
 	S3Key           string     `json:"s3_key"`
 	S3Bucket        string     `json:"s3_bucket"`
 	EncryptedDek    []byte     `json:"encrypted_dek"`
-	KeyVersion      int32      `json:"key_version"`
 	EncryptedEmail  []byte     `json:"encrypted_email"`
 	EncryptedPhone  []byte     `json:"encrypted_phone"`
 	Status          string     `json:"status"`

@@ -2,75 +2,78 @@ package envelope
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 
 	"github.com/zerodayz7/platform/pkg/crypto"
 	"github.com/zerodayz7/platform/pkg/kms"
 )
 
+// EncryptedPayload przechowuje zaszyfrowane dane oraz gotowy do zapisu w bazie DEK (z wbudowaną wersją)
 type EncryptedPayload struct {
-	EncryptedData []byte // Zaszyfrowane dane dokumentu
-	EncryptedDEK  []byte // Zaszyfrowany klucz DEK
-	KeyVersion    int    // Wersja klucza KEK z KMS
+	EncryptedData []byte // Zaszyfrowane dane właściwe (np. dokument)
+	EncryptedDEK  []byte // Zaszyfrowany klucz DEK z doklejoną wersją (gotowy do DB)
+	KeyVersion    int    // Czysta wersja (gdyby była potrzebna osobno)
 }
 
 type EnvelopeCryptor struct {
 	kmsCfg kms.Config
 }
 
+// #region NewEnvelopeCryptor
 func NewEnvelopeCryptor(kmsCfg kms.Config) *EnvelopeCryptor {
 	return &EnvelopeCryptor{kmsCfg: kmsCfg}
 }
 
 // #region Seal
-// Seal wykonuje pełny proces szyfrowania kopertowego:
-// 1. Generuje losowy DEK (32 bajty)
-// 2. Szyfruje nim plaintext (AES-256-GCM)
-// 3. Szyfruje DEK w KMS za pomocą KEK o podanym keyAlias
+// Seal wykonuje pełny proces szyfrowania kopertowego i automatycznie pakuje wersję klucza do DEK
 func (e *EnvelopeCryptor) Seal(ctx context.Context, keyAlias string, plaintext []byte) (*EncryptedPayload, error) {
-	// 1. Generuj świeży DEK
 	dek, err := crypto.GenerateDEK(32)
 	if err != nil {
 		return nil, err
 	}
-
 	defer kms.ZeroBytes(dek)
 
-	// 2. Szyfruj dane w lokalnej pamięci
 	encryptedData, err := crypto.EncryptAESGCM(plaintext, dek)
 	if err != nil {
 		return nil, fmt.Errorf("envelope: failed to encrypt payload: %w", err)
 	}
 
-	// 3. Zaszyfruj DEK w KMS i pobierz wersję klucza
-	encryptedDEK, keyVersion, err := kms.EncryptDEK(ctx, e.kmsCfg, keyAlias, dek)
+	rawEncryptedDEK, keyVersion, err := kms.EncryptDEK(ctx, e.kmsCfg, keyAlias, dek)
 	if err != nil {
 		return nil, fmt.Errorf("envelope: failed to encrypt DEK via KMS: %w", err)
 	}
 
+	// Automatyczne pakowanie wersji klucza (4 bajty) + rawEncryptedDEK
+	packedDEK := make([]byte, 4+len(rawEncryptedDEK))
+	binary.BigEndian.PutUint32(packedDEK[0:4], uint32(keyVersion))
+	copy(packedDEK[4:], rawEncryptedDEK)
+
 	return &EncryptedPayload{
 		EncryptedData: encryptedData,
-		EncryptedDEK:  encryptedDEK,
+		EncryptedDEK:  packedDEK, // Tutaj jest już spakowane!
 		KeyVersion:    keyVersion,
 	}, nil
 }
 
-// #endregion
-
 // #region Unseal
-// Unseal wykonuje proces odszyfrowywania kopertowego:
-// 1. Wysyła EncryptedDEK do KMS w celu uzyskania surowego DEK
-// 2. Odszyfrowuje dane w lokalnej pamięci przy użyciu surowego DEK
-func (e *EnvelopeCryptor) Unseal(ctx context.Context, keyAlias string, payload EncryptedPayload) ([]byte, error) {
-	// 1. Odszyfruj DEK w KMS, przekazując wersję klucza zapisaną w payloadzie (z bazy danych)
-	plaintextDEK, err := kms.DecryptDEK(ctx, e.kmsCfg, keyAlias, payload.EncryptedDEK, payload.KeyVersion)
+// Unseal automatycznie rozpakowuje wersję klucza z EncryptedDEK i odszyfrowuje dane
+func (e *EnvelopeCryptor) Unseal(ctx context.Context, keyAlias string, encryptedData []byte, packedDEK []byte) ([]byte, error) {
+	if len(packedDEK) < 4 {
+		return nil, fmt.Errorf("envelope: packed DEK too short")
+	}
+
+	// Automatyczne wyciągnięcie wersji z pierwszych 4 bajtów
+	keyVersion := int(binary.BigEndian.Uint32(packedDEK[0:4]))
+	rawEncryptedDEK := packedDEK[4:]
+
+	plaintextDEK, err := kms.DecryptDEK(ctx, e.kmsCfg, keyAlias, rawEncryptedDEK, keyVersion)
 	if err != nil {
 		return nil, fmt.Errorf("envelope: failed to decrypt DEK via KMS: %w", err)
 	}
 	defer kms.ZeroBytes(plaintextDEK)
 
-	// 2. Odszyfruj dane lokalnie
-	plaintext, err := crypto.DecryptAESGCM(payload.EncryptedData, plaintextDEK)
+	plaintext, err := crypto.DecryptAESGCM(encryptedData, plaintextDEK)
 	if err != nil {
 		return nil, fmt.Errorf("envelope: failed to decrypt payload: %w", err)
 	}

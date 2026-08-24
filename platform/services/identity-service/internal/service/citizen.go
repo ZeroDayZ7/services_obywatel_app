@@ -165,7 +165,6 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 		PhoneHash:     phoneHash,
 		EncryptedData: encryptedPayload.EncryptedData,
 		EncryptedDEK:  encryptedPayload.EncryptedDEK,
-		KeyVersion:    encryptedPayload.KeyVersion,
 	}
 
 	agreementID := shared.NewUUIDv7()
@@ -336,7 +335,6 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 	eventPayload, err := json.Marshal(map[string]any{
 		"user_id":          citizen.UserID,
 		"agreement_number": agreement.AgreementNumber,
-		"key_version":      citizen.KeyVersion,
 		"signed_at":        agreement.SignedAt,
 	})
 	if err != nil {
@@ -412,12 +410,7 @@ func (s *citizenService) GetCitizenByID(ctx context.Context, userID uuid.UUID) (
 		return nil, apperr.ErrNotFound
 	}
 
-	encPayload := envelope.EncryptedPayload{
-		EncryptedData: citizen.EncryptedData,
-		EncryptedDEK:  citizen.EncryptedDEK,
-	}
-
-	plaintext, err := s.cryptor.Unseal(ctx, s.dataKeyAlias, encPayload)
+	plaintext, err := s.cryptor.Unseal(ctx, s.dataKeyAlias, citizen.EncryptedData, citizen.EncryptedDEK)
 	if err != nil {
 		return nil, &apperr.AppError{
 			Code:    "DECRYPTION_FAILED",
@@ -503,14 +496,7 @@ func (s *citizenService) DownloadAgreementPDF(ctx context.Context, agreementID u
 		}
 	}
 
-	// 3. Odszyfrowanie pliku w locie (Envelope Encryption)
-	encPayload := envelope.EncryptedPayload{
-		EncryptedData: encryptedPdfBytes,
-		EncryptedDEK:  agreement.EncryptedDEK,
-		KeyVersion:    agreement.KeyVersion,
-	}
-
-	decryptedPdf, err := s.cryptor.Unseal(ctx, s.agreementsKeyAlias, encPayload)
+	decryptedPdf, err := s.cryptor.Unseal(ctx, s.agreementsKeyAlias, encryptedPdfBytes, agreement.EncryptedDEK)
 	if err != nil {
 		return nil, &apperr.AppError{
 			Code:    "DECRYPTION_FAILED",

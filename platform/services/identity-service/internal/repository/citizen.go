@@ -80,7 +80,6 @@ func (r *citizenRepository) Create(ctx context.Context, citizen *model.Citizen) 
 		PhoneHash:     citizen.PhoneHash,
 		EncryptedData: citizen.EncryptedData,
 		EncryptedDek:  citizen.EncryptedDEK,
-		KeyVersion:    int32(citizen.KeyVersion),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to insert citizen: %w", err)
@@ -101,7 +100,6 @@ func (r *citizenRepository) CreateAgreement(ctx context.Context, agreement *mode
 		S3Key:           agreement.S3Key,
 		S3Bucket:        agreement.S3Bucket,
 		EncryptedDek:    agreement.EncryptedDEK,
-		KeyVersion:      int32(agreement.KeyVersion),
 		EncryptedEmail:  agreement.EncryptedEmail,
 		EncryptedPhone:  agreement.EncryptedPhone,
 		Status:          string(agreement.Status),
@@ -218,7 +216,6 @@ func (r *citizenRepository) GetByID(ctx context.Context, userID uuid.UUID) (*mod
 		PESELHash:     row.PeselHash,
 		EncryptedData: row.EncryptedData,
 		EncryptedDEK:  row.EncryptedDek,
-		KeyVersion:    int(row.KeyVersion),
 		CreatedAt:     row.CreatedAt,
 	}, nil
 }
@@ -237,8 +234,13 @@ func (r *citizenRepository) GetByPESELHash(ctx context.Context, peselHash string
 	}
 
 	return &model.Citizen{
-		UserID:    row.UserID,
-		PESELHash: row.PeselHash,
+		UserID:        row.UserID,
+		PESELHash:     row.PeselHash,
+		EmailHash:     row.EmailHash,
+		PhoneHash:     row.PhoneHash,
+		EncryptedData: row.EncryptedData,
+		EncryptedDEK:  row.EncryptedDek,
+		CreatedAt:     row.CreatedAt,
 	}, nil
 }
 
@@ -256,8 +258,13 @@ func (r *citizenRepository) GetByEmailHash(ctx context.Context, emailHash string
 	}
 
 	return &model.Citizen{
-		UserID:    row.UserID,
-		EmailHash: row.EmailHash,
+		UserID:        row.UserID,
+		PESELHash:     row.PeselHash,
+		EmailHash:     row.EmailHash,
+		PhoneHash:     row.PhoneHash,
+		EncryptedData: row.EncryptedData,
+		EncryptedDEK:  row.EncryptedDek,
+		CreatedAt:     row.CreatedAt,
 	}, nil
 }
 
@@ -275,8 +282,13 @@ func (r *citizenRepository) GetByPhoneHash(ctx context.Context, phoneHash string
 	}
 
 	return &model.Citizen{
-		UserID:    row.UserID,
-		PhoneHash: row.PhoneHash,
+		UserID:        row.UserID,
+		PESELHash:     row.PeselHash,
+		EmailHash:     row.EmailHash,
+		PhoneHash:     row.PhoneHash,
+		EncryptedData: row.EncryptedData,
+		EncryptedDEK:  row.EncryptedDek,
+		CreatedAt:     row.CreatedAt,
 	}, nil
 }
 
@@ -300,7 +312,6 @@ func (r *citizenRepository) GetAgreementByID(ctx context.Context, agreementID uu
 		S3Key:           row.S3Key,
 		S3Bucket:        row.S3Bucket,
 		EncryptedDEK:    row.EncryptedDek,
-		KeyVersion:      int(row.KeyVersion),
 		EncryptedEmail:  row.EncryptedEmail,
 		EncryptedPhone:  row.EncryptedPhone,
 		Status:          model.AgreementStatus(row.Status),

@@ -14,10 +14,10 @@ import (
 
 const createUserAgreement = `-- name: CreateUserAgreement :one
 INSERT INTO user_agreements (
-    id, user_id, agreement_number, s3_key, s3_bucket, encrypted_dek, key_version, encrypted_email, encrypted_phone, status, signed_at, verified_at, verified_via
+    id, user_id, agreement_number, s3_key, s3_bucket, encrypted_dek, encrypted_email, encrypted_phone, status, signed_at, verified_at, verified_via
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
-) RETURNING id, user_id, agreement_number, s3_key, s3_bucket, encrypted_dek, key_version, encrypted_email, encrypted_phone, status, signed_at, verified_at, verified_via, created_at, updated_at, deleted_at
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
+) RETURNING id, user_id, agreement_number, s3_key, s3_bucket, encrypted_dek, encrypted_email, encrypted_phone, status, signed_at, verified_at, verified_via, created_at, updated_at, deleted_at
 `
 
 type CreateUserAgreementParams struct {
@@ -27,7 +27,6 @@ type CreateUserAgreementParams struct {
 	S3Key           string     `json:"s3_key"`
 	S3Bucket        string     `json:"s3_bucket"`
 	EncryptedDek    []byte     `json:"encrypted_dek"`
-	KeyVersion      int32      `json:"key_version"`
 	EncryptedEmail  []byte     `json:"encrypted_email"`
 	EncryptedPhone  []byte     `json:"encrypted_phone"`
 	Status          string     `json:"status"`
@@ -44,7 +43,6 @@ func (q *Queries) CreateUserAgreement(ctx context.Context, arg CreateUserAgreeme
 		arg.S3Key,
 		arg.S3Bucket,
 		arg.EncryptedDek,
-		arg.KeyVersion,
 		arg.EncryptedEmail,
 		arg.EncryptedPhone,
 		arg.Status,
@@ -60,7 +58,6 @@ func (q *Queries) CreateUserAgreement(ctx context.Context, arg CreateUserAgreeme
 		&i.S3Key,
 		&i.S3Bucket,
 		&i.EncryptedDek,
-		&i.KeyVersion,
 		&i.EncryptedEmail,
 		&i.EncryptedPhone,
 		&i.Status,
@@ -123,7 +120,7 @@ func (q *Queries) CreateUserPukCode(ctx context.Context, arg CreateUserPukCodePa
 }
 
 const getAgreementByID = `-- name: GetAgreementByID :one
-SELECT id, user_id, agreement_number, s3_key, s3_bucket, encrypted_dek, key_version, encrypted_email, encrypted_phone, status, signed_at, verified_at, verified_via, created_at, updated_at, deleted_at FROM user_agreements
+SELECT id, user_id, agreement_number, s3_key, s3_bucket, encrypted_dek, encrypted_email, encrypted_phone, status, signed_at, verified_at, verified_via, created_at, updated_at, deleted_at FROM user_agreements
 WHERE id = $1 AND deleted_at IS NULL LIMIT 1
 `
 
@@ -137,7 +134,6 @@ func (q *Queries) GetAgreementByID(ctx context.Context, id uuid.UUID) (UserAgree
 		&i.S3Key,
 		&i.S3Bucket,
 		&i.EncryptedDek,
-		&i.KeyVersion,
 		&i.EncryptedEmail,
 		&i.EncryptedPhone,
 		&i.Status,
@@ -152,7 +148,7 @@ func (q *Queries) GetAgreementByID(ctx context.Context, id uuid.UUID) (UserAgree
 }
 
 const getAgreementByNumber = `-- name: GetAgreementByNumber :one
-SELECT id, user_id, agreement_number, s3_key, s3_bucket, encrypted_dek, key_version, encrypted_email, encrypted_phone, status, signed_at, verified_at, verified_via, created_at, updated_at, deleted_at FROM user_agreements
+SELECT id, user_id, agreement_number, s3_key, s3_bucket, encrypted_dek, encrypted_email, encrypted_phone, status, signed_at, verified_at, verified_via, created_at, updated_at, deleted_at FROM user_agreements
 WHERE agreement_number = $1 AND deleted_at IS NULL LIMIT 1
 `
 
@@ -166,7 +162,6 @@ func (q *Queries) GetAgreementByNumber(ctx context.Context, agreementNumber stri
 		&i.S3Key,
 		&i.S3Bucket,
 		&i.EncryptedDek,
-		&i.KeyVersion,
 		&i.EncryptedEmail,
 		&i.EncryptedPhone,
 		&i.Status,
@@ -181,7 +176,7 @@ func (q *Queries) GetAgreementByNumber(ctx context.Context, agreementNumber stri
 }
 
 const getAgreementByUserID = `-- name: GetAgreementByUserID :one
-SELECT id, user_id, agreement_number, s3_key, s3_bucket, encrypted_dek, key_version, encrypted_email, encrypted_phone, status, signed_at, verified_at, verified_via, created_at, updated_at, deleted_at FROM user_agreements
+SELECT id, user_id, agreement_number, s3_key, s3_bucket, encrypted_dek, encrypted_email, encrypted_phone, status, signed_at, verified_at, verified_via, created_at, updated_at, deleted_at FROM user_agreements
 WHERE user_id = $1 AND deleted_at IS NULL LIMIT 1
 `
 
@@ -195,7 +190,6 @@ func (q *Queries) GetAgreementByUserID(ctx context.Context, userID uuid.UUID) (U
 		&i.S3Key,
 		&i.S3Bucket,
 		&i.EncryptedDek,
-		&i.KeyVersion,
 		&i.EncryptedEmail,
 		&i.EncryptedPhone,
 		&i.Status,

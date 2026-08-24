@@ -14,9 +14,9 @@ import (
 
 const createCitizenWithAudit = `-- name: CreateCitizenWithAudit :one
 INSERT INTO citizens (
-    user_id, pesel_hash, email_hash, phone_hash, encrypted_data, encrypted_dek, key_version
+    user_id, pesel_hash, email_hash, phone_hash, encrypted_data, encrypted_dek
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7
+    $1, $2, $3, $4, $5, $6
 ) RETURNING user_id, created_at
 `
 
@@ -27,7 +27,6 @@ type CreateCitizenWithAuditParams struct {
 	PhoneHash     string    `json:"phone_hash"`
 	EncryptedData []byte    `json:"encrypted_data"`
 	EncryptedDek  []byte    `json:"encrypted_dek"`
-	KeyVersion    int32     `json:"key_version"`
 }
 
 type CreateCitizenWithAuditRow struct {
@@ -43,7 +42,6 @@ func (q *Queries) CreateCitizenWithAudit(ctx context.Context, arg CreateCitizenW
 		arg.PhoneHash,
 		arg.EncryptedData,
 		arg.EncryptedDek,
-		arg.KeyVersion,
 	)
 	var i CreateCitizenWithAuditRow
 	err := row.Scan(&i.UserID, &i.CreatedAt)
@@ -51,7 +49,7 @@ func (q *Queries) CreateCitizenWithAudit(ctx context.Context, arg CreateCitizenW
 }
 
 const getCitizenByEmailHash = `-- name: GetCitizenByEmailHash :one
-SELECT user_id, pesel_hash, email_hash, phone_hash, encrypted_data, encrypted_dek, key_version, created_at
+SELECT user_id, pesel_hash, email_hash, phone_hash, encrypted_data, encrypted_dek, created_at
 FROM citizens WHERE email_hash = $1 LIMIT 1
 `
 
@@ -62,7 +60,6 @@ type GetCitizenByEmailHashRow struct {
 	PhoneHash     string    `json:"phone_hash"`
 	EncryptedData []byte    `json:"encrypted_data"`
 	EncryptedDek  []byte    `json:"encrypted_dek"`
-	KeyVersion    int32     `json:"key_version"`
 	CreatedAt     time.Time `json:"created_at"`
 }
 
@@ -76,14 +73,13 @@ func (q *Queries) GetCitizenByEmailHash(ctx context.Context, emailHash string) (
 		&i.PhoneHash,
 		&i.EncryptedData,
 		&i.EncryptedDek,
-		&i.KeyVersion,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const getCitizenByPeselHash = `-- name: GetCitizenByPeselHash :one
-SELECT user_id, pesel_hash, email_hash, phone_hash, encrypted_data, encrypted_dek, key_version, created_at
+SELECT user_id, pesel_hash, email_hash, phone_hash, encrypted_data, encrypted_dek, created_at
 FROM citizens WHERE pesel_hash = $1 LIMIT 1
 `
 
@@ -94,7 +90,6 @@ type GetCitizenByPeselHashRow struct {
 	PhoneHash     string    `json:"phone_hash"`
 	EncryptedData []byte    `json:"encrypted_data"`
 	EncryptedDek  []byte    `json:"encrypted_dek"`
-	KeyVersion    int32     `json:"key_version"`
 	CreatedAt     time.Time `json:"created_at"`
 }
 
@@ -108,14 +103,13 @@ func (q *Queries) GetCitizenByPeselHash(ctx context.Context, peselHash string) (
 		&i.PhoneHash,
 		&i.EncryptedData,
 		&i.EncryptedDek,
-		&i.KeyVersion,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const getCitizenByPhoneHash = `-- name: GetCitizenByPhoneHash :one
-SELECT user_id, pesel_hash, email_hash, phone_hash, encrypted_data, encrypted_dek, key_version, created_at
+SELECT user_id, pesel_hash, email_hash, phone_hash, encrypted_data, encrypted_dek, created_at
 FROM citizens WHERE phone_hash = $1 LIMIT 1
 `
 
@@ -126,7 +120,6 @@ type GetCitizenByPhoneHashRow struct {
 	PhoneHash     string    `json:"phone_hash"`
 	EncryptedData []byte    `json:"encrypted_data"`
 	EncryptedDek  []byte    `json:"encrypted_dek"`
-	KeyVersion    int32     `json:"key_version"`
 	CreatedAt     time.Time `json:"created_at"`
 }
 
@@ -140,14 +133,13 @@ func (q *Queries) GetCitizenByPhoneHash(ctx context.Context, phoneHash string) (
 		&i.PhoneHash,
 		&i.EncryptedData,
 		&i.EncryptedDek,
-		&i.KeyVersion,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const getCitizenByUserID = `-- name: GetCitizenByUserID :one
-SELECT user_id, pesel_hash, email_hash, phone_hash, encrypted_data, encrypted_dek, key_version, created_at
+SELECT user_id, pesel_hash, email_hash, phone_hash, encrypted_data, encrypted_dek, created_at
 FROM citizens WHERE user_id = $1 LIMIT 1
 `
 
@@ -158,7 +150,6 @@ type GetCitizenByUserIDRow struct {
 	PhoneHash     string    `json:"phone_hash"`
 	EncryptedData []byte    `json:"encrypted_data"`
 	EncryptedDek  []byte    `json:"encrypted_dek"`
-	KeyVersion    int32     `json:"key_version"`
 	CreatedAt     time.Time `json:"created_at"`
 }
 
@@ -172,7 +163,6 @@ func (q *Queries) GetCitizenByUserID(ctx context.Context, userID uuid.UUID) (Get
 		&i.PhoneHash,
 		&i.EncryptedData,
 		&i.EncryptedDek,
-		&i.KeyVersion,
 		&i.CreatedAt,
 	)
 	return i, err

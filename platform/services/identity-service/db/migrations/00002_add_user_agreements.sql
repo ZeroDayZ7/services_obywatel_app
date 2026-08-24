@@ -11,7 +11,6 @@ CREATE TABLE IF NOT EXISTS user_agreements (
 
     -- Bezpieczeństwo i Kryptografia (Envelope Encryption)
     encrypted_dek BYTEA NOT NULL,
-    key_version INT NOT NULL DEFAULT 1,
 
     -- Zaszyfrowane dane kontaktowe do 2FA / powiadomień
     encrypted_email BYTEA NOT NULL,
