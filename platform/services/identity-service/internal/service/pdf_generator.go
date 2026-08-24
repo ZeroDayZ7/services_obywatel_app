@@ -20,15 +20,19 @@ type AgreementTemplateData struct {
 	AgreementID     string
 	AgreementNumber string
 	FirstName       string
+	SecondName      *string
 	LastName        string
 	PESEL           string
+	Email           string
 	Street          string
 	HouseNumber     string
-	FlatNumber      string
+	FlatNumber      *string
 	PostalCode      string
 	City            string
 	PhoneNumber     string
 	SignedAt        string
+	KeyVersion      int
+	DocumentHash    string
 }
 
 type PDFGenerator interface {
@@ -57,8 +61,6 @@ func (g *pdfGenerator) GenerateAgreementPDF(ctx context.Context, data AgreementT
 
 	// 2. Uruchomienie lokalnego Chrome/Edge bez pobierania z sieci
 	chromePath := `C:\Program Files\Google\Chrome\Application\chrome.exe`
-	// Jeśli chcesz użyć Edge, zamień na:
-	// chromePath := `C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`
 
 	u := launcher.New().
 		Bin(chromePath).

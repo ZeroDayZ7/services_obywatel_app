@@ -34,6 +34,8 @@ func (e *EnvelopeCryptor) Seal(ctx context.Context, keyAlias string, plaintext [
 		return nil, err
 	}
 
+	defer kms.ZeroBytes(dek)
+
 	// 2. Szyfruj dane w lokalnej pamięci
 	encryptedData, err := crypto.EncryptAESGCM(plaintext, dek)
 	if err != nil {
@@ -60,11 +62,12 @@ func (e *EnvelopeCryptor) Seal(ctx context.Context, keyAlias string, plaintext [
 // 1. Wysyła EncryptedDEK do KMS w celu uzyskania surowego DEK
 // 2. Odszyfrowuje dane w lokalnej pamięci przy użyciu surowego DEK
 func (e *EnvelopeCryptor) Unseal(ctx context.Context, keyAlias string, payload EncryptedPayload) ([]byte, error) {
-	// 1. Odszyfruj DEK w KMS
-	plaintextDEK, err := kms.DecryptDEK(ctx, e.kmsCfg, keyAlias, payload.EncryptedDEK)
+	// 1. Odszyfruj DEK w KMS, przekazując wersję klucza zapisaną w payloadzie (z bazy danych)
+	plaintextDEK, err := kms.DecryptDEK(ctx, e.kmsCfg, keyAlias, payload.EncryptedDEK, payload.KeyVersion)
 	if err != nil {
 		return nil, fmt.Errorf("envelope: failed to decrypt DEK via KMS: %w", err)
 	}
+	defer kms.ZeroBytes(plaintextDEK)
 
 	// 2. Odszyfruj dane lokalnie
 	plaintext, err := crypto.DecryptAESGCM(payload.EncryptedData, plaintextDEK)
@@ -74,5 +77,3 @@ func (e *EnvelopeCryptor) Unseal(ctx context.Context, keyAlias string, payload E
 
 	return plaintext, nil
 }
-
-// #endregion
