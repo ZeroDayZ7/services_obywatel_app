@@ -107,6 +107,11 @@ func main() {
 	defer cancelConsumers()
 
 	if config.AppConfig.RabbitMQ.Enabled {
+		log.Info("🐰 Uruchamianie konsumera RabbitMQ dla rejestracji obywateli...",
+			"queue", rabbitmq.QueueAuthCitizen,
+			"topic", rabbitmq.TopicCitizenCreated,
+		)
+
 		go func() {
 			err := eventPublisher.Subscribe(
 				consumerCtx,
@@ -118,6 +123,8 @@ func main() {
 				log.Error("❌ Error in citizen created consumer", "error", err)
 			}
 		}()
+	} else {
+		log.Warn("⚠️ RabbitMQ jest wyłączony - konsumery w tle nie zostały uruchomione.")
 	}
 
 	router.SetupRoutes(authApp, container)

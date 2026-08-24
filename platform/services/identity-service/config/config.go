@@ -54,18 +54,18 @@ type RegistrationWorkerConfig struct {
 }
 
 type Config struct {
-	Server          viper.ServerConfig      `mapstructure:",squash"`
-	Database        viper.DBConfig          `mapstructure:",squash"`
-	Redis           viper.RedisConfig       `mapstructure:",squash"`
-	RabbitMQ        viper.RabbitMQConfig    `mapstructure:",squash"`
-	S3              viper.S3Config          `mapstructure:",squash"`
-	HMAC            IdentityHMACConfig      `mapstructure:",squash"`
-	RabbitConsumers RabbitMQConsumersConfig `mapstructure:",squash"`
-	KMS             viper.KMSConfig         `mapstructure:",squash"`
-	OTEL            viper.OTELConfig        `mapstructure:",squash"`
-	AuditWorker     AuditWorkerConfig       `mapstructure:",squash"`
+	Server             viper.ServerConfig       `mapstructure:",squash"`
+	Database           viper.DBConfig           `mapstructure:",squash"`
+	Redis              viper.RedisConfig        `mapstructure:",squash"`
+	RabbitMQ           viper.RabbitMQConfig     `mapstructure:",squash"`
+	S3                 viper.S3Config           `mapstructure:",squash"`
+	HMAC               IdentityHMACConfig       `mapstructure:",squash"`
+	RabbitConsumers    RabbitMQConsumersConfig  `mapstructure:",squash"`
+	KMS                viper.KMSConfig          `mapstructure:",squash"`
+	OTEL               viper.OTELConfig         `mapstructure:",squash"`
+	AuditWorker        AuditWorkerConfig        `mapstructure:",squash"`
 	RegistrationWorker RegistrationWorkerConfig `mapstructure:",squash"`
-	Shutdown        time.Duration           `mapstructure:"SHUTDOWN_TIMEOUT" validate:"required"`
+	Shutdown           time.Duration            `mapstructure:"SHUTDOWN_TIMEOUT" validate:"required"`
 }
 
 func (c *Config) ToKMSServiceConfig() kms.Config {
@@ -135,6 +135,7 @@ func LoadConfigGlobal() error {
 		Algorithm: "HmacSha256",
 	})
 
+	spfViper.SetDefault("AUDIT_WORKER_ENABLED", true)
 	spfViper.SetDefault("AUDIT_WORKER_BATCH_SIZE", 200)
 	spfViper.SetDefault("AUDIT_WORKER_INTERVAL", "2s")
 	spfViper.SetDefault("AUDIT_WORKER_MAX_RETRIES", 10)
@@ -143,7 +144,6 @@ func LoadConfigGlobal() error {
 	spfViper.SetDefault("AUDIT_WORKER_CONCURRENCY", 1)
 	spfViper.SetDefault("AUDIT_WORKER_ROUTING_KEY", "audit.log.created")
 	spfViper.SetDefault("AUDIT_WORKER_SOURCE_SERVICE", "identity-service")
-	spfViper.SetDefault("AUDIT_WORKER_ENABLED", true)
 
 	// Registration worker defaults
 	spfViper.SetDefault("REGISTRATION_WORKER_ENABLED", true)

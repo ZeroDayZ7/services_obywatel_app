@@ -98,12 +98,15 @@ func main() {
 		SourceService: app.Config.AuditWorker.SourceService,
 	})
 
-	log.Info("🚀 Uruchamianie Audit Workera w tle...",
-		"batch_size", app.Config.AuditWorker.BatchSize,
-		"interval", app.Config.AuditWorker.Interval,
-	)
-
-	go auditWorker.Start(ctx)
+	if app.Config.AuditWorker.Enabled {
+		log.Info("🚀 Uruchamianie Audit Workera w tle...",
+			"batch_size", app.Config.AuditWorker.BatchSize,
+			"interval", app.Config.AuditWorker.Interval,
+		)
+		go auditWorker.Start(ctx)
+	} else {
+		log.Warn("⚠️ Audit Worker jest wyłączony (Enabled=false).")
+	}
 
 	// Initialize and optionally start Registration Worker (sends user registration events to auth)
 	registrationWorker := worker.NewRegistrationWorker(app.DB, eventPublisher, worker.RegistrationWorkerConfig{
@@ -118,7 +121,10 @@ func main() {
 	})
 
 	if app.Config.RegistrationWorker.Enabled {
-		log.Info("🚀 Uruchamianie Registration Workera w tle...")
+		log.Info("🚀 Uruchamianie Registration Workera w tle...",
+			"batch_size", app.Config.RegistrationWorker.BatchSize,
+			"interval", app.Config.RegistrationWorker.Interval,
+		)
 		go registrationWorker.Start(ctx)
 	} else {
 		log.Warn("⚠️ Registration Worker jest wyłączony (Enabled=false).")

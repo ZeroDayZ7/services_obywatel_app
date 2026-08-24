@@ -41,6 +41,7 @@ type AuditEvent struct {
 }
 
 type AuditWorkerConfig struct {
+	Enabled       bool
 	BatchSize     int
 	Interval      time.Duration
 	MaxRetries    int
@@ -306,7 +307,8 @@ func computeBackoff(attempt int, base, max time.Duration) time.Duration {
 		delay = max
 	}
 	if attempt > 0 {
-		jitter := time.Duration(rand.Int63n(int64(base)))
+		rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+		jitter := time.Duration(rng.Int63n(int64(base)))
 		delay += jitter
 	}
 	if delay > max {
@@ -434,10 +436,6 @@ func (w *AuditWorker) Shutdown() error {
 	return w.Close()
 }
 
-func init() {
-	rand.Seed(time.Now().UnixNano())
-}
-
 type noopAuditPublisher struct{}
 
 func (n *noopAuditPublisher) Publish(ctx context.Context, routingKey string, payload []byte) error {
@@ -446,5 +444,7 @@ func (n *noopAuditPublisher) Publish(ctx context.Context, routingKey string, pay
 
 func (n *noopAuditPublisher) Close() error { return nil }
 
-var _ AuditRepository = (*postgresAuditRepository)(nil)
-var _ AuditPublisher = (*noopAuditPublisher)(nil)
+var (
+	_ AuditRepository = (*postgresAuditRepository)(nil)
+	_ AuditPublisher  = (*noopAuditPublisher)(nil)
+)
