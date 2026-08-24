@@ -1,3 +1,4 @@
+// platform/services/auth-service/internal/consumer/citizen_consumer.go
 package consumer
 
 import (
@@ -5,40 +6,59 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/auth-service/internal/service"
 )
 
 type CitizenCreatedPayload struct {
-	CitizenID string `json:"citizen_id"`
-	Email     string `json:"email"`
+	UserID          string `json:"user_id"`
+	AgreementNumber string `json:"agreement_number"`
+	SignedAt        string `json:"signed_at"`
+}
+
+type OutboxEnvelope struct {
+	MessageID     string                `json:"message_id"`
+	AggregateID   string                `json:"aggregate_id"`
+	AggregateType string                `json:"aggregate_type"`
+	EventType     string                `json:"event_type"`
+	Payload       CitizenCreatedPayload `json:"payload"`
 }
 
 type CitizenConsumer struct {
-	userService service.UserService
-	log         *shared.Logger
+	consumerService service.ConsumerService
+	log             *shared.Logger
 }
 
-func NewCitizenConsumer(userService service.UserService) *CitizenConsumer {
+func NewCitizenConsumer(consumerService service.ConsumerService) *CitizenConsumer {
 	return &CitizenConsumer{
-		userService: userService,
-		log:         shared.GetLogger(),
+		consumerService: consumerService,
+		log:             shared.GetLogger(),
 	}
 }
 
 func (c *CitizenConsumer) HandleCitizenCreated(ctx context.Context, headers amqp.Table, body []byte) error {
-	c.log.Info("📨 Odebrano zdarzenie utworzenia obywatela przez RabbitMQ", "body", string(body))
+	c.log.Info("📨 Odebrano zdarzenie utworzenia obywatela przez RabbitMQ")
 
-	var payload CitizenCreatedPayload
-	if err := json.Unmarshal(body, &payload); err != nil {
-		c.log.Error("❌ Błąd unmarshalingu payloadu zdarzenia", "error", err)
-		return fmt.Errorf("unmarshal event failed: %w", err)
+	var envelope OutboxEnvelope
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		c.log.Error("❌ Błąd unmarshalingu koperty Outbox", "error", err)
+		return fmt.Errorf("unmarshal envelope failed: %w", err)
 	}
 
-	c.log.Info("👤 Przetwarzanie rejestracji obywatela", "citizen_id", payload.CitizenID, "email", payload.Email)
+	// Konwersja ID z stringa na UUID
+	citizenUUID, err := uuid.Parse(envelope.Payload.UserID)
+	if err != nil {
+		c.log.Error("❌ Niepoprawny format UUID obywatela w payloadzie", "user_id", envelope.Payload.UserID, "error", err)
+		return fmt.Errorf("invalid citizen uuid: %w", err)
+	}
 
-	// Wywołanie metody w serwisie biznesowym
-	// return c.userService.CreateUserFromCitizen(ctx, payload.CitizenID, payload.Email)
+	// Wywołanie dedykowanego serwisu dla konsumera
+	err = c.consumerService.CreateCitizenAccountFromEvent(ctx, citizenUUID, envelope.Payload.AgreementNumber)
+	if err != nil {
+		return err // Zwrócenie błędu spowoduje Nack / ponowienie w RabbitMQ
+	}
+
 	return nil
 }

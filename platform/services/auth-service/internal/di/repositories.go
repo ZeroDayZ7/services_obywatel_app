@@ -11,6 +11,7 @@ type Repositories struct {
 	UserRepo         repo.UserRepository
 	RefreshTokenRepo repo.RefreshTokenRepository
 	EmployeeRepo     repo.EmployeeRepository
+	ConsumerRepo     repo.ConsumerRepository
 }
 
 func NewRepositories(db *gorm.DB) *Repositories {
@@ -18,5 +19,6 @@ func NewRepositories(db *gorm.DB) *Repositories {
 		UserRepo:         repoDB.NewUserRepository(db),
 		RefreshTokenRepo: repoDB.NewRefreshTokenRepository(db),
 		EmployeeRepo:     repoDB.NewEmployeeRepository(db),
+		ConsumerRepo:     repoDB.NewConsumerRepository(db), // DODANE
 	}
 }

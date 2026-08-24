@@ -1,3 +1,4 @@
+// services_obywatel_app\platform\pkg\rabbitmq\rabbitmq.go
 package rabbitmq
 
 import (

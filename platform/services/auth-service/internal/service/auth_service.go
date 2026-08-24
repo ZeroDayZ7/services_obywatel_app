@@ -14,7 +14,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/pkg/constants"
 	"github.com/zerodayz7/platform/pkg/errors"
-	"github.com/zerodayz7/platform/pkg/rabbitmq"
 	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/schemas"
 	"github.com/zerodayz7/platform/pkg/security"
@@ -44,12 +43,11 @@ type AuthService interface {
 // region struct
 type authService struct {
 	// Zmiana: używaj interfejsu z repozytorium
-	userRepo       repo.UserRepository
-	employeeRepo   repo.EmployeeRepository
-	refreshRepo    repo.RefreshTokenRepository
-	cache          *redis.Cache
-	eventPublisher rabbitmq.EventPublisher
-	cfg            *config.Config
+	userRepo     repo.UserRepository
+	employeeRepo repo.EmployeeRepository
+	refreshRepo  repo.RefreshTokenRepository
+	cache        *redis.Cache
+	cfg          *config.Config
 }
 
 func NewAuthService(
@@ -57,16 +55,14 @@ func NewAuthService(
 	employeeRepo repo.EmployeeRepository,
 	refreshRepo repo.RefreshTokenRepository,
 	cache *redis.Cache,
-	eventPublisher rabbitmq.EventPublisher,
 	cfg *config.Config,
 ) AuthService {
 	return &authService{
-		userRepo:       userRepo,
-		employeeRepo:   employeeRepo,
-		refreshRepo:    refreshRepo,
-		cache:          cache,
-		eventPublisher: eventPublisher,
-		cfg:            cfg,
+		userRepo:     userRepo,
+		employeeRepo: employeeRepo,
+		refreshRepo:  refreshRepo,
+		cache:        cache,
+		cfg:          cfg,
 	}
 }
 

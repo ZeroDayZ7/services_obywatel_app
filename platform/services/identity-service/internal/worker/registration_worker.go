@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/zerodayz7/platform/pkg/rabbitmq"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/services/identity-service/internal/model"
 	"github.com/zerodayz7/services/identity-service/internal/repository"
@@ -139,7 +140,7 @@ func (w *RegistrationWorker) processOnce(ctx context.Context) error {
 
 	for _, msg := range batch {
 		m := msg
-		if strings.EqualFold(m.EventType, "CitizenRegistered") || strings.EqualFold(m.EventType, "UserRegistered") {
+		if strings.HasPrefix(m.EventType, "citizen.") {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
@@ -149,8 +150,6 @@ func (w *RegistrationWorker) processOnce(ctx context.Context) error {
 					errCh <- err
 				}
 			}()
-		} else {
-			continue
 		}
 	}
 	wg.Wait()
@@ -232,7 +231,14 @@ func (w *RegistrationWorker) publishSingle(ctx context.Context, batchID uuid.UUI
 		return err
 	}
 
-	if err := w.publisher.Publish(ctx, w.cfg.RoutingKey, body); err != nil {
+	// Używamy event_type bezpośrednio z bazy jako Routing Key,
+	// a jeśli w bazie byłby pusty, bierzemy fallback z konfiguracji lub pakietu rabbitmq
+	routingKey := msg.EventType
+	if routingKey == "" {
+		routingKey = rabbitmq.TopicCitizenCreated
+	}
+
+	if err := w.publisher.Publish(ctx, routingKey, body); err != nil {
 		span.RecordError(err)
 		return err
 	}

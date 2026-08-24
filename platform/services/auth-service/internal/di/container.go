@@ -33,7 +33,7 @@ func NewContainer(
 	)
 
 	repos := NewRepositories(db)
-	services := NewServices(repos, cache, eventPublisher, cfg)
+	services := NewServices(repos, cache, cfg)
 	handlers := NewHandlers(services, cache, cfg)
 	consumers := NewConsumers(services)
 
