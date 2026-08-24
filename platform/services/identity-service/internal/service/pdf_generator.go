@@ -33,6 +33,11 @@ type AgreementTemplateData struct {
 	SignedAt        string
 	KeyVersion      int
 	DocumentHash    string
+
+	OfficerName   string
+	OfficerID     string
+	DepartmentID  string
+	InstitutionID string
 }
 
 type PDFGenerator interface {

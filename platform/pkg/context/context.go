@@ -18,6 +18,10 @@ type RequestContext struct {
 	Permissions []string
 	RiskScore   int
 	Challenge   string
+
+	InstitutionID *uuid.UUID
+	DepartmentID  *uuid.UUID
+	Username      string
 }
 
 func FromContext(ctx context.Context) (*RequestContext, bool) {

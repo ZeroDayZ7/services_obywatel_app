@@ -134,6 +134,25 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 	docHashBytes := sha256.Sum256(plaintextBytes)
 	documentHash := hex.EncodeToString(docHashBytes[:])
 
+	reqCtx, ok := reqctx.FromContext(ctx)
+
+	officerName := "System Automatyczny"
+	officerID := actorID.String()
+	departmentIDStr := "-"
+	institutionIDStr := "-"
+
+	if ok && reqCtx != nil && reqCtx.Role == "OFFICER" {
+		if reqCtx.Username != "" {
+			officerName = reqCtx.Username
+		}
+		if reqCtx.DepartmentID != nil {
+			departmentIDStr = reqCtx.DepartmentID.String()
+		}
+		if reqCtx.InstitutionID != nil {
+			institutionIDStr = reqCtx.InstitutionID.String()
+		}
+	}
+
 	templateData := AgreementTemplateData{
 		AgreementID:     agreementID.String(),
 		AgreementNumber: agreementNumber,
@@ -151,6 +170,10 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 		SignedAt:        now.Format("02.01.2006 15:04"),
 		KeyVersion:      int(encryptedPayload.KeyVersion),
 		DocumentHash:    documentHash,
+		OfficerName:     officerName,
+		OfficerID:       officerID,
+		DepartmentID:    departmentIDStr,
+		InstitutionID:   institutionIDStr,
 	}
 
 	log.DebugJSON("Pełny payload danych do generowania umowy PDF", templateData)
