@@ -22,7 +22,7 @@ type IdentityHMACConfig struct {
 	PeselKey      KeyTarget            `mapstructure:"HMAC_PESEL_KEY"`
 	PhoneKey      KeyTarget            `mapstructure:"HMAC_PHONE_KEY"`
 	EmailKey      KeyTarget            `mapstructure:"HMAC_EMAIL_KEY"`
-	 PukKey        KeyTarget            `mapstructure:"HMAC_PUK_KEY"`
+	PukKey        KeyTarget            `mapstructure:"HMAC_PUK_KEY"`
 	RabbitMQKey   KeyTarget            `mapstructure:"HMAC_RABBITMQ_KEY"`
 }
 
@@ -113,16 +113,14 @@ func LoadConfigGlobal() error {
 	})
 
 	spfViper.SetDefault("HMAC_PUK_KEY", KeyTarget{
-        TargetKey: "hmac-identity-puk-index",
-        Algorithm: "HmacSha256",
-    })
+		TargetKey: "hmac-identity-puk-index",
+		Algorithm: "HmacSha256",
+	})
 
 	spfViper.SetDefault("HMAC_RABBITMQ_KEY", KeyTarget{
 		TargetKey: "hmac-identity-rabbitmq",
 		Algorithm: "HmacSha256",
 	})
-
-
 
 	spfViper.SetDefault("AUDIT_WORKER_BATCH_SIZE", 200)
 	spfViper.SetDefault("AUDIT_WORKER_INTERVAL", "2s")

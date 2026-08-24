@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/zerodayz7/platform/pkg/httpserver"
-	"github.com/zerodayz7/platform/pkg/kms"
 	"github.com/zerodayz7/platform/pkg/rabbitmq"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/pkg/storage"
@@ -19,67 +18,6 @@ import (
 	"github.com/zerodayz7/services/identity-service/internal/worker"
 )
 
-// #region LoadSecurityKeys
-func LoadSecurityKeys(ctx context.Context, app *config.App, keyStore *httpserver.KeyStore) {
-	log := shared.GetLogger()
-	kmsCfg := app.Config.ToKMSServiceConfig()
-
-	log.Info("🔍 Sprawdzanie stanu serwisu KMS...")
-	if err := kms.HealthCheck(ctx, kmsCfg); err != nil {
-		log.Error("❌ KMS jest niedostępny podczas inicjalizacji", "error", err)
-		os.Exit(1)
-	}
-
-	loadKey := func(alias string, target config.KeyTarget) {
-		keyBytes, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, target.TargetKey, 1, target.Algorithm)
-		if err != nil {
-			log.Error("❌ Nie udało się pobrać klucza z KMS",
-				"alias", alias,
-				"target", target.TargetKey,
-				"algorithm", target.Algorithm,
-				"error", err,
-			)
-			os.Exit(1)
-		}
-
-		keyStore.SetKey(alias, keyBytes, uint32(version))
-		log.Info("✅ Klucz załadowany do KeyStore",
-			"alias", alias,
-			"target", target.TargetKey,
-			"algorithm", target.Algorithm,
-			"version", version,
-		)
-	}
-
-	// 1. Zewnętrzni nadawcy (API Gateway, BFF)
-	for senderID, keyTarget := range app.Config.HMAC.TargetKeys {
-		loadKey(senderID, keyTarget)
-	}
-
-	// 2. Zaufani nadawcy RabbitMQ
-	for senderID, keyTarget := range app.Config.RabbitConsumers.TrustedSenders {
-		loadKey(senderID, keyTarget)
-	}
-
-	// 3. Klucze wewnętrzne serwisu pobierane bezpośrednio z konfiguracji
-	internalKeys := map[string]config.KeyTarget{
-		"pesel":      app.Config.HMAC.PeselKey,
-		"rabbitmq":   app.Config.HMAC.RabbitMQKey,
-		"audit":      app.Config.HMAC.AuditKey,
-		"agreements": app.Config.HMAC.AgreementsKey,
-	}
-
-	for alias, keyTarget := range internalKeys {
-		loadKey(alias, keyTarget)
-	}
-
-	if _, _, ok := keyStore.GetKey("rabbitmq"); !ok {
-		log.Error("❌ Brak klucza RabbitMQ w KeyStore po załadowaniu z KMS")
-		os.Exit(1)
-	}
-}
-
-// #region main
 func main() {
 	log := shared.GetLogger()
 
@@ -94,9 +32,9 @@ func main() {
 	securityCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
+	// Wywołanie funkcji z pliku keys.go (ten sam pakiet main)
 	LoadSecurityKeys(securityCtx, app, keyStore)
 
-	// Pobranie klucza do podpisywania zdarzeń wychodzących w RabbitMQ z KeyStore
 	rabbitHMACKey, _, ok := keyStore.GetKey("rabbitmq")
 	if !ok {
 		log.Error("❌ Brak klucza RabbitMQ w KeyStore")
@@ -127,11 +65,7 @@ func main() {
 		}
 	}()
 
-	// =========================================================================
-	// INICJALIZACJA S3 STORAGE
-	// =========================================================================
 	var fileStorage storage.StorageClient
-
 	if app.Config.S3.Enabled {
 		log.Info("S3 Storage is ENABLED. Connecting...")
 		s3, err := storage.NewS3Storage(

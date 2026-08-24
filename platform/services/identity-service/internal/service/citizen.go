@@ -21,6 +21,7 @@ import (
 	"github.com/zerodayz7/services/identity-service/internal/repository"
 )
 
+// #region Interface
 type CitizenService interface {
 	RegisterCitizen(ctx context.Context, payload model.CitizenPayload) (*model.RegisterCitizenResponse, error)
 	GetCitizenByID(ctx context.Context, userID uuid.UUID) (*model.CitizenPayload, error)
@@ -36,10 +37,10 @@ type citizenService struct {
 	hmacPhoneSecret    []byte
 	hmacEmailSecret    []byte
 	hmacPukSecret      []byte
-	dataKeyAlias       string // Klucz do głównego payloadu obywatela
-	agreementsKeyAlias string // Klucz do umów PDF
-	phoneKeyAlias      string // <- NOWE: Klucz KMS do szyfrowania telefonu (2FA)
-	emailKeyAlias      string // <- NOWE: Klucz KMS do szyfrowania e-maila (2FA)
+	dataKeyAlias       string
+	agreementsKeyAlias string
+	phoneKeyAlias      string
+	emailKeyAlias      string
 }
 
 func NewCitizenService(
@@ -75,12 +76,21 @@ func NewCitizenService(
 // #region RegisterCitizen
 func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.CitizenPayload) (*model.RegisterCitizenResponse, error) {
 	log := shared.GetLogger()
+	log.Debug("🔍 Przed obliczeniem haszy",
+		"pesel_raw_len", len(payload.PESEL),
+		"email_raw_len", len(payload.Email),
+		"phone_raw_len", len(payload.PhoneNumber),
+	)
 
 	peselHash := hex.EncodeToString(reqctx.ComputeMAC([]byte(payload.PESEL), s.hmacPeselSecret))
-
 	emailHash := hex.EncodeToString(reqctx.ComputeMAC([]byte(payload.Email), s.hmacEmailSecret))
-
 	phoneHash := hex.EncodeToString(reqctx.ComputeMAC([]byte(payload.PhoneNumber), s.hmacPhoneSecret))
+
+	log.Debug("✅ Po obliczeniu haszy",
+		"pesel_hash", peselHash,
+		"email_hash", emailHash,
+		"phone_hash", phoneHash,
+	)
 
 	existingCitizen, err := s.repo.GetByPESELHash(ctx, peselHash)
 	if err != nil {
