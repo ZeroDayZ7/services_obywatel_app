@@ -235,7 +235,6 @@ func (s *authService) AttemptLoginStep2(ctx context.Context, userIDStr string, s
 	}, nil
 }
 
-// region UnpairDevice
 // #region UnpairDevice
 func (s *authService) UnpairDevice(ctx context.Context, userID uuid.UUID, deviceFingerprint, sessionID string, req schemas.UnpairDeviceRequest) error {
 	log := shared.GetLogger()
@@ -268,6 +267,8 @@ func (s *authService) UnpairDevice(ctx context.Context, userID uuid.UUID, device
 }
 
 // #region VerifyDeviceSignature
+//
+//
 func (s *authService) VerifyDeviceSignature(ctx context.Context, userIDStr, sessionID, signature, fingerprint string) (*http.LoginResponse, error) {
 	log := shared.GetLogger()
 

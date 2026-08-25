@@ -155,6 +155,8 @@ func (s *authService) createChallengeSession(ctx context.Context, userID uuid.UU
 }
 
 // #region verifyChallengeSession
+//
+// Weryfikacja challenge session
 func (s *authService) verifyChallengeSession(ctx context.Context, sessionID string, signatureB64 string, pubKeyBytes []byte) error {
 	log := shared.GetLogger()
 
