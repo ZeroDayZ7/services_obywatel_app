@@ -123,4 +123,5 @@ var (
 	ErrInvalidResetCode     = newErr("INVALID_RESET_CODE", Validation, "Nieprawidłowy kod resetujący.")
 	ErrUntrustedDevice      = newErr("UNTRUSTED_DEVICE", Unauthorized, "To urządzenie nie jest zaufane.")
 	ErrInvalidSignature     = newErr("INVALID_SIGNATURE", Unauthorized, "Nieprawidłowy podpis bezpieczeństwa.")
+	ErrChallengeExpired     = newErr("CHALLENGE_EXPIRED", Unauthorized, "Sesja wyzwania wygasła lub nie istnieje.")
 )

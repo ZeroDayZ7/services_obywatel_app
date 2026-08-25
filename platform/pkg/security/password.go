@@ -1,3 +1,5 @@
+// cmdr: security\password.go
+
 package security
 
 import (

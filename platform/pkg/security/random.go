@@ -1,3 +1,5 @@
+// cmdr: security\random.go
+
 package security
 
 import (

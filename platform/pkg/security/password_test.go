@@ -1,3 +1,5 @@
+// cmdr: security\password_test.go
+
 package security_test
 
 import (
