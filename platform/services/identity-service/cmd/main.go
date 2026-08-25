@@ -15,6 +15,7 @@ import (
 	"github.com/zerodayz7/services/identity-service/config"
 	"github.com/zerodayz7/services/identity-service/internal/di"
 	"github.com/zerodayz7/services/identity-service/internal/router"
+	"github.com/zerodayz7/services/identity-service/internal/security"
 	"github.com/zerodayz7/services/identity-service/internal/worker"
 )
 
@@ -33,20 +34,24 @@ func main() {
 	securityCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	// Wywołanie funkcji z pliku keys.go (ten sam pakiet main)
-	LoadSecurityKeys(securityCtx, app, keyStore)
-
-	rabbitHMACKey, _, ok := keyStore.GetKey("rabbitmq")
-	if !ok {
-		log.Error("❌ Brak klucza RabbitMQ w KeyStore")
+	// Załaduj klucze bezpieczeństwa z KMS do KeyStore
+	if err := security.LoadSecurityKeys(securityCtx, app, keyStore); err != nil {
+		log.Error("❌ Błąd ładowania kluczy bezpieczeństwa", "error", err)
 		os.Exit(1)
 	}
 
-	var err error
 	var eventPublisher rabbitmq.EventPublisher
+	var err error
 
 	if app.Config.RabbitMQ.Enabled {
 		log.Info("RabbitMQ is ENABLED. Connecting...")
+
+		rabbitHMACKey, _, ok := keyStore.GetKey("rabbitmq")
+		if !ok {
+			log.Error("❌ Brak klucza RabbitMQ w KeyStore")
+			os.Exit(1)
+		}
+
 		eventPublisher, err = rabbitmq.NewLivePublisher(
 			app.Config.RabbitMQ.GetURL(),
 			app.Config.Server.AppName,
@@ -60,6 +65,7 @@ func main() {
 		log.Warn("RabbitMQ is DISABLED. Fallback to No-Op Driver.")
 		eventPublisher = rabbitmq.NewNoOpPublisher()
 	}
+
 	defer func() {
 		if err := eventPublisher.Close(); err != nil {
 			log.Error("Błąd podczas zamykania połączenia z RabbitMQ", "error", err)
