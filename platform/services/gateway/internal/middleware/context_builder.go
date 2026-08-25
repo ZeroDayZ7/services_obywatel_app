@@ -13,6 +13,7 @@ import (
 	"github.com/zerodayz7/platform/services/gateway/internal/di"
 )
 
+//#region ContextBuilder
 func ContextBuilder(container *di.Container) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		log := shared.GetLogger()

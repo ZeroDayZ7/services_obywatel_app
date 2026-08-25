@@ -6,6 +6,7 @@ import (
 	gwMiddleware "github.com/zerodayz7/platform/services/gateway/internal/middleware"
 )
 
+//#region RegisterWsRoutes
 func RegisterWsRoutes(app *fiber.App, container *di.Container) {
 	app.Get(
 		"/ws/messaging",

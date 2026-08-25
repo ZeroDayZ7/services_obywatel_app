@@ -31,6 +31,7 @@ type CitizenConsumer struct {
 	log             *shared.Logger
 }
 
+//#region NewCitizenConsumer
 func NewCitizenConsumer(consumerService service.ConsumerService) *CitizenConsumer {
 	return &CitizenConsumer{
 		consumerService: consumerService,
@@ -38,6 +39,7 @@ func NewCitizenConsumer(consumerService service.ConsumerService) *CitizenConsume
 	}
 }
 
+//#region HandleCitizenCreated
 func (c *CitizenConsumer) HandleCitizenCreated(ctx context.Context, headers amqp.Table, body []byte) error {
 	c.log.Info("📨 Odebrano zdarzenie utworzenia obywatela przez RabbitMQ")
 

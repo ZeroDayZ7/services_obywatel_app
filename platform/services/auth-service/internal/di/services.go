@@ -14,6 +14,7 @@ type Services struct {
 	ConsumerService      service.ConsumerService
 }
 
+//#region NewServices
 func NewServices(
 	repos *Repositories,
 	cache *redis.Cache,

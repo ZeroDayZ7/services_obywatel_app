@@ -50,6 +50,7 @@ type authService struct {
 	cfg          *config.Config
 }
 
+//#region NewAuthService
 func NewAuthService(
 	userRepo repo.UserRepository,
 	employeeRepo repo.EmployeeRepository,
@@ -66,7 +67,7 @@ func NewAuthService(
 	}
 }
 
-// #region AttemptLoginStep2
+//#region AttemptLoginStep2
 func (s *authService) AttemptLoginStep2(ctx context.Context, userIDStr string, sessionID string, signature string, fingerprint string, clientIP string) (*http.LoginResponse, error) {
 	log := shared.GetLogger()
 
@@ -240,6 +241,7 @@ func (s *authService) AttemptLoginStep2(ctx context.Context, userIDStr string, s
 }
 
 // region UnpairDevice
+//#region UnpairDevice
 func (s *authService) UnpairDevice(ctx context.Context, userID uuid.UUID, deviceFingerprint, sessionID string, req schemas.UnpairDeviceRequest) error {
 	log := shared.GetLogger()
 
@@ -271,6 +273,7 @@ func (s *authService) UnpairDevice(ctx context.Context, userID uuid.UUID, device
 }
 
 // region VerifyDeviceSignature
+//#region VerifyDeviceSignature
 func (s *authService) VerifyDeviceSignature(ctx context.Context, userIDStr, sessionID, signature, fingerprint string) (*http.LoginResponse, error) {
 	log := shared.GetLogger()
 
@@ -362,6 +365,7 @@ func (s *authService) VerifyDeviceSignature(ctx context.Context, userIDStr, sess
 }
 
 // region RefreshToken
+//#region RefreshToken
 func (s *authService) RefreshToken(ctx context.Context, tokenStr string, fingerprint string) (*http.RefreshResponse, error) {
 	log := shared.GetLogger()
 
@@ -449,6 +453,7 @@ func (s *authService) RefreshToken(ctx context.Context, tokenStr string, fingerp
 }
 
 // region RegisterDevice
+//#region RegisterDevice
 func (s *authService) RegisterDevice(ctx context.Context, userID uuid.UUID, sessionID string, clientIP string, req schemas.RegisterDeviceRequest) (*http.RegisterDeviceResponse, error) {
 	log := shared.GetLogger()
 
@@ -673,6 +678,7 @@ func (s *authService) RegisterDevice(ctx context.Context, userID uuid.UUID, sess
 }
 
 // region Logout
+//#region Logout
 func (s *authService) Logout(ctx context.Context, userID uuid.UUID, sessionID string, fingerprint string) error {
 	log := shared.GetLogger()
 
@@ -706,6 +712,7 @@ func (s *authService) Logout(ctx context.Context, userID uuid.UUID, sessionID st
 }
 
 // region Verify2FA
+//#region Verify2FA
 func (s *authService) Verify2FA(ctx context.Context, token string, code []byte, fingerprint string, ip string) (*http.Verify2FAResponse, error) {
 	log := shared.GetLogger()
 
@@ -793,7 +800,7 @@ func (s *authService) Verify2FA(ctx context.Context, token string, code []byte, 
 	return response, nil
 }
 
-// #region RESEND 2FA
+//#region Resend2FACode
 func (s *authService) Resend2FACode(ctx context.Context, email string, token string) error {
 	log := shared.GetLogger()
 
@@ -849,6 +856,7 @@ func (s *authService) Resend2FACode(ctx context.Context, email string, token str
 }
 
 // region AttemptLogin
+//#region AttemptLogin
 func (s *authService) AttemptLogin(ctx context.Context, email string, password []byte, fingerprint string) (*http.LoginResponse, error) {
 	defer func() {
 		if len(password) > 0 {
@@ -901,6 +909,7 @@ func (s *authService) AttemptLogin(ctx context.Context, email string, password [
 }
 
 // region prepareEmployeeLogin
+//#region prepareEmployeeLogin
 func (s *authService) prepareEmployeeLogin(ctx context.Context, user *model.User, fingerprint string) (*http.LoginResponse, error) {
 	log := shared.GetLogger()
 
@@ -947,6 +956,7 @@ func (s *authService) prepareEmployeeLogin(ctx context.Context, user *model.User
 }
 
 // region createChallengeSession
+//#region createChallengeSession
 func (s *authService) createChallengeSession(ctx context.Context, userID uuid.UUID, fingerprint string) (setupToken string, sessionID string, challenge string, err error) {
 	log := shared.GetLogger()
 
@@ -971,6 +981,7 @@ func (s *authService) createChallengeSession(ctx context.Context, userID uuid.UU
 }
 
 // region prepare2FASession
+//#region prepare2FASession
 func (s *authService) prepare2FASession(ctx context.Context, user *model.User, fingerprint string) (*http.LoginResponse, error) {
 	log := shared.GetLogger()
 	// 1. Generujemy 6-cyfrowy kod (bezpiecznie)
@@ -1022,6 +1033,7 @@ func (s *authService) prepare2FASession(ctx context.Context, user *model.User, f
 }
 
 // region finalizeLogin
+//#region finalizeLogin
 func (s *authService) finalizeLogin(ctx context.Context, user *model.User, fingerprint string) (*http.LoginResponse, error) {
 	accessToken, sessionID, err := s.CreateAccessToken(ctx, user.ID, fingerprint)
 	if err != nil {
@@ -1055,6 +1067,7 @@ func (s *authService) finalizeLogin(ctx context.Context, user *model.User, finge
 }
 
 // region UpdatePassword
+//#region UpdatePassword
 func (s *authService) UpdatePassword(ctx context.Context, userID uuid.UUID, newPassword string) error {
 	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil || user == nil {
@@ -1081,6 +1094,7 @@ func (s *authService) UpdatePassword(ctx context.Context, userID uuid.UUID, newP
 }
 
 // region CreateAccessToken
+//#region CreateAccessToken
 func (s *authService) CreateAccessToken(ctx context.Context, userID uuid.UUID, fingerprint string) (string, string, error) {
 	sessionID := shared.GenerateSessionID()
 	claims := jwt.MapClaims{
@@ -1099,6 +1113,7 @@ func (s *authService) CreateAccessToken(ctx context.Context, userID uuid.UUID, f
 }
 
 // region CreateSetupToken
+//#region CreateSetupToken
 func (s *authService) CreateSetupToken(ctx context.Context, userID uuid.UUID, fingerprint string) (string, string, error) {
 	sessionID := shared.GenerateSessionID()
 	claims := jwt.MapClaims{
@@ -1119,6 +1134,7 @@ func (s *authService) CreateSetupToken(ctx context.Context, userID uuid.UUID, fi
 }
 
 // region CreateRefreshToken
+//#region CreateRefreshToken
 func (s *authService) CreateRefreshToken(userID uuid.UUID, fingerprint string, deviceID *uuid.UUID) (*model.RefreshToken, error) {
 	rawToken, err := security.GenerateRefreshToken()
 	if err != nil {
@@ -1143,6 +1159,7 @@ func (s *authService) CreateRefreshToken(userID uuid.UUID, fingerprint string, d
 }
 
 // region RevokeRefreshToken
+//#region RevokeRefreshToken
 func (s *authService) RevokeRefreshToken(token string) error {
 	rt, err := s.refreshRepo.GetByToken(token)
 	if err != nil {
@@ -1153,6 +1170,7 @@ func (s *authService) RevokeRefreshToken(token string) error {
 }
 
 // region Register
+//#region Register
 func (s *authService) Register(username, email, rawPassword string) (*model.User, error) {
 	passBytes := []byte(rawPassword)
 	defer clear(passBytes)
@@ -1178,6 +1196,7 @@ func (s *authService) Register(username, email, rawPassword string) (*model.User
 }
 
 // region RegisterUserDevice
+//#region RegisterUserDevice
 func (s *authService) RegisterUserDevice(ctx context.Context, userID uuid.UUID, fingerprint, publicKey, deviceName, platform string, isVerified bool, lastIp string) error {
 	device := model.UserDevice{
 		UserID: userID, DeviceFingerprint: fingerprint, PublicKey: publicKey,
@@ -1188,6 +1207,7 @@ func (s *authService) RegisterUserDevice(ctx context.Context, userID uuid.UUID, 
 }
 
 // region CanUserLogin
+//#region CanUserLogin
 func (s *authService) CanUserLogin(user *model.User) error {
 	// 1. Najpierw sprawdzamy statusy stałe
 	switch user.Status {
@@ -1225,6 +1245,7 @@ func (s *authService) CanUserLogin(user *model.User) error {
 }
 
 // region handleFailedLogin
+//#region handleFailedLogin
 func (s *authService) handleFailedLogin(ctx context.Context, userID uuid.UUID) error {
 	log := shared.GetLogger()
 
@@ -1242,6 +1263,7 @@ func (s *authService) handleFailedLogin(ctx context.Context, userID uuid.UUID) e
 }
 
 // region preparePreTrustSession
+//#region preparePreTrustSession
 func (s *authService) preparePreTrustSession(ctx context.Context, user *model.User, publicKey string, fingerprint string) (*http.LoginResponse, error) {
 	log := shared.GetLogger()
 

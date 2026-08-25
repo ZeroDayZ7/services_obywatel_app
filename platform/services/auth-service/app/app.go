@@ -11,6 +11,7 @@ import (
 	"github.com/zerodayz7/platform/services/auth-service/internal/di"
 )
 
+//#region NewAuthApp
 func NewAuthApp(container *di.Container) *fiber.App {
 	cfg := container.Config.Server
 

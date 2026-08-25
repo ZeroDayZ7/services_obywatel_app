@@ -6,6 +6,7 @@ import (
 	rdy "github.com/zerodayz7/platform/pkg/redis"
 )
 
+//#region GetMeHandler
 func GetMeHandler(c *fiber.Ctx) error {
 	sess, ok := c.Locals("userSession").(rdy.UserSession)
 	if !ok {

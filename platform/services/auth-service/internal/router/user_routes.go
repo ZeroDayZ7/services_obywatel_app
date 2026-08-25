@@ -6,6 +6,7 @@ import (
 	"github.com/zerodayz7/platform/services/auth-service/internal/handler"
 )
 
+//#region SetupUserRoutes
 func SetupUserRoutes(app *fiber.App, h *handler.UserHandler) {
 	user := app.Group("/user")
 	user.Use(shared.GetLimiter(shared.LimitUsers, nil))

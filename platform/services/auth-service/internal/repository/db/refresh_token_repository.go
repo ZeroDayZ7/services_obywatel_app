@@ -17,16 +17,19 @@ type RefreshTokenRepository struct {
 	DB *gorm.DB
 }
 
+//#region NewRefreshTokenRepository
 func NewRefreshTokenRepository(db *gorm.DB) *RefreshTokenRepository {
 	return &RefreshTokenRepository{DB: db}
 }
 
 // region Save
+//#region Save
 func (r *RefreshTokenRepository) Save(rt *model.RefreshToken) error {
 	return r.DB.Create(rt).Error
 }
 
 // region Get
+//#region Get
 func (r *RefreshTokenRepository) Get(token string) (*model.RefreshToken, error) {
 	var rt model.RefreshToken
 	err := r.DB.Where("token = ? AND revoked = false AND expires_at > ?", token, time.Now()).First(&rt).Error
@@ -37,11 +40,13 @@ func (r *RefreshTokenRepository) Get(token string) (*model.RefreshToken, error) 
 }
 
 // region Revoke
+//#region Revoke
 func (r *RefreshTokenRepository) Revoke(token string) error {
 	return r.DB.Model(&model.RefreshToken{}).Where("token = ?", token).Update("revoked", true).Error
 }
 
 // region RevokeAllUserTokens
+//#region RevokeAllUserTokens
 func (r *RefreshTokenRepository) RevokeAllUserTokens(ctx context.Context, userID uuid.UUID) error {
 	return r.DB.WithContext(ctx).
 		Model(&model.RefreshToken{}).
@@ -50,6 +55,7 @@ func (r *RefreshTokenRepository) RevokeAllUserTokens(ctx context.Context, userID
 }
 
 // region GetByToken
+//#region GetByToken
 func (r *RefreshTokenRepository) GetByToken(token string) (*model.RefreshToken, error) {
 	var rt model.RefreshToken
 	err := r.DB.Where("token = ?", token).First(&rt).Error
@@ -60,11 +66,13 @@ func (r *RefreshTokenRepository) GetByToken(token string) (*model.RefreshToken, 
 }
 
 // region Update
+//#region Update
 func (r *RefreshTokenRepository) Update(rt *model.RefreshToken) error {
 	return r.DB.Save(rt).Error
 }
 
 // region GetSessions
+//#region GetSessions
 func (r *RefreshTokenRepository) GetSessions(ctx context.Context, userID uuid.UUID) ([]model.UserSessionDTO, error) {
 	var results []model.UserSessionDTO
 
@@ -87,6 +95,7 @@ func (r *RefreshTokenRepository) GetSessions(ctx context.Context, userID uuid.UU
 }
 
 // region RevokeSession
+//#region RevokeSession
 func (r *RefreshTokenRepository) RevokeSession(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID) error { // <-- zmiana uint na uuid.UUID
 	return r.DB.WithContext(ctx).
 		Model(&model.RefreshToken{}).
@@ -95,6 +104,7 @@ func (r *RefreshTokenRepository) RevokeSession(ctx context.Context, userID uuid.
 }
 
 // region RevokeByFingerprint
+//#region RevokeByFingerprint
 func (r *RefreshTokenRepository) RevokeByFingerprint(ctx context.Context, userID uuid.UUID, fingerprint string) error {
 	return r.DB.Model(&model.RefreshToken{}).
 		Where("user_id = ? AND device_fingerprint = ? AND revoked = ?", userID, fingerprint, false).

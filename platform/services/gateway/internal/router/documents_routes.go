@@ -9,6 +9,7 @@ import (
 
 const ServiceDocuments = "citizen-docs-service"
 
+//#region RegisterDocumentRoutes
 func RegisterDocumentRoutes(app *fiber.App, container *di.Container) {
 	target := container.Config.Services.Documents
 

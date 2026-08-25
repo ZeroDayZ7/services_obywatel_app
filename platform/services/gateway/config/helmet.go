@@ -2,6 +2,7 @@ package config
 
 import "github.com/gofiber/fiber/v2/middleware/helmet"
 
+//#region HelmetConfig
 func HelmetConfig() helmet.Config {
 	return helmet.Config{
 		XSSProtection:             "0",

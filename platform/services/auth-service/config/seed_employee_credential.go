@@ -22,6 +22,7 @@ type AngularDevCard struct {
 	UserID           string `json:"userId"`
 }
 
+//#region SeedInitialEmployeeCredential
 func SeedInitialEmployeeCredential(db *gorm.DB) error {
 	log := shared.GetLogger()
 

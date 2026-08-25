@@ -18,6 +18,7 @@ var upgrader = websocket.FastHTTPUpgrader{
 	},
 }
 
+//#region handleWSProxy
 func handleWSProxy(upstreamURL string) fiber.Handler {
 	targetWS := strings.Replace(upstreamURL, "http://", "ws://", 1)
 	targetWS = strings.Replace(targetWS, "https://", "wss://", 1)

@@ -9,6 +9,7 @@ import (
 	"github.com/zerodayz7/platform/services/auth-service/config"
 )
 
+//#region LoadSecurityKeys
 func LoadSecurityKeys(ctx context.Context, app *config.Config, keyStore *httpserver.KeyStore) ([]byte, error) {
 	log := shared.GetLogger()
 	kmsCfg := app.ToKMSServiceConfig()

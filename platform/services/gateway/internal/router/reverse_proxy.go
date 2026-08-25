@@ -16,6 +16,7 @@ import (
 	"github.com/zerodayz7/platform/services/gateway/internal/di"
 )
 
+//#region ReverseProxyFiber
 func ReverseProxyFiber(container *di.Container, target string) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		ctx, _ := c.Locals("requestContext").(*reqctx.RequestContext)
@@ -33,6 +34,7 @@ func ReverseProxyFiber(container *di.Container, target string) fiber.Handler {
 }
 
 // region ReverseProxy
+//#region ReverseProxy
 func ReverseProxy(container *di.Container, serviceID string, target string) fiber.Handler {
 	log := shared.GetLogger()
 	return func(c *fiber.Ctx) error {
@@ -84,6 +86,7 @@ func ReverseProxy(container *di.Container, serviceID string, target string) fibe
 	}
 }
 
+//#region ReverseProxySecure
 func ReverseProxySecure(container *di.Container, serviceID string, target string) fiber.Handler {
 	log := shared.GetLogger()
 
@@ -159,6 +162,7 @@ func ReverseProxySecure(container *di.Container, serviceID string, target string
 
 // --- FUNKCJE POMOCNICZE (DRY) ---
 
+//#region prepareProxyRequest
 func prepareProxyRequest(c *fiber.Ctx, target string) (*http.Request, error) {
 	body := c.Body()
 
@@ -177,6 +181,7 @@ func prepareProxyRequest(c *fiber.Ctx, target string) (*http.Request, error) {
 	return req, nil
 }
 
+//#region executeProxyRequest
 func executeProxyRequest(c *fiber.Ctx, container *di.Container, req *http.Request, log *shared.Logger) error {
 	resp, err := container.HTTPClient.Do(req)
 	if err != nil {
@@ -210,6 +215,7 @@ func executeProxyRequest(c *fiber.Ctx, container *di.Container, req *http.Reques
 	return nil
 }
 
+//#region isHopByHop
 func isHopByHop(header string) bool {
 	headers := map[string]bool{
 		"Connection":          true,

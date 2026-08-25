@@ -18,6 +18,7 @@ type Container struct {
 	KeyStore       *hmac.GatewayKeyStore
 }
 
+//#region NewContainer
 func NewContainer(
 	redisClient *redis.Client,
 	eventPublisher rabbitmq.EventPublisher,
@@ -43,6 +44,7 @@ func NewContainer(
 	}
 }
 
+//#region GetHMACKey
 func (c *Container) GetHMACKey(serviceID string) ([]byte, uint32, bool) {
 	if c.KeyStore == nil {
 		return nil, 0, false

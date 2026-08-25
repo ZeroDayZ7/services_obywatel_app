@@ -14,6 +14,7 @@ import (
 	"github.com/zerodayz7/platform/pkg/shared"
 )
 
+//#region AuthRedisMiddleware
 func AuthRedisMiddleware(rdb *redis.Client) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		log := shared.GetLogger()

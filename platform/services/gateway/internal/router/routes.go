@@ -7,6 +7,7 @@ import (
 	"github.com/zerodayz7/platform/services/gateway/internal/di"
 )
 
+//#region SetupRoutes
 func SetupRoutes(app *fiber.App, container *di.Container) {
 	services := container.Config.Services
 

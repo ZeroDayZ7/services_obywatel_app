@@ -14,6 +14,7 @@ type ResetHandler struct {
 	cache        *redis.Cache
 }
 
+//#region NewResetHandler
 func NewResetHandler(resetService service.PasswordResetService, cache *redis.Cache) *ResetHandler {
 	return &ResetHandler{
 		resetService: resetService,
@@ -21,7 +22,6 @@ func NewResetHandler(resetService service.PasswordResetService, cache *redis.Cac
 	}
 }
 
-// #region STRUCT RESET SESSION
 // ResetSession w Redis – wzór jak w 2FA
 type ResetSession struct {
 	UserID    string `json:"user_id"`
@@ -33,7 +33,7 @@ type ResetSession struct {
 	Verified  bool   `json:"verified"`
 }
 
-// #region SEND RESET CODE
+//#region SendResetCode
 func (h *ResetHandler) SendResetCode(c *fiber.Ctx) error {
 	body := c.Locals("validatedBody").(schemas.ResetPasswordRequest)
 
@@ -53,7 +53,7 @@ func (h *ResetHandler) SendResetCode(c *fiber.Ctx) error {
 	})
 }
 
-// #region VERIFY RESET CODE
+//#region VerifyResetCode
 func (h *ResetHandler) VerifyResetCode(c *fiber.Ctx) error {
 	body := c.Locals("validatedBody").(schemas.ResetCodeVerifyRequest)
 
@@ -70,7 +70,7 @@ func (h *ResetHandler) VerifyResetCode(c *fiber.Ctx) error {
 	})
 }
 
-// #region FINAL RESET PASSWORD
+//#region FinalizeReset
 func (h *ResetHandler) FinalizeReset(c *fiber.Ctx) error {
 	req, ok := c.Locals("validatedBody").(*schemas.ResetPasswordFinalRequest)
 	if !ok {

@@ -10,6 +10,7 @@ import (
 
 const ServiceAuth = "auth-service"
 
+//#region RegisterAuthRoutes
 func RegisterAuthRoutes(app *fiber.App, container *di.Container) {
 	target := container.Config.Services.Auth
 

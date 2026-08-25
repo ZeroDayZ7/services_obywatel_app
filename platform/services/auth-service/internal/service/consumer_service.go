@@ -21,6 +21,7 @@ type consumerService struct {
 	log          *shared.Logger
 }
 
+//#region NewConsumerService
 func NewConsumerService(consumerRepo repo.ConsumerRepository) ConsumerService {
 	return &consumerService{
 		consumerRepo: consumerRepo,
@@ -28,6 +29,7 @@ func NewConsumerService(consumerRepo repo.ConsumerRepository) ConsumerService {
 	}
 }
 
+//#region CreateCitizenAccountFromEvent
 func (s *consumerService) CreateCitizenAccountFromEvent(ctx context.Context, citizenID uuid.UUID, agreementNumber string) error {
 	s.log.Info("🔄 Tworzenie konta obywatela na podstawie eventu z RabbitMQ",
 		"citizen_id", citizenID,

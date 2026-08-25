@@ -5,6 +5,7 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/compress"
 )
 
+//#region CompressConfig
 func CompressConfig() compress.Config {
 	return compress.Config{
 		Level: compress.LevelBestSpeed,

@@ -7,6 +7,7 @@ import (
 )
 
 // NewJWTConfig — konfiguracja middleware JWT dla Fiber z użyciem Ed25519 (EdDSA)
+//#region NewJWTConfig
 func NewJWTConfig() jwtware.Config {
 	return jwtware.Config{
 		SigningKey: jwtware.SigningKey{
@@ -21,6 +22,7 @@ func NewJWTConfig() jwtware.Config {
 }
 
 // jwtErrorHandler — standardowa obsługa błędów JWT
+//#region jwtErrorHandler
 func jwtErrorHandler(c *fiber.Ctx, err error) error {
 	log := shared.GetLogger()
 	log.WarnObj("JWT error", err.Error())

@@ -23,6 +23,7 @@ type AuthHandler struct {
 	cfg         *config.Config
 }
 
+//#region NewAuthHandler
 func NewAuthHandler(authService service.AuthService, cache *redis.Cache, cfg *config.Config) *AuthHandler {
 	return &AuthHandler{
 		authService: authService,
@@ -31,7 +32,7 @@ func NewAuthHandler(authService service.AuthService, cache *redis.Cache, cfg *co
 	}
 }
 
-// #region LOGIN
+//#region Login
 func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(c.UserContext(), 2*time.Second)
 	defer cancel()
@@ -57,7 +58,7 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	return c.JSON(response)
 }
 
-// #region LOGIN STEP 2
+//#region LoginStep2
 func (h *AuthHandler) LoginStep2(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(c.UserContext(), 2*time.Second)
 	defer cancel()
@@ -101,7 +102,7 @@ func (h *AuthHandler) LoginStep2(c *fiber.Ctx) error {
 
 // #endregion
 
-// #region VerifyDevice
+//#region VerifyDevice
 func (h *AuthHandler) VerifyDevice(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(c.UserContext(), 2*time.Second)
 	defer cancel()
@@ -159,7 +160,7 @@ func (h *AuthHandler) VerifyDevice(c *fiber.Ctx) error {
 	return c.JSON(response)
 }
 
-// #region REGISTER DEVICE
+//#region RegisterDevice
 func (h *AuthHandler) RegisterDevice(c *fiber.Ctx) error {
 	log := shared.GetLogger()
 	ctx, cancel := context.WithTimeout(c.Context(), 5*time.Second)
@@ -187,7 +188,7 @@ func (h *AuthHandler) RegisterDevice(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(response)
 }
 
-// #region VERIFY 2 FA
+//#region Verify2FA
 func (h *AuthHandler) Verify2FA(c *fiber.Ctx) error {
 	log := shared.GetLogger()
 	body := c.Locals("validatedBody").(schemas.TwoFARequest)
@@ -219,7 +220,7 @@ func (h *AuthHandler) Verify2FA(c *fiber.Ctx) error {
 	return c.JSON(response)
 }
 
-// #region REFRESH TOKEN
+//#region RefreshToken
 func (h *AuthHandler) RefreshToken(c *fiber.Ctx) error {
 	// Używamy bezpiecznego kontekstu z timeoutem
 	ctx, cancel := context.WithTimeout(c.Context(), 3*time.Second)
@@ -241,7 +242,7 @@ func (h *AuthHandler) RefreshToken(c *fiber.Ctx) error {
 	return c.JSON(response)
 }
 
-// #region LOGOUT
+//#region Logout
 func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 	log := shared.GetLogger()
 
@@ -274,7 +275,7 @@ func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 	})
 }
 
-// #region REGISTER
+//#region Register
 func (h *AuthHandler) Register(c *fiber.Ctx) error {
 	log := shared.GetLogger()
 	body := c.Locals("validatedBody").(schemas.RegisterRequest)
@@ -303,7 +304,7 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(response)
 }
 
-// #region UNPAIR DEVICE
+//#region UnpairDevice
 func (h *AuthHandler) UnpairDevice(c *fiber.Ctx) error {
 	log := shared.GetLogger()
 
@@ -346,7 +347,7 @@ func (h *AuthHandler) UnpairDevice(c *fiber.Ctx) error {
 	})
 }
 
-// #region RESEND 2 FA
+//#region Resend2FA
 func (h *AuthHandler) Resend2FA(c *fiber.Ctx) error {
 	log := shared.GetLogger()
 	ctx, cancel := context.WithTimeout(c.Context(), 3*time.Second)

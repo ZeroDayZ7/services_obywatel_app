@@ -12,10 +12,12 @@ type OfficialHandler struct {
 	svc service.OfficialService
 }
 
+//#region NewOfficialHandler
 func NewOfficialHandler(svc service.OfficialService) *OfficialHandler {
 	return &OfficialHandler{svc: svc}
 }
 
+//#region RegisterCitizen
 func (h *OfficialHandler) RegisterCitizen(w http.ResponseWriter, r *http.Request) {
 	var req model.RegisterCitizenRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

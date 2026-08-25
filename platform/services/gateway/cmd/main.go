@@ -19,6 +19,7 @@ import (
 )
 
 // loadSecurityKeys obsługuje połączenie z KMS, health-check oraz pobieranie kluczy JWT, HMAC serwisów i opcjonalnie RabbitMQ.
+//#region loadSecurityKeys
 func loadSecurityKeys(ctx context.Context, appCfg *config.Config, keyStore *hmac.GatewayKeyStore) []byte {
 	log := shared.GetLogger()
 	kmsCfg := appCfg.ToKMSServiceConfig()
@@ -72,6 +73,7 @@ func loadSecurityKeys(ctx context.Context, appCfg *config.Config, keyStore *hmac
 	return publisherHMACKey
 }
 
+//#region main
 func main() {
 	// 0. Bootstrap logger setup
 	bootLog := shared.InitBootstrapLogger(os.Getenv("ENV"), false)

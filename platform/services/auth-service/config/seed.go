@@ -6,6 +6,7 @@ import (
 	"gorm.io/gorm"
 )
 
+//#region SeedData
 func SeedData(db *gorm.DB) error {
 	if err := SeedPermissions(db); err != nil {
 		return fmt.Errorf("permission seeding failed: %w", err)

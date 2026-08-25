@@ -8,6 +8,7 @@ import (
 	"github.com/zerodayz7/platform/services/auth-service/internal/di"
 )
 
+//#region SetupRoutes
 func SetupRoutes(app *fiber.App, container *di.Container) {
 	checker := &health.Checker{
 		Redis:   container.Redis.Client,

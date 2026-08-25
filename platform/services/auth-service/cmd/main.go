@@ -17,6 +17,7 @@ import (
 	"github.com/zerodayz7/platform/services/auth-service/internal/router"
 )
 
+//#region main
 func main() {
 	// 0. Bootstrap Logger
 	bootLog := shared.InitBootstrapLogger(os.Getenv("ENV"), false)

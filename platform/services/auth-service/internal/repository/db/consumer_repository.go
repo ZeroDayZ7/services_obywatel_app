@@ -17,10 +17,12 @@ type consumerRepository struct {
 	db *gorm.DB
 }
 
+//#region NewConsumerRepository
 func NewConsumerRepository(db *gorm.DB) ConsumerRepository {
 	return &consumerRepository{db: db}
 }
 
+//#region CreatePendingCitizen
 func (r *consumerRepository) CreatePendingCitizen(ctx context.Context, user *model.User) error {
 	if err := r.db.WithContext(ctx).Create(user).Error; err != nil {
 		return fmt.Errorf("failed to create pending citizen user account in db: %w", err)

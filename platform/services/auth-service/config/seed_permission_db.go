@@ -9,6 +9,7 @@ import (
 	"gorm.io/gorm"
 )
 
+//#region SeedPermissions
 func SeedPermissions(db *gorm.DB) error {
 	log := shared.GetLogger()
 

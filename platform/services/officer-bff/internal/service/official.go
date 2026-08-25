@@ -14,10 +14,12 @@ type OfficialService interface {
 
 type officialService struct{}
 
+//#region NewOfficialService
 func NewOfficialService() OfficialService {
 	return &officialService{}
 }
 
+//#region RegisterCitizenWorkflow
 func (s *officialService) RegisterCitizenWorkflow(ctx context.Context, req model.RegisterCitizenRequest) (*model.RegisterCitizenResponse, error) {
 	citizenID, err := uuid.NewV7()
 	if err != nil {

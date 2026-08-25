@@ -13,6 +13,7 @@ type Handlers struct {
 	UserHandler  *handler.UserHandler
 }
 
+//#region NewHandlers
 func NewHandlers(services *Services, cache *redis.Cache, cfg *config.Config) *Handlers {
 	return &Handlers{
 		AuthHandler:  handler.NewAuthHandler(services.AuthService, cache, cfg),

@@ -20,6 +20,7 @@ type Container struct {
 	Config         *config.Config
 }
 
+//#region NewContainer
 func NewContainer(
 	db *gorm.DB,
 	redisClient *redis.Client,

@@ -17,6 +17,7 @@ import (
 	"github.com/zerodayz7/platform/services/gateway/internal/middleware"
 )
 
+//#region NewGatewayApp
 func NewGatewayApp(container *di.Container) (*fiber.App, error) {
 	if container == nil {
 		return nil, fmt.Errorf("container is nil")

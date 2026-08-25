@@ -14,6 +14,7 @@ type Repositories struct {
 	ConsumerRepo     repo.ConsumerRepository
 }
 
+//#region NewRepositories
 func NewRepositories(db *gorm.DB) *Repositories {
 	return &Repositories{
 		UserRepo:         repoDB.NewUserRepository(db),
