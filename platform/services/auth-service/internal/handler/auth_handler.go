@@ -72,29 +72,40 @@ func (h *AuthHandler) LoginStep2(c *fiber.Ctx) error {
 		return apperr.SendAppError(c, apperr.ErrInvalidDeviceFingerprint)
 	}
 
-	if rc.SessionID == "" {
-		log.WarnMap("LoginStep2: Brak SessionID w kontekście żądania", map[string]any{"user_id": body.UserID})
+	if rc.SessionID == nil {
+		log.WarnMap("LoginStep2: Missing SessionID in request context", map[string]any{
+			"user_id": body.UserID,
+		})
 		return apperr.SendAppError(c, apperr.ErrUnauthorized)
+	}
+
+	parsedUserID, err := uuid.Parse(body.UserID)
+	if err != nil {
+		log.WarnMap("LoginStep2: Invalid UserID format", map[string]any{
+			"user_id": body.UserID,
+			"err":     err.Error(),
+		})
+		return apperr.SendAppError(c, apperr.ErrInvalidRequest)
 	}
 
 	response, err := h.authService.AttemptLoginStep2(
 		ctx,
-		body.UserID,
-		rc.SessionID,
+		parsedUserID,
+		*rc.SessionID,
 		body.Signature,
 		fingerprint,
 		rc.IP,
 	)
 	if err != nil {
 		log.WarnObj("Login step 2 failed", map[string]any{
-			"user_id": body.UserID,
+			"user_id": parsedUserID,
 			"err":     err.Error(),
 		})
 		return apperr.SendAppError(c, err)
 	}
 
 	log.InfoMap("Login step 2 successful", map[string]any{
-		"user_id": body.UserID,
+		"user_id": parsedUserID,
 	})
 
 	return c.JSON(response)
@@ -116,15 +127,8 @@ func (h *AuthHandler) VerifyDevice(c *fiber.Ctx) error {
 	// 2. Dane z Contextu (weryfikacja czy Middleware przekazał dane z setupTokena)
 	rc := reqctx.MustFromFiber(c)
 
-	log.InfoMap("VerifyDevice: Odebrano żądanie", map[string]any{
-		"user_id":    rc.UserID.String(),
-		"session_id": rc.SessionID,
-		"device_id":  rc.DeviceID,
-		"has_sig":    body.Signature != "",
-	})
-
 	// Sprawdzenie czy kontekst nie jest pusty
-	if rc.UserID == nil || *rc.UserID == uuid.Nil || rc.SessionID == "" || rc.DeviceID == "" {
+	if rc.UserID == nil || *rc.UserID == uuid.Nil || rc.SessionID == nil || rc.DeviceID == "" {
 		log.ErrorObj("VerifyDevice: Brak wymaganych danych w RequestContext (błąd Middleware)", map[string]any{
 			"user_id":    rc.UserID,
 			"session_id": rc.SessionID,
@@ -136,8 +140,8 @@ func (h *AuthHandler) VerifyDevice(c *fiber.Ctx) error {
 	// 3. Delegacja do serwisu
 	response, err := h.authService.VerifyDeviceSignature(
 		ctx,
-		rc.UserID.String(),
-		rc.SessionID,
+		*rc.UserID,
+		*rc.SessionID,
 		body.Signature,
 		rc.DeviceID,
 	)
@@ -161,7 +165,7 @@ func (h *AuthHandler) VerifyDevice(c *fiber.Ctx) error {
 // #region RegisterDevice
 func (h *AuthHandler) RegisterDevice(c *fiber.Ctx) error {
 	log := shared.GetLogger()
-	ctx, cancel := context.WithTimeout(c.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(c.UserContext(), 5*time.Second)
 	defer cancel()
 
 	rc := reqctx.MustFromFiber(c)
@@ -169,11 +173,18 @@ func (h *AuthHandler) RegisterDevice(c *fiber.Ctx) error {
 		return apperr.SendAppError(c, apperr.ErrUnauthorized)
 	}
 
+	if rc.SessionID == nil {
+		log.WarnMap("RegisterDevice: Missing SessionID in request context", map[string]any{
+			"user_id": *rc.UserID,
+		})
+		return apperr.SendAppError(c, apperr.ErrUnauthorized)
+	}
+
 	body := c.Locals("validatedBody").(schemas.RegisterDeviceRequest)
 	response, err := h.authService.RegisterDevice(
 		ctx,
 		*rc.UserID,
-		rc.SessionID,
+		*rc.SessionID,
 		rc.IP,
 		body,
 	)
@@ -244,28 +255,26 @@ func (h *AuthHandler) RefreshToken(c *fiber.Ctx) error {
 func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 	log := shared.GetLogger()
 
-	// Pobranie zwalidowanego kontekstu (skoro register tak robi, my też)
 	rc := reqctx.MustFromFiber(c)
 	if rc.UserID == nil {
 		return apperr.SendAppError(c, apperr.ErrUnauthorized)
 	}
 
-	// Wyciągamy sessionID z headerów (bo to specyficzny identyfikator tej konkretnej sesji)
-	sessionID := c.Get("X-Session-Id")
-	if sessionID == "" {
-		return fiber.NewError(fiber.StatusBadRequest, "Missing session ID")
+	if rc.SessionID == nil {
+		log.WarnMap("Logout: Missing SessionID in request context", map[string]any{
+			"user_id": *rc.UserID,
+		})
+		return apperr.SendAppError(c, apperr.ErrInvalidSession)
 	}
 
-	// Wywołanie serwisu z "czystymi" danymi z rc (Request Context)
-	// rc.UserID jest już typu *uuid.UUID, więc robimy dereferencję *rc.UserID
-	err := h.authService.Logout(c.Context(), *rc.UserID, sessionID, rc.DeviceID)
+	err := h.authService.Logout(c.UserContext(), *rc.UserID, *rc.SessionID, rc.DeviceID)
 	if err != nil {
 		return apperr.SendAppError(c, err)
 	}
 
 	log.InfoMap("Logout successful", map[string]any{
-		"user_id":    rc.UserID,
-		"session_id": sessionID,
+		"user_id":    *rc.UserID,
+		"session_id": *rc.SessionID,
 	})
 
 	return c.Status(fiber.StatusOK).JSON(http.LogoutResponse{
@@ -318,6 +327,13 @@ func (h *AuthHandler) UnpairDevice(c *fiber.Ctx) error {
 		return apperr.SendAppError(c, apperr.ErrInvalidDeviceFingerprint)
 	}
 
+	if rc.SessionID == nil {
+		log.WarnMap("UnpairDevice: Missing SessionID in request context", map[string]any{
+			"user_id": *rc.UserID,
+		})
+		return apperr.SendAppError(c, apperr.ErrInvalidSession)
+	}
+
 	// Opcjonalne parsowanie dodatkowych danych bezpieczeństwa z body (np. signature/timestamp)
 	var body schemas.UnpairDeviceRequest
 	if len(c.Body()) > 0 {
@@ -325,10 +341,10 @@ func (h *AuthHandler) UnpairDevice(c *fiber.Ctx) error {
 	}
 
 	// Wywołanie logiki biznesowej w usłudze
-	err := h.authService.UnpairDevice(ctx, *rc.UserID, rc.DeviceID, rc.SessionID, body)
+	err := h.authService.UnpairDevice(ctx, *rc.UserID, rc.DeviceID, *rc.SessionID, body)
 	if err != nil {
 		log.WarnObj("Unpair device failed", map[string]any{
-			"user_id":   rc.UserID,
+			"user_id":   *rc.UserID,
 			"device_id": rc.DeviceID,
 			"err":       err.Error(),
 		})
@@ -336,7 +352,7 @@ func (h *AuthHandler) UnpairDevice(c *fiber.Ctx) error {
 	}
 
 	log.InfoMap("Device unpaired successfully", map[string]any{
-		"user_id":   rc.UserID,
+		"user_id":   *rc.UserID,
 		"device_id": rc.DeviceID,
 	})
 

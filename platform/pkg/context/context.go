@@ -11,7 +11,7 @@ import (
 type RequestContext struct {
 	RequestID   string
 	UserID      *uuid.UUID
-	SessionID   string
+	SessionID   *uuid.UUID
 	DeviceID    string
 	IP          string
 	Role        string

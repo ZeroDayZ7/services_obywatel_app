@@ -126,8 +126,8 @@ func ReverseProxySecure(container *di.Container, serviceID string, target string
 		if ctx.UserID != nil {
 			req.Header.Set(constants.HeaderUserID, ctx.UserID.String())
 		}
-		if ctx.SessionID != "" {
-			req.Header.Set(constants.HeaderSessionID, ctx.SessionID)
+		if ctx.SessionID != nil {
+			req.Header.Set(constants.HeaderSessionID, ctx.SessionID.String())
 		}
 
 		if ctx.DeviceID != "" {

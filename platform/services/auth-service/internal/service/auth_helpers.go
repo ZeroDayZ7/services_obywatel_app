@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/pkg/constants"
 	"github.com/zerodayz7/platform/pkg/errors"
+	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/security"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/auth-service/internal/model"
@@ -52,29 +53,29 @@ func (s *authService) CanUserLogin(user *model.User) error {
 }
 
 // #region CreateAccessToken
-func (s *authService) CreateAccessToken(ctx context.Context, userID uuid.UUID, fingerprint string) (string, string, error) {
+func (s *authService) CreateAccessToken(ctx context.Context, userID uuid.UUID, fingerprint string) (string, uuid.UUID, error) {
 	sessionID := shared.GenerateSessionID()
 	claims := jwt.MapClaims{
-		"uid":   userID,
-		"sid":   sessionID,
+		"uid":   userID.String(),
+		"sid":   sessionID.String(),
 		"fpt":   shared.HashSHA256(fingerprint),
 		"scope": constants.ScopeAccess.String(),
 	}
 
 	token, err := security.GenerateJWTViaKMS(ctx, s.cfg.ToKMSServiceConfig(), "shared-jwt", claims, s.cfg.JWT.AccessTTL)
 	if err != nil {
-		return "", "", fmt.Errorf("auth: failed to generate access token via KMS: %w", err)
+		return "", uuid.Nil, fmt.Errorf("auth: failed to generate access token via KMS: %w", err)
 	}
 
 	return token, sessionID, nil
 }
 
 // #region CreateSetupToken
-func (s *authService) CreateSetupToken(ctx context.Context, userID uuid.UUID, fingerprint string) (string, string, error) {
+func (s *authService) CreateSetupToken(ctx context.Context, userID uuid.UUID, fingerprint string) (string, uuid.UUID, error) {
 	sessionID := shared.GenerateSessionID()
 	claims := jwt.MapClaims{
 		"uid":   userID.String(),
-		"sid":   sessionID,
+		"sid":   sessionID.String(),
 		"fpt":   shared.HashSHA256(fingerprint),
 		"scope": constants.ScopeDeviceVerify.String(),
 	}
@@ -83,7 +84,7 @@ func (s *authService) CreateSetupToken(ctx context.Context, userID uuid.UUID, fi
 
 	token, err := security.GenerateJWTViaKMS(ctx, s.cfg.ToKMSServiceConfig(), "shared-jwt", claims, setupTTL)
 	if err != nil {
-		return "", "", fmt.Errorf("auth: failed to generate setup token via KMS: %w", err)
+		return "", uuid.Nil, fmt.Errorf("auth: failed to generate setup token via KMS: %w", err)
 	}
 
 	return token, sessionID, nil
@@ -131,33 +132,31 @@ func (s *authService) handleFailedLogin(ctx context.Context, userID uuid.UUID) e
 }
 
 // #region createChallengeSession
-func (s *authService) createChallengeSession(ctx context.Context, userID uuid.UUID, fingerprint string) (setupToken string, sessionID string, challenge string, err error) {
+func (s *authService) createChallengeSession(ctx context.Context, userID uuid.UUID, fingerprint string) (setupToken string, sessionID uuid.UUID, challenge string, err error) {
 	log := shared.GetLogger()
 
 	setupToken, sessionID, err = s.CreateSetupToken(ctx, userID, fingerprint)
 	if err != nil {
 		log.ErrorObj("Failed to create setup token", err)
-		return "", "", "", errors.ErrInternal
+		return "", uuid.Nil, "", errors.ErrInternal
 	}
 
 	challenge, err = security.GenerateRandomString(32)
 	if err != nil {
 		log.ErrorObj("Failed to generate challenge", err)
-		return "", "", "", errors.ErrInternal
+		return "", uuid.Nil, "", errors.ErrInternal
 	}
 
 	if err := s.cache.SetChallenge(ctx, sessionID, challenge, 5*time.Minute); err != nil {
 		log.ErrorObj("Failed to save challenge in Redis", err)
-		return "", "", "", errors.ErrInternal
+		return "", uuid.Nil, "", errors.ErrInternal
 	}
 
 	return setupToken, sessionID, challenge, nil
 }
 
 // #region verifyChallengeSession
-//
-// Weryfikacja challenge session
-func (s *authService) verifyChallengeSession(ctx context.Context, sessionID string, signatureB64 string, pubKeyBytes []byte) error {
+func (s *authService) verifyChallengeSession(ctx context.Context, sessionID uuid.UUID, signatureB64 string, pubKeyBytes []byte) error {
 	log := shared.GetLogger()
 
 	// 1. Odczyt challenge z Redisa
@@ -178,4 +177,36 @@ func (s *authService) verifyChallengeSession(ctx context.Context, sessionID stri
 	}
 
 	return nil
+}
+
+// #region buildUserSession
+func (s *authService) buildUserSession(user *model.User, fingerprint, pubKey string) redis.UserSession {
+	var empNumber, instID, deptID string
+	var permissions []string
+
+	if user.EmployeeProfile != nil {
+		empNumber = user.EmployeeProfile.EmployeeNumber
+		if user.EmployeeProfile.InstitutionID != uuid.Nil {
+			instID = user.EmployeeProfile.InstitutionID.String()
+		}
+		if user.EmployeeProfile.DepartmentID != uuid.Nil {
+			deptID = user.EmployeeProfile.DepartmentID.String()
+		}
+		if user.EmployeeProfile.Permissions != nil {
+			permissions = user.EmployeeProfile.Permissions
+		}
+	}
+
+	return redis.UserSession{
+		UserID:         user.ID.String(),
+		Username:       user.Username,
+		Email:          user.Email,
+		Role:           string(user.Role),
+		EmployeeNumber: empNumber,
+		InstitutionID:  instID,
+		DepartmentID:   deptID,
+		Permissions:    permissions,
+		Fingerprint:    shared.HashSHA256(fingerprint),
+		PublicKey:      pubKey,
+	}
 }

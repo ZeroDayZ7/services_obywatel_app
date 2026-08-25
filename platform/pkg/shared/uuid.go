@@ -13,6 +13,6 @@ func NewUUIDv7() uuid.UUID {
 
 // GenerateSessionID
 //#region GenerateSessionID
-func GenerateSessionID() string {
-	return NewUUIDv7().String()
+func GenerateSessionID() uuid.UUID {
+	return NewUUIDv7()
 }

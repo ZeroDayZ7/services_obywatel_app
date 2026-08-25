@@ -1,12 +1,12 @@
 package middleware
 
 import (
-	"encoding/json"
 	"errors"
 	"slices"
 
 	"github.com/gofiber/fiber/v2"
 	jwt "github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"github.com/zerodayz7/platform/pkg/constants"
 	apperr "github.com/zerodayz7/platform/pkg/errors"
@@ -15,7 +15,7 @@ import (
 )
 
 //#region AuthRedisMiddleware
-func AuthRedisMiddleware(rdb *redis.Client) fiber.Handler {
+func AuthRedisMiddleware(cache *rdy.Cache) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		log := shared.GetLogger()
 		path := c.Path()
@@ -30,7 +30,6 @@ func AuthRedisMiddleware(rdb *redis.Client) fiber.Handler {
 			return apperr.SendAppError(c, apperr.ErrInvalidDeviceFingerprint)
 		}
 
-		// Haszujemy nagłówek przesłany przez klienta, aby porównywać hashe SHA-256
 		hashedClientFingerprint := shared.HashSHA256(clientFingerprint)
 
 		jwtPayload := c.Locals("user")
@@ -51,15 +50,12 @@ func AuthRedisMiddleware(rdb *redis.Client) fiber.Handler {
 			return apperr.SendAppError(c, apperr.ErrInternal)
 		}
 
-		// 1. Walidacja Token Scope (zanim odpytamy Redisa)
 		tokenScope, _ := claims["scope"].(string)
+		isDeviceVerifyPath := slices.Contains(constants.DeviceVerifyPaths, path)
 
 		expectedScope := constants.ScopeAccess.String()
-		redisPrefix := constants.SessionPrefix
-
-		if slices.Contains(constants.DeviceVerifyPaths, path) {
+		if isDeviceVerifyPath {
 			expectedScope = constants.ScopeDeviceVerify.String()
-			redisPrefix = constants.SetupSessionPrefix
 		}
 
 		if tokenScope != expectedScope {
@@ -71,41 +67,36 @@ func AuthRedisMiddleware(rdb *redis.Client) fiber.Handler {
 			return apperr.SendAppError(c, apperr.ErrUnauthorized)
 		}
 
-		sessionID, _ := claims["sid"].(string)
-		fullRedisKey := redisPrefix + sessionID
+		sessionIDStr, _ := claims["sid"].(string)
+		sessionID, err := uuid.Parse(sessionIDStr)
+		if err != nil || sessionID == uuid.Nil {
+			log.WarnMap("[AuthRedisMiddleware] Invalid or missing sid claim", map[string]any{
+				"path": path,
+				"sid":  sessionIDStr,
+			})
+			return apperr.SendAppError(c, apperr.ErrUnauthorized)
+		}
 
-		// LOG DIAGNOSTYCZNY - Sprawdzenie dokładnego klucza i scope
-		log.DebugMap("[AuthRedisMiddleware] Fetching session from Redis", map[string]any{
-			"path":           path,
-			"sid_from_jwt":   sessionID,
-			"token_scope":    tokenScope,
-			"redis_prefix":   redisPrefix,
-			"full_redis_key": fullRedisKey,
-		})
+		// UŻYCIE GOTOWYCH METOD Z PKG/REDIS
+		var session *rdy.UserSession
 
-		ctx := c.Context()
-		jsonData, err := rdb.Get(ctx, fullRedisKey).Result()
+		if isDeviceVerifyPath {
+			session, err = cache.GetSetupSession(c.Context(), sessionID)
+		} else {
+			session, err = cache.GetSession(c.Context(), sessionID)
+		}
+
 		if err != nil {
 			if errors.Is(err, redis.Nil) {
 				log.WarnMap("[AuthRedisMiddleware] Key not found in Redis", map[string]any{
-					"looked_for_key": fullRedisKey,
-					"sid":            sessionID,
-					"path":           path,
+					"sid":  sessionID,
+					"path": path,
 				})
 				return apperr.SendAppError(c, apperr.ErrSessionExpired)
 			}
 			log.ErrorMap("[AuthRedisMiddleware] Redis command error", map[string]any{
-				"key": fullRedisKey,
+				"sid": sessionID,
 				"err": err.Error(),
-			})
-			return apperr.SendAppError(c, apperr.ErrInternal)
-		}
-
-		var session rdy.UserSession
-		if err := json.Unmarshal([]byte(jsonData), &session); err != nil {
-			log.ErrorMap("[AuthRedisMiddleware] JSON unmarshal failed", map[string]any{
-				"raw_json": jsonData,
-				"err":      err.Error(),
 			})
 			return apperr.SendAppError(c, apperr.ErrInternal)
 		}
@@ -118,9 +109,8 @@ func AuthRedisMiddleware(rdb *redis.Client) fiber.Handler {
 			return apperr.SendAppError(c, apperr.ErrUntrustedDevice)
 		}
 
-		c.Locals("userID", session.UserID)
+		// Przekazujemy sesję oraz sid z JWT dalej do ContextBuilder
 		c.Locals("sessionID", sessionID)
-		c.Locals("deviceID", hashedClientFingerprint)
 		c.Locals("userSession", session)
 
 		return c.Next()

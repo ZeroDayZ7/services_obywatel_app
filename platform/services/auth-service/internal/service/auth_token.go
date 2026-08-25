@@ -87,7 +87,7 @@ func (s *authService) RefreshToken(ctx context.Context, tokenStr string, fingerp
 		Role:        string(user.Role),
 	}
 
-	if err := s.cache.SetSession(ctx, newSessionID, sessionData, s.cfg.Session.TTL); err != nil {
+	if err := s.cache.SetSession(ctx, newSessionID, &sessionData, s.cfg.Session.TTL); err != nil {
 		log.ErrorObj("Failed to save session in Redis", err)
 		return nil, errors.ErrInternal
 	}
