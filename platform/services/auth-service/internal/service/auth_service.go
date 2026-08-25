@@ -50,7 +50,7 @@ type authService struct {
 	cfg          *config.Config
 }
 
-//#region NewAuthService
+// #region NewAuthService
 func NewAuthService(
 	userRepo repo.UserRepository,
 	employeeRepo repo.EmployeeRepository,
@@ -67,7 +67,7 @@ func NewAuthService(
 	}
 }
 
-//#region AttemptLoginStep2
+// #region AttemptLoginStep2
 func (s *authService) AttemptLoginStep2(ctx context.Context, userIDStr string, sessionID string, signature string, fingerprint string, clientIP string) (*http.LoginResponse, error) {
 	log := shared.GetLogger()
 
@@ -241,7 +241,7 @@ func (s *authService) AttemptLoginStep2(ctx context.Context, userIDStr string, s
 }
 
 // region UnpairDevice
-//#region UnpairDevice
+// #region UnpairDevice
 func (s *authService) UnpairDevice(ctx context.Context, userID uuid.UUID, deviceFingerprint, sessionID string, req schemas.UnpairDeviceRequest) error {
 	log := shared.GetLogger()
 
@@ -273,7 +273,8 @@ func (s *authService) UnpairDevice(ctx context.Context, userID uuid.UUID, device
 }
 
 // region VerifyDeviceSignature
-//#region VerifyDeviceSignature
+// #region VerifyDeviceSignature
+// #region VerifyDeviceSignature
 func (s *authService) VerifyDeviceSignature(ctx context.Context, userIDStr, sessionID, signature, fingerprint string) (*http.LoginResponse, error) {
 	log := shared.GetLogger()
 
@@ -296,7 +297,7 @@ func (s *authService) VerifyDeviceSignature(ctx context.Context, userIDStr, sess
 	}
 
 	// Dekodowanie wyzwania z Base64 do surowych bajtów binarnych
-	challengeBytes, err := base64.StdEncoding.DecodeString(storedChallenge)
+	challengeBytes, err := decodeChallenge(storedChallenge)
 	if err != nil {
 		log.ErrorObj("Failed to decode challenge from Base64", err)
 		return nil, errors.ErrInvalidParams
@@ -343,11 +344,36 @@ func (s *authService) VerifyDeviceSignature(ctx context.Context, userIDStr, sess
 		return nil, errors.ErrInternal
 	}
 
-	// Zapis rozdzielonej roli i uprawnień do pełnej sesji w Redis
+	// Wyciąganie szczegółów profilu pracownika/instytucji
+	var empNumber, instID, deptID string
+	permissions := []string{}
+
+	if user.EmployeeProfile != nil {
+		empNumber = user.EmployeeProfile.EmployeeNumber
+
+		if user.EmployeeProfile.InstitutionID != uuid.Nil {
+			instID = user.EmployeeProfile.InstitutionID.String()
+		}
+		if user.EmployeeProfile.DepartmentID != uuid.Nil {
+			deptID = user.EmployeeProfile.DepartmentID.String()
+		}
+		if user.EmployeeProfile.Permissions != nil {
+			permissions = user.EmployeeProfile.Permissions
+		}
+	}
+
+	// Pełne zestawienie danych sesyjnych zapisywanych w Redis dla Gatewaya
 	sessionData := redis.UserSession{
-		UserID:      user.ID.String(),
-		Fingerprint: shared.HashSHA256(fingerprint),
-		Role:        string(user.Role),
+		UserID:         user.ID.String(),
+		Username:       user.Username,
+		Email:          user.Email,
+		Role:           string(user.Role),
+		EmployeeNumber: empNumber,
+		InstitutionID:  instID,
+		DepartmentID:   deptID,
+		Permissions:    permissions,
+		Fingerprint:    shared.HashSHA256(fingerprint),
+		PublicKey:      device.PublicKey,
 	}
 
 	if err := s.cache.SetSession(ctx, newSessionID, sessionData, s.cfg.Session.TTL); err != nil {
@@ -365,7 +391,7 @@ func (s *authService) VerifyDeviceSignature(ctx context.Context, userIDStr, sess
 }
 
 // region RefreshToken
-//#region RefreshToken
+// #region RefreshToken
 func (s *authService) RefreshToken(ctx context.Context, tokenStr string, fingerprint string) (*http.RefreshResponse, error) {
 	log := shared.GetLogger()
 
@@ -452,8 +478,7 @@ func (s *authService) RefreshToken(ctx context.Context, tokenStr string, fingerp
 	}, nil
 }
 
-// region RegisterDevice
-//#region RegisterDevice
+// #region RegisterDevice
 func (s *authService) RegisterDevice(ctx context.Context, userID uuid.UUID, sessionID string, clientIP string, req schemas.RegisterDeviceRequest) (*http.RegisterDeviceResponse, error) {
 	log := shared.GetLogger()
 
@@ -486,10 +511,13 @@ func (s *authService) RegisterDevice(ctx context.Context, userID uuid.UUID, sess
 			"received_fp": req.DeviceFingerprint,
 		})
 
-		if setupSess.Fingerprint != req.DeviceFingerprint {
+		hashedFpt := shared.HashSHA256(req.DeviceFingerprint)
+
+		if setupSess.Fingerprint != hashedFpt {
 			log.WarnMap("[RegisterDevice] Fingerprint mismatch during registration", map[string]any{
 				"expected": setupSess.Fingerprint,
 				"received": req.DeviceFingerprint,
+				"end":      hashedFpt,
 			})
 			return nil, errors.ErrInvalidDeviceFingerprint
 		}
@@ -518,12 +546,13 @@ func (s *authService) RegisterDevice(ctx context.Context, userID uuid.UUID, sess
 	})
 
 	// Dekodowanie challenge z Base64 (jeśli zapisany w Base64) lub bezpośrednia konwersja na bajty
-	challengeBytes, err := base64.StdEncoding.DecodeString(storedChallenge)
+	challengeBytes, err := decodeChallenge(storedChallenge)
 	if err != nil {
-		log.DebugMap("[RegisterDevice] Challenge is not Base64, falling back to raw bytes", map[string]any{
-			"challenge_string": storedChallenge,
+		log.ErrorMap("[RegisterDevice] Failed to decode challenge Base64", map[string]any{
+			"challenge": storedChallenge,
+			"err":       err,
 		})
-		challengeBytes = []byte(storedChallenge)
+		return nil, errors.ErrInvalidPairingData
 	}
 
 	log.DebugMap("[RegisterDevice] Decoding Public Key from Base64", map[string]any{
@@ -598,7 +627,7 @@ func (s *authService) RegisterDevice(ctx context.Context, userID uuid.UUID, sess
 	// 4. ZAPIS LUB AKTUALIZACJA URZĄDZENIA W BAZIE DANYCH
 	device := &model.UserDevice{
 		UserID:              userID,
-		DeviceFingerprint:   req.DeviceFingerprint,
+		DeviceFingerprint:   shared.HashSHA256(req.DeviceFingerprint),
 		PublicKey:           req.PublicKey,
 		DeviceNameEncrypted: req.DeviceNameEncrypted,
 		Platform:            req.Platform,
@@ -640,11 +669,34 @@ func (s *authService) RegisterDevice(ctx context.Context, userID uuid.UUID, sess
 		return nil, errors.ErrInternal
 	}
 
-	// 6. ZAPIS SESJI W REDIS
+	// 6. ZAPIS SESJI W REDIS (Pobranie pełnego kontekstu dla Gatewaya)
+	var empNumber, instID, deptID string
+	permissions := []string{}
+
+	if user.EmployeeProfile != nil {
+		empNumber = user.EmployeeProfile.EmployeeNumber
+		if user.EmployeeProfile.InstitutionID != uuid.Nil {
+			instID = user.EmployeeProfile.InstitutionID.String()
+		}
+		if user.EmployeeProfile.DepartmentID != uuid.Nil {
+			deptID = user.EmployeeProfile.DepartmentID.String()
+		}
+		if user.EmployeeProfile.Permissions != nil {
+			permissions = user.EmployeeProfile.Permissions
+		}
+	}
+
 	sessionData := redis.UserSession{
-		UserID:      user.ID.String(),
-		Fingerprint: req.DeviceFingerprint,
-		Role:        string(user.Role),
+		UserID:         user.ID.String(),
+		Username:       user.Username,
+		Email:          user.Email,
+		Role:           string(user.Role),
+		EmployeeNumber: empNumber,
+		InstitutionID:  instID,
+		DepartmentID:   deptID,
+		Permissions:    permissions,
+		Fingerprint:    shared.HashSHA256(req.DeviceFingerprint),
+		PublicKey:      req.PublicKey,
 	}
 
 	log.DebugMap("[RegisterDevice] Persisting new full session to Redis", map[string]any{
@@ -678,7 +730,7 @@ func (s *authService) RegisterDevice(ctx context.Context, userID uuid.UUID, sess
 }
 
 // region Logout
-//#region Logout
+// #region Logout
 func (s *authService) Logout(ctx context.Context, userID uuid.UUID, sessionID string, fingerprint string) error {
 	log := shared.GetLogger()
 
@@ -712,7 +764,7 @@ func (s *authService) Logout(ctx context.Context, userID uuid.UUID, sessionID st
 }
 
 // region Verify2FA
-//#region Verify2FA
+// #region Verify2FA
 func (s *authService) Verify2FA(ctx context.Context, token string, code []byte, fingerprint string, ip string) (*http.Verify2FAResponse, error) {
 	log := shared.GetLogger()
 
@@ -769,7 +821,7 @@ func (s *authService) Verify2FA(ctx context.Context, token string, code []byte, 
 
 	err = s.cache.SetSetupSession(ctx, sessionID, redis.UserSession{
 		UserID:      session.UserID,
-		Fingerprint: fingerprint,
+		Fingerprint: shared.HashSHA256(fingerprint),
 	}, s.cfg.Session.TTL)
 	if err != nil {
 		return nil, errors.ErrInternal
@@ -800,7 +852,7 @@ func (s *authService) Verify2FA(ctx context.Context, token string, code []byte, 
 	return response, nil
 }
 
-//#region Resend2FACode
+// #region Resend2FACode
 func (s *authService) Resend2FACode(ctx context.Context, email string, token string) error {
 	log := shared.GetLogger()
 
@@ -856,7 +908,7 @@ func (s *authService) Resend2FACode(ctx context.Context, email string, token str
 }
 
 // region AttemptLogin
-//#region AttemptLogin
+// #region AttemptLogin
 func (s *authService) AttemptLogin(ctx context.Context, email string, password []byte, fingerprint string) (*http.LoginResponse, error) {
 	defer func() {
 		if len(password) > 0 {
@@ -909,7 +961,7 @@ func (s *authService) AttemptLogin(ctx context.Context, email string, password [
 }
 
 // region prepareEmployeeLogin
-//#region prepareEmployeeLogin
+// #region prepareEmployeeLogin
 func (s *authService) prepareEmployeeLogin(ctx context.Context, user *model.User, fingerprint string) (*http.LoginResponse, error) {
 	log := shared.GetLogger()
 
@@ -956,7 +1008,7 @@ func (s *authService) prepareEmployeeLogin(ctx context.Context, user *model.User
 }
 
 // region createChallengeSession
-//#region createChallengeSession
+// #region createChallengeSession
 func (s *authService) createChallengeSession(ctx context.Context, userID uuid.UUID, fingerprint string) (setupToken string, sessionID string, challenge string, err error) {
 	log := shared.GetLogger()
 
@@ -981,7 +1033,7 @@ func (s *authService) createChallengeSession(ctx context.Context, userID uuid.UU
 }
 
 // region prepare2FASession
-//#region prepare2FASession
+// #region prepare2FASession
 func (s *authService) prepare2FASession(ctx context.Context, user *model.User, fingerprint string) (*http.LoginResponse, error) {
 	log := shared.GetLogger()
 	// 1. Generujemy 6-cyfrowy kod (bezpiecznie)
@@ -1032,8 +1084,7 @@ func (s *authService) prepare2FASession(ctx context.Context, user *model.User, f
 	}, nil
 }
 
-// region finalizeLogin
-//#region finalizeLogin
+// #region finalizeLogin
 func (s *authService) finalizeLogin(ctx context.Context, user *model.User, fingerprint string) (*http.LoginResponse, error) {
 	accessToken, sessionID, err := s.CreateAccessToken(ctx, user.ID, fingerprint)
 	if err != nil {
@@ -1042,10 +1093,33 @@ func (s *authService) finalizeLogin(ctx context.Context, user *model.User, finge
 
 	hashedFpt := shared.HashSHA256(fingerprint)
 
+	var empNumber, instID, deptID string
+	permissions := []string{}
+
+	if user.EmployeeProfile != nil {
+		empNumber = user.EmployeeProfile.EmployeeNumber
+
+		if user.EmployeeProfile.InstitutionID != uuid.Nil {
+			instID = user.EmployeeProfile.InstitutionID.String()
+		}
+		if user.EmployeeProfile.DepartmentID != uuid.Nil {
+			deptID = user.EmployeeProfile.DepartmentID.String()
+		}
+		if user.EmployeeProfile.Permissions != nil {
+			permissions = user.EmployeeProfile.Permissions
+		}
+	}
+
 	sessionData := redis.UserSession{
-		UserID:      user.ID.String(),
-		Fingerprint: hashedFpt,
-		Role:        string(user.Role),
+		UserID:         user.ID.String(),
+		Username:       user.Username,
+		Email:          user.Email,
+		Role:           string(user.Role),
+		EmployeeNumber: empNumber,
+		InstitutionID:  instID,
+		DepartmentID:   deptID,
+		Permissions:    permissions,
+		Fingerprint:    hashedFpt,
 	}
 
 	if err := s.cache.SetSession(ctx, sessionID, sessionData, s.cfg.Session.TTL); err != nil {
@@ -1067,7 +1141,7 @@ func (s *authService) finalizeLogin(ctx context.Context, user *model.User, finge
 }
 
 // region UpdatePassword
-//#region UpdatePassword
+// #region UpdatePassword
 func (s *authService) UpdatePassword(ctx context.Context, userID uuid.UUID, newPassword string) error {
 	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil || user == nil {
@@ -1094,7 +1168,7 @@ func (s *authService) UpdatePassword(ctx context.Context, userID uuid.UUID, newP
 }
 
 // region CreateAccessToken
-//#region CreateAccessToken
+// #region CreateAccessToken
 func (s *authService) CreateAccessToken(ctx context.Context, userID uuid.UUID, fingerprint string) (string, string, error) {
 	sessionID := shared.GenerateSessionID()
 	claims := jwt.MapClaims{
@@ -1113,7 +1187,7 @@ func (s *authService) CreateAccessToken(ctx context.Context, userID uuid.UUID, f
 }
 
 // region CreateSetupToken
-//#region CreateSetupToken
+// #region CreateSetupToken
 func (s *authService) CreateSetupToken(ctx context.Context, userID uuid.UUID, fingerprint string) (string, string, error) {
 	sessionID := shared.GenerateSessionID()
 	claims := jwt.MapClaims{
@@ -1134,7 +1208,7 @@ func (s *authService) CreateSetupToken(ctx context.Context, userID uuid.UUID, fi
 }
 
 // region CreateRefreshToken
-//#region CreateRefreshToken
+// #region CreateRefreshToken
 func (s *authService) CreateRefreshToken(userID uuid.UUID, fingerprint string, deviceID *uuid.UUID) (*model.RefreshToken, error) {
 	rawToken, err := security.GenerateRefreshToken()
 	if err != nil {
@@ -1159,7 +1233,7 @@ func (s *authService) CreateRefreshToken(userID uuid.UUID, fingerprint string, d
 }
 
 // region RevokeRefreshToken
-//#region RevokeRefreshToken
+// #region RevokeRefreshToken
 func (s *authService) RevokeRefreshToken(token string) error {
 	rt, err := s.refreshRepo.GetByToken(token)
 	if err != nil {
@@ -1170,7 +1244,7 @@ func (s *authService) RevokeRefreshToken(token string) error {
 }
 
 // region Register
-//#region Register
+// #region Register
 func (s *authService) Register(username, email, rawPassword string) (*model.User, error) {
 	passBytes := []byte(rawPassword)
 	defer clear(passBytes)
@@ -1196,7 +1270,7 @@ func (s *authService) Register(username, email, rawPassword string) (*model.User
 }
 
 // region RegisterUserDevice
-//#region RegisterUserDevice
+// #region RegisterUserDevice
 func (s *authService) RegisterUserDevice(ctx context.Context, userID uuid.UUID, fingerprint, publicKey, deviceName, platform string, isVerified bool, lastIp string) error {
 	device := model.UserDevice{
 		UserID: userID, DeviceFingerprint: fingerprint, PublicKey: publicKey,
@@ -1207,7 +1281,7 @@ func (s *authService) RegisterUserDevice(ctx context.Context, userID uuid.UUID, 
 }
 
 // region CanUserLogin
-//#region CanUserLogin
+// #region CanUserLogin
 func (s *authService) CanUserLogin(user *model.User) error {
 	// 1. Najpierw sprawdzamy statusy stałe
 	switch user.Status {
@@ -1245,7 +1319,7 @@ func (s *authService) CanUserLogin(user *model.User) error {
 }
 
 // region handleFailedLogin
-//#region handleFailedLogin
+// #region handleFailedLogin
 func (s *authService) handleFailedLogin(ctx context.Context, userID uuid.UUID) error {
 	log := shared.GetLogger()
 
@@ -1263,7 +1337,7 @@ func (s *authService) handleFailedLogin(ctx context.Context, userID uuid.UUID) e
 }
 
 // region preparePreTrustSession
-//#region preparePreTrustSession
+// #region preparePreTrustSession
 func (s *authService) preparePreTrustSession(ctx context.Context, user *model.User, publicKey string, fingerprint string) (*http.LoginResponse, error) {
 	log := shared.GetLogger()
 
@@ -1298,4 +1372,22 @@ func (s *authService) preparePreTrustSession(ctx context.Context, user *model.Us
 		SetupToken: setupToken,
 		IsTrusted:  true,
 	}, nil
+}
+
+// decodeChallenge próbuje zdekodować challenge zarówno w formacie StdBase64 jak i Base64URL
+func decodeChallenge(storedChallenge string) ([]byte, error) {
+	// 1. Zastąp znaki URL-safe na standardowy Base64
+	b64 := strings.ReplaceAll(storedChallenge, "-", "+")
+	b64 = strings.ReplaceAll(b64, "_", "/")
+
+	// 2. Uzupełnij padding '=' jeśli brakuje
+	switch len(b64) % 4 {
+	case 2:
+		b64 += "=="
+	case 3:
+		b64 += "="
+	}
+
+	// 3. Dekoduj standardowym dekoderem
+	return base64.StdEncoding.DecodeString(b64)
 }
