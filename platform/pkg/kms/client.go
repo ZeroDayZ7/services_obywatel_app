@@ -1,3 +1,5 @@
+// cmdr: kms\client.go
+
 package kms
 
 import (

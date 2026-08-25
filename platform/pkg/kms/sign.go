@@ -1,3 +1,5 @@
+// cmdr: kms\sign.go
+
 package kms
 
 import (
