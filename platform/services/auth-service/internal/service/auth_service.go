@@ -172,7 +172,7 @@ func (s *authService) AttemptLoginStep2(ctx context.Context, userID uuid.UUID, s
 		PublicKey:      cred.PublicKey,
 	}
 
-	if err := s.cache.SetSession(ctx, newSessionID, sessionData, s.cfg.Session.TTL); err != nil {
+	if err := s.cache.SetSession(ctx, newSessionID, &sessionData, s.cfg.Session.TTL); err != nil {
 		return nil, errors.ErrInternal
 	}
 
@@ -287,7 +287,7 @@ func (s *authService) RegisterDevice(ctx context.Context, userID uuid.UUID, sess
 
 // region Logout
 // #region Logout
-func (s *authService) Logout(ctx context.Context, userID uuid.UUID, sessionID string, fingerprint string) error {
+func (s *authService) Logout(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID, fingerprint string) error {
 	log := shared.GetLogger()
 
 	// 1. Pobierz sesję
@@ -375,7 +375,7 @@ func (s *authService) Verify2FA(ctx context.Context, token string, code []byte, 
 		return nil, errors.ErrInternal
 	}
 
-	err = s.cache.SetSetupSession(ctx, sessionID, redis.UserSession{
+	err = s.cache.SetSetupSession(ctx, sessionID, &redis.UserSession{
 		UserID:      session.UserID,
 		Fingerprint: shared.HashSHA256(fingerprint),
 	}, s.cfg.Session.TTL)
@@ -551,7 +551,7 @@ func (s *authService) prepareEmployeeLogin(ctx context.Context, user *model.User
 		Role:        string(user.Role),
 	}
 
-	if err := s.cache.SetSetupSession(ctx, sessionID, sessionData, 15*time.Minute); err != nil {
+	if err := s.cache.SetSetupSession(ctx, sessionID, &sessionData, 15*time.Minute); err != nil {
 		log.ErrorObj("Failed to save employee setup session in Redis", err)
 		return nil, errors.ErrInternal
 	}
@@ -564,9 +564,9 @@ func (s *authService) prepareEmployeeLogin(ctx context.Context, user *model.User
 }
 
 // region prepare2FASession
-// #region prepare2FASession
 func (s *authService) prepare2FASession(ctx context.Context, user *model.User, fingerprint string) (*http.LoginResponse, error) {
 	log := shared.GetLogger()
+
 	// 1. Generujemy 6-cyfrowy kod (bezpiecznie)
 	code, err := security.GenerateOTP(6)
 	if err != nil {
@@ -581,19 +581,19 @@ func (s *authService) prepare2FASession(ctx context.Context, user *model.User, f
 		return nil, errors.ErrInternal
 	}
 
-	// 3. Tworzymy sesję 2FA
+	// 3. Tworzymy sesję 2FA (konwersja UUID na string)
 	token := shared.GenerateSessionID()
 	session := redis.TwoFASession{
 		UserID:      user.ID.String(),
 		Email:       user.Email,
-		Token:       token,
+		Token:       token.String(),
 		CodeHash:    hashedCode,
 		Fingerprint: shared.HashSHA256(fingerprint),
 		Attempts:    0,
 	}
 
-	// 4. Zapis do Redis (Metoda sama robi Marshal i dodaje prefix klucza)
-	if err := s.cache.Set2FASession(ctx, token, session, 5*time.Minute); err != nil {
+	// 4. Zapis do Redis (przekazujemy token.String() oraz wskaźnik &session)
+	if err := s.cache.Set2FASession(ctx, token.String(), session, 5*time.Minute); err != nil {
 		log.ErrorObj("Failed to save 2FA session in Redis", err)
 		return nil, errors.ErrInternal
 	}
@@ -604,14 +604,14 @@ func (s *authService) prepare2FASession(ctx context.Context, user *model.User, f
 	// DEBUG
 	log.DebugInfo("Generated 2FA code", map[string]any{
 		"email": user.Email,
-		"token": token,
+		"token": token.String(),
 		"code":  code,
 	})
 
 	return &http.LoginResponse{
 		Type:          "2fa",
 		TwoFARequired: true,
-		TwoFAToken:    token,
+		TwoFAToken:    token.String(),
 	}, nil
 }
 
@@ -622,38 +622,9 @@ func (s *authService) finalizeLogin(ctx context.Context, user *model.User, finge
 		return nil, errors.ErrInternal
 	}
 
-	hashedFpt := shared.HashSHA256(fingerprint)
+	sessionData := s.buildUserSession(user, fingerprint, "")
 
-	var empNumber, instID, deptID string
-	permissions := []string{}
-
-	if user.EmployeeProfile != nil {
-		empNumber = user.EmployeeProfile.EmployeeNumber
-
-		if user.EmployeeProfile.InstitutionID != uuid.Nil {
-			instID = user.EmployeeProfile.InstitutionID.String()
-		}
-		if user.EmployeeProfile.DepartmentID != uuid.Nil {
-			deptID = user.EmployeeProfile.DepartmentID.String()
-		}
-		if user.EmployeeProfile.Permissions != nil {
-			permissions = user.EmployeeProfile.Permissions
-		}
-	}
-
-	sessionData := redis.UserSession{
-		UserID:         user.ID.String(),
-		Username:       user.Username,
-		Email:          user.Email,
-		Role:           string(user.Role),
-		EmployeeNumber: empNumber,
-		InstitutionID:  instID,
-		DepartmentID:   deptID,
-		Permissions:    permissions,
-		Fingerprint:    hashedFpt,
-	}
-
-	if err := s.cache.SetSession(ctx, sessionID, sessionData, s.cfg.Session.TTL); err != nil {
+	if err := s.cache.SetSession(ctx, sessionID, &sessionData, s.cfg.Session.TTL); err != nil {
 		return nil, errors.ErrInternal
 	}
 
