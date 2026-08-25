@@ -25,6 +25,7 @@ type Container struct {
 	Storage        storage.StorageClient
 }
 
+//#region BuildContainer
 func BuildContainer(
 	app *config.App,
 	eventPublisher rabbitmq.EventPublisher,

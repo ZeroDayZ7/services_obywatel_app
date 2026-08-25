@@ -54,6 +54,7 @@ type RegistrationWorker struct {
 	tracer    trace.Tracer
 }
 
+//#region normalizeRegistrationConfig
 func normalizeRegistrationConfig(cfg RegistrationWorkerConfig) RegistrationWorkerConfig {
 	if cfg.BatchSize <= 0 {
 		cfg.BatchSize = defaultRegistrationWorkerBatchSize
@@ -79,10 +80,12 @@ func normalizeRegistrationConfig(cfg RegistrationWorkerConfig) RegistrationWorke
 	return cfg
 }
 
+//#region NewRegistrationWorker
 func NewRegistrationWorker(db *pgxpool.Pool, publisher RegistrationPublisher, cfg RegistrationWorkerConfig) *RegistrationWorker {
 	return NewRegistrationWorkerWithDeps(repository.NewOutboxRepository(db), publisher, cfg)
 }
 
+//#region NewRegistrationWorkerWithDeps
 func NewRegistrationWorkerWithDeps(repo repository.OutboxRepository, publisher RegistrationPublisher, cfg RegistrationWorkerConfig) *RegistrationWorker {
 	cfg = normalizeRegistrationConfig(cfg)
 	return &RegistrationWorker{
@@ -94,6 +97,7 @@ func NewRegistrationWorkerWithDeps(repo repository.OutboxRepository, publisher R
 	}
 }
 
+//#region Start
 func (w *RegistrationWorker) Start(ctx context.Context) {
 	if w.repo == nil || w.publisher == nil {
 		w.log.Error("registration worker cannot start without repository or publisher")
@@ -116,10 +120,12 @@ func (w *RegistrationWorker) Start(ctx context.Context) {
 	}
 }
 
+//#region ProcessOnce
 func (w *RegistrationWorker) ProcessOnce(ctx context.Context) error {
 	return w.processOnce(ctx)
 }
 
+//#region processOnce
 func (w *RegistrationWorker) processOnce(ctx context.Context) error {
 	ctx, span := w.tracer.Start(ctx, "registration_worker.process_once")
 	defer span.End()
@@ -163,6 +169,7 @@ func (w *RegistrationWorker) processOnce(ctx context.Context) error {
 	return nil
 }
 
+//#region publishWithRetry
 func (w *RegistrationWorker) publishWithRetry(ctx context.Context, batchID uuid.UUID, msg model.OutboxMessage) error {
 	for attempt := 0; attempt <= w.cfg.MaxRetries; attempt++ {
 		if err := w.publishSingle(ctx, batchID, msg); err != nil {
@@ -200,6 +207,7 @@ func (w *RegistrationWorker) publishWithRetry(ctx context.Context, batchID uuid.
 	return nil
 }
 
+//#region publishSingle
 func (w *RegistrationWorker) publishSingle(ctx context.Context, batchID uuid.UUID, msg model.OutboxMessage) error {
 	ctx, span := w.tracer.Start(ctx, "registration_worker.publish")
 	defer span.End()
@@ -245,6 +253,7 @@ func (w *RegistrationWorker) publishSingle(ctx context.Context, batchID uuid.UUI
 	return nil
 }
 
+//#region Close
 func (w *RegistrationWorker) Close() error {
 	if w.publisher != nil {
 		return w.publisher.Close()
@@ -252,6 +261,7 @@ func (w *RegistrationWorker) Close() error {
 	return nil
 }
 
+//#region isRetryableRegistrationError
 func isRetryableRegistrationError(err error) bool {
 	if err == nil {
 		return false
@@ -260,6 +270,7 @@ func isRetryableRegistrationError(err error) bool {
 	return true
 }
 
+//#region computeRegistrationBackoff
 func computeRegistrationBackoff(attempt int, base, maxVal time.Duration) time.Duration {
 	multiplier := 1 << min(attempt, 30)
 	delay := base * time.Duration(multiplier)

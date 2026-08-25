@@ -9,6 +9,7 @@ type App struct {
 	DB     *pgxpool.Pool
 }
 
+//#region InitApp
 func InitApp() (*App, func()) {
 	if err := LoadConfigGlobal(); err != nil {
 		panic(err)

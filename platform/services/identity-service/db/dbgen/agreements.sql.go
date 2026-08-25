@@ -35,6 +35,7 @@ type CreateUserAgreementParams struct {
 	VerifiedVia     string     `json:"verified_via"`
 }
 
+//#region CreateUserAgreement
 func (q *Queries) CreateUserAgreement(ctx context.Context, arg CreateUserAgreementParams) (UserAgreement, error) {
 	row := q.db.QueryRow(ctx, createUserAgreement,
 		arg.ID,
@@ -90,6 +91,7 @@ type CreateUserPukCodeParams struct {
 	ExpiresAt       *time.Time `json:"expires_at"`
 }
 
+//#region CreateUserPukCode
 func (q *Queries) CreateUserPukCode(ctx context.Context, arg CreateUserPukCodeParams) (UserPukCode, error) {
 	row := q.db.QueryRow(ctx, createUserPukCode,
 		arg.ID,
@@ -124,6 +126,7 @@ SELECT id, user_id, agreement_number, s3_key, s3_bucket, encrypted_dek, encrypte
 WHERE id = $1 AND deleted_at IS NULL LIMIT 1
 `
 
+//#region GetAgreementByID
 func (q *Queries) GetAgreementByID(ctx context.Context, id uuid.UUID) (UserAgreement, error) {
 	row := q.db.QueryRow(ctx, getAgreementByID, id)
 	var i UserAgreement
@@ -152,6 +155,7 @@ SELECT id, user_id, agreement_number, s3_key, s3_bucket, encrypted_dek, encrypte
 WHERE agreement_number = $1 AND deleted_at IS NULL LIMIT 1
 `
 
+//#region GetAgreementByNumber
 func (q *Queries) GetAgreementByNumber(ctx context.Context, agreementNumber string) (UserAgreement, error) {
 	row := q.db.QueryRow(ctx, getAgreementByNumber, agreementNumber)
 	var i UserAgreement
@@ -180,6 +184,7 @@ SELECT id, user_id, agreement_number, s3_key, s3_bucket, encrypted_dek, encrypte
 WHERE user_id = $1 AND deleted_at IS NULL LIMIT 1
 `
 
+//#region GetAgreementByUserID
 func (q *Queries) GetAgreementByUserID(ctx context.Context, userID uuid.UUID) (UserAgreement, error) {
 	row := q.db.QueryRow(ctx, getAgreementByUserID, userID)
 	var i UserAgreement
@@ -208,6 +213,7 @@ SELECT id, user_agreement_id, user_id, puk_hash, status, failed_attempts, max_at
 WHERE user_id = $1 AND deleted_at IS NULL LIMIT 1
 `
 
+//#region GetPukCodeByUserID
 func (q *Queries) GetPukCodeByUserID(ctx context.Context, userID uuid.UUID) (UserPukCode, error) {
 	row := q.db.QueryRow(ctx, getPukCodeByUserID, userID)
 	var i UserPukCode
@@ -236,6 +242,7 @@ SET failed_attempts = failed_attempts + 1,
 WHERE id = $1 AND deleted_at IS NULL
 `
 
+//#region IncrementPukFailedAttempts
 func (q *Queries) IncrementPukFailedAttempts(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, incrementPukFailedAttempts, id)
 	return err
@@ -247,6 +254,7 @@ SET status = 'USED', used_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
 WHERE id = $1 AND deleted_at IS NULL
 `
 
+//#region MarkPukAsUsed
 func (q *Queries) MarkPukAsUsed(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, markPukAsUsed, id)
 	return err
@@ -264,6 +272,7 @@ type UpdateAgreementStatusParams struct {
 	VerifiedAt *time.Time `json:"verified_at"`
 }
 
+//#region UpdateAgreementStatus
 func (q *Queries) UpdateAgreementStatus(ctx context.Context, arg UpdateAgreementStatusParams) error {
 	_, err := q.db.Exec(ctx, updateAgreementStatus, arg.ID, arg.Status, arg.VerifiedAt)
 	return err

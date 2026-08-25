@@ -7,6 +7,7 @@ import (
 	"github.com/zerodayz7/platform/pkg/viper"
 )
 
+//#region MustInitDB
 func MustInitDB(cfg viper.DBConfig) (*pgxpool.Pool, func()) {
 	dbPool, closeDB := database.MustInitDB(cfg)
 
@@ -17,6 +18,7 @@ func MustInitDB(cfg viper.DBConfig) (*pgxpool.Pool, func()) {
 	return dbPool, closeDB
 }
 
+//#region RunMigrations
 func RunMigrations(dsn string) error {
 	log := shared.GetLogger()
 	log.Info("Running Goose migrations for citizen-service...")

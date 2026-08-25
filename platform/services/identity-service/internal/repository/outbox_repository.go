@@ -15,6 +15,7 @@ type outboxRepository struct {
 	q      *dbgen.Queries
 }
 
+//#region NewOutboxRepository
 func NewOutboxRepository(dbPool *pgxpool.Pool) OutboxRepository {
 	return &outboxRepository{
 		dbPool: dbPool,
@@ -22,6 +23,7 @@ func NewOutboxRepository(dbPool *pgxpool.Pool) OutboxRepository {
 	}
 }
 
+//#region FetchPendingMessages
 func (r *outboxRepository) FetchPendingMessages(ctx context.Context, limit int) ([]model.OutboxMessage, error) {
 	rows, err := r.q.FetchPendingOutboxMessages(ctx, limit)
 	if err != nil {
@@ -43,10 +45,12 @@ func (r *outboxRepository) FetchPendingMessages(ctx context.Context, limit int) 
 	return messages, nil
 }
 
+//#region MarkAsSent
 func (r *outboxRepository) MarkAsSent(ctx context.Context, id uuid.UUID) error {
 	return r.q.MarkOutboxMessageAsSent(ctx, id)
 }
 
+//#region MarkAsFailed
 func (r *outboxRepository) MarkAsFailed(ctx context.Context, id uuid.UUID, maxRetries int16, lastErr string) error {
 	var lastErrPtr *string
 	if lastErr != "" {

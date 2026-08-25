@@ -18,6 +18,7 @@ import (
 	"github.com/zerodayz7/services/identity-service/internal/worker"
 )
 
+//#region main
 func main() {
 	log := shared.GetLogger()
 

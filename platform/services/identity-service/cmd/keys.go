@@ -11,6 +11,7 @@ import (
 )
 
 // LoadSecurityKeys ładuje wszystkie klucze kryptograficzne z KMS do KeyStore
+//#region LoadSecurityKeys
 func LoadSecurityKeys(ctx context.Context, app *config.App, keyStore *httpserver.KeyStore) {
 	log := shared.GetLogger()
 	kmsCfg := app.Config.ToKMSServiceConfig()

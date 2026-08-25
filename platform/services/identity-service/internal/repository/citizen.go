@@ -26,6 +26,7 @@ type citizenRepository struct {
 }
 
 // #region NewCitizenRepository
+//#region NewCitizenRepository
 func NewCitizenRepository(dbPool *pgxpool.Pool, auditHmacKey []byte) CitizenRepository {
 	return &citizenRepository{
 		dbPool:       dbPool,
@@ -37,6 +38,7 @@ func NewCitizenRepository(dbPool *pgxpool.Pool, auditHmacKey []byte) CitizenRepo
 // #endregion NewCitizenRepository
 
 // #region WithinTx
+//#region WithinTx
 func (r *citizenRepository) WithinTx(ctx context.Context, fn func(ctx context.Context) error) error {
 	tx, err := r.dbPool.Begin(ctx)
 	if err != nil {
@@ -61,6 +63,7 @@ func (r *citizenRepository) WithinTx(ctx context.Context, fn func(ctx context.Co
 // #endregion WithinTx
 
 // #region getQueries
+//#region getQueries
 func (r *citizenRepository) getQueries(ctx context.Context) *dbgen.Queries {
 	if q, ok := ctx.Value(txKey{}).(*dbgen.Queries); ok {
 		return q
@@ -71,6 +74,7 @@ func (r *citizenRepository) getQueries(ctx context.Context) *dbgen.Queries {
 // #endregion getQueries
 
 // #region Create
+//#region Create
 func (r *citizenRepository) Create(ctx context.Context, citizen *model.Citizen) error {
 	q := r.getQueries(ctx)
 	res, err := q.CreateCitizenWithAudit(ctx, dbgen.CreateCitizenWithAuditParams{
@@ -91,6 +95,7 @@ func (r *citizenRepository) Create(ctx context.Context, citizen *model.Citizen) 
 // #endregion Create
 
 // #region CreateAgreement
+//#region CreateAgreement
 func (r *citizenRepository) CreateAgreement(ctx context.Context, agreement *model.UserAgreement) error {
 	q := r.getQueries(ctx)
 	row, err := q.CreateUserAgreement(ctx, dbgen.CreateUserAgreementParams{
@@ -117,6 +122,7 @@ func (r *citizenRepository) CreateAgreement(ctx context.Context, agreement *mode
 // #endregion CreateAgreement
 
 // #region CreatePukCode
+//#region CreatePukCode
 func (r *citizenRepository) CreatePukCode(ctx context.Context, puk *model.UserPukCode) error {
 	q := r.getQueries(ctx)
 	row, err := q.CreateUserPukCode(ctx, dbgen.CreateUserPukCodeParams{
@@ -139,6 +145,7 @@ func (r *citizenRepository) CreatePukCode(ctx context.Context, puk *model.UserPu
 // #endregion CreatePukCode
 
 // #region CreateAuditLog
+//#region CreateAuditLog
 func (r *citizenRepository) CreateAuditLog(ctx context.Context, audit *model.CitizenAuditLog) error {
 	q := r.getQueries(ctx)
 
@@ -181,6 +188,7 @@ func (r *citizenRepository) CreateAuditLog(ctx context.Context, audit *model.Cit
 // #endregion CreateAuditLog
 
 // #region CreateOutboxMessage
+//#region CreateOutboxMessage
 func (r *citizenRepository) CreateOutboxMessage(ctx context.Context, outbox *model.OutboxMessage) error {
 	q := r.getQueries(ctx)
 	row, err := q.CreateOutboxMessage(ctx, dbgen.CreateOutboxMessageParams{
@@ -201,6 +209,7 @@ func (r *citizenRepository) CreateOutboxMessage(ctx context.Context, outbox *mod
 // #endregion CreateOutboxMessage
 
 // #region GetByID
+//#region GetByID
 func (r *citizenRepository) GetByID(ctx context.Context, userID uuid.UUID) (*model.Citizen, error) {
 	q := r.getQueries(ctx)
 	row, err := q.GetCitizenByUserID(ctx, userID)
@@ -223,6 +232,7 @@ func (r *citizenRepository) GetByID(ctx context.Context, userID uuid.UUID) (*mod
 // #endregion GetByID
 
 // #region GetByPESELHash
+//#region GetByPESELHash
 func (r *citizenRepository) GetByPESELHash(ctx context.Context, peselHash string) (*model.Citizen, error) {
 	q := r.getQueries(ctx)
 	row, err := q.GetCitizenByPeselHash(ctx, peselHash)
@@ -247,6 +257,7 @@ func (r *citizenRepository) GetByPESELHash(ctx context.Context, peselHash string
 // #endregion GetByPESELHash
 
 // #region GetByEmailHash
+//#region GetByEmailHash
 func (r *citizenRepository) GetByEmailHash(ctx context.Context, emailHash string) (*model.Citizen, error) {
 	q := r.getQueries(ctx)
 	row, err := q.GetCitizenByEmailHash(ctx, emailHash)
@@ -271,6 +282,7 @@ func (r *citizenRepository) GetByEmailHash(ctx context.Context, emailHash string
 // #endregion GetByEmailHash
 
 // #region GetByPhoneHash
+//#region GetByPhoneHash
 func (r *citizenRepository) GetByPhoneHash(ctx context.Context, phoneHash string) (*model.Citizen, error) {
 	q := r.getQueries(ctx)
 	row, err := q.GetCitizenByPhoneHash(ctx, phoneHash)
@@ -295,6 +307,7 @@ func (r *citizenRepository) GetByPhoneHash(ctx context.Context, phoneHash string
 // #endregion GetByPhoneHash
 
 // #region GetAgreementByID
+//#region GetAgreementByID
 func (r *citizenRepository) GetAgreementByID(ctx context.Context, agreementID uuid.UUID) (*model.UserAgreement, error) {
 	q := r.getQueries(ctx)
 	row, err := q.GetAgreementByID(ctx, agreementID)
@@ -326,6 +339,7 @@ func (r *citizenRepository) GetAgreementByID(ctx context.Context, agreementID uu
 // #endregion GetAgreementByID
 
 // #region calculateAuditHMAC
+//#region calculateAuditHMAC
 func calculateAuditHMAC(id, userID uuid.UUID, action string, actorID uuid.UUID, ipAddress, payloadHash, prevHash string, hmacSecret []byte) string {
 	// Łączymy wszystkie kluczowe pola (w tym IPAddress i PrevHash)
 	raw := fmt.Sprintf("%s:%s:%s:%s:%s:%s:%s",

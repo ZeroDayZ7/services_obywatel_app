@@ -68,12 +68,14 @@ type Config struct {
 	Shutdown           time.Duration            `mapstructure:"SHUTDOWN_TIMEOUT" validate:"required"`
 }
 
+//#region ToKMSServiceConfig
 func (c *Config) ToKMSServiceConfig() kms.Config {
 	return c.KMS.ToKMSServiceConfig()
 }
 
 var AppConfig Config
 
+//#region LoadConfigGlobal
 func LoadConfigGlobal() error {
 	log := shared.GetLogger()
 

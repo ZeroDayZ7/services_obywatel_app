@@ -28,6 +28,7 @@ type CreateOutboxMessageParams struct {
 	Status        string    `json:"status"`
 }
 
+//#region CreateOutboxMessage
 func (q *Queries) CreateOutboxMessage(ctx context.Context, arg CreateOutboxMessageParams) (OutboxMessage, error) {
 	row := q.db.QueryRow(ctx, createOutboxMessage,
 		arg.ID,
@@ -72,6 +73,7 @@ type FetchPendingOutboxMessagesRow struct {
 	RetryCount    int16     `json:"retry_count"`
 }
 
+//#region FetchPendingOutboxMessages
 func (q *Queries) FetchPendingOutboxMessages(ctx context.Context, limit int) ([]FetchPendingOutboxMessagesRow, error) {
 	rows, err := q.db.Query(ctx, fetchPendingOutboxMessages, limit)
 	if err != nil {
@@ -114,6 +116,7 @@ type MarkOutboxMessageAsFailedParams struct {
 	LastError  *string   `json:"last_error"`
 }
 
+//#region MarkOutboxMessageAsFailed
 func (q *Queries) MarkOutboxMessageAsFailed(ctx context.Context, arg MarkOutboxMessageAsFailedParams) error {
 	_, err := q.db.Exec(ctx, markOutboxMessageAsFailed, arg.ID, arg.RetryCount, arg.LastError)
 	return err
@@ -125,6 +128,7 @@ SET status = 'SENT', processed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIME
 WHERE id = $1
 `
 
+//#region MarkOutboxMessageAsSent
 func (q *Queries) MarkOutboxMessageAsSent(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, markOutboxMessageAsSent, id)
 	return err

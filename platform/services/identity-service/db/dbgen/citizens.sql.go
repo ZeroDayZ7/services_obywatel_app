@@ -34,6 +34,7 @@ type CreateCitizenWithAuditRow struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+//#region CreateCitizenWithAudit
 func (q *Queries) CreateCitizenWithAudit(ctx context.Context, arg CreateCitizenWithAuditParams) (CreateCitizenWithAuditRow, error) {
 	row := q.db.QueryRow(ctx, createCitizenWithAudit,
 		arg.UserID,
@@ -63,6 +64,7 @@ type GetCitizenByEmailHashRow struct {
 	CreatedAt     time.Time `json:"created_at"`
 }
 
+//#region GetCitizenByEmailHash
 func (q *Queries) GetCitizenByEmailHash(ctx context.Context, emailHash string) (GetCitizenByEmailHashRow, error) {
 	row := q.db.QueryRow(ctx, getCitizenByEmailHash, emailHash)
 	var i GetCitizenByEmailHashRow
@@ -93,6 +95,7 @@ type GetCitizenByPeselHashRow struct {
 	CreatedAt     time.Time `json:"created_at"`
 }
 
+//#region GetCitizenByPeselHash
 func (q *Queries) GetCitizenByPeselHash(ctx context.Context, peselHash string) (GetCitizenByPeselHashRow, error) {
 	row := q.db.QueryRow(ctx, getCitizenByPeselHash, peselHash)
 	var i GetCitizenByPeselHashRow
@@ -123,6 +126,7 @@ type GetCitizenByPhoneHashRow struct {
 	CreatedAt     time.Time `json:"created_at"`
 }
 
+//#region GetCitizenByPhoneHash
 func (q *Queries) GetCitizenByPhoneHash(ctx context.Context, phoneHash string) (GetCitizenByPhoneHashRow, error) {
 	row := q.db.QueryRow(ctx, getCitizenByPhoneHash, phoneHash)
 	var i GetCitizenByPhoneHashRow
@@ -153,6 +157,7 @@ type GetCitizenByUserIDRow struct {
 	CreatedAt     time.Time `json:"created_at"`
 }
 
+//#region GetCitizenByUserID
 func (q *Queries) GetCitizenByUserID(ctx context.Context, userID uuid.UUID) (GetCitizenByUserIDRow, error) {
 	row := q.db.QueryRow(ctx, getCitizenByUserID, userID)
 	var i GetCitizenByUserIDRow

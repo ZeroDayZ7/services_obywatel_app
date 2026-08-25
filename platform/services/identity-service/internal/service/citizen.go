@@ -43,6 +43,7 @@ type citizenService struct {
 	emailKeyAlias      string
 }
 
+//#region NewCitizenService
 func NewCitizenService(
 	repo repository.CitizenRepository,
 	cryptor *envelope.EnvelopeCryptor,
@@ -74,6 +75,7 @@ func NewCitizenService(
 }
 
 // #region RegisterCitizen
+//#region RegisterCitizen
 func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.CitizenPayload) (*model.RegisterCitizenResponse, error) {
 	log := shared.GetLogger()
 	// log.Debug("🔍 Przed obliczeniem haszy",
@@ -399,6 +401,7 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 }
 
 // #region GetCitizenByID
+//#region GetCitizenByID
 func (s *citizenService) GetCitizenByID(ctx context.Context, userID uuid.UUID) (*model.CitizenPayload, error) {
 	citizen, err := s.repo.GetByID(ctx, userID)
 	if err != nil {
@@ -437,6 +440,7 @@ func (s *citizenService) GetCitizenByID(ctx context.Context, userID uuid.UUID) (
 }
 
 // #region GenerateAndSaveAgreement
+//#region GenerateAndSaveAgreement
 func (s *citizenService) GenerateAndSaveAgreement(ctx context.Context, userID uuid.UUID, pdfBytes []byte) (*model.UserAgreement, error) {
 	encryptedPayload, err := s.cryptor.Seal(ctx, s.agreementsKeyAlias, pdfBytes)
 	if err != nil {
@@ -472,6 +476,7 @@ func (s *citizenService) GenerateAndSaveAgreement(ctx context.Context, userID uu
 }
 
 // #region DownloadAgreementPDF
+//#region DownloadAgreementPDF
 func (s *citizenService) DownloadAgreementPDF(ctx context.Context, agreementID uuid.UUID) ([]byte, error) {
 	// log := shared.GetLogger()
 	agreement, err := s.repo.GetAgreementByID(ctx, agreementID)

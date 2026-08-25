@@ -17,11 +17,13 @@ type CitizenHandler struct {
 	svc service.CitizenService
 }
 
+//#region NewCitizenHandler
 func NewCitizenHandler(svc service.CitizenService) *CitizenHandler {
 	return &CitizenHandler{svc: svc}
 }
 
 // #region Register
+//#region Register
 func (h *CitizenHandler) Register(w http.ResponseWriter, r *http.Request) {
 	log := shared.GetLogger()
 	var payload model.CitizenPayload
@@ -44,6 +46,7 @@ func (h *CitizenHandler) Register(w http.ResponseWriter, r *http.Request) {
 }
 
 // #region GetByID
+//#region GetByID
 func (h *CitizenHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 	idStr := r.PathValue("user_id")
 	userID, err := uuid.Parse(idStr)
@@ -62,6 +65,7 @@ func (h *CitizenHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 }
 
 // #region DownloadAgreementPDF
+//#region DownloadAgreementPDF
 func (h *CitizenHandler) DownloadAgreementPDF(w http.ResponseWriter, r *http.Request) {
 	idStr := r.PathValue("agreement_id")
 	agreementID, err := uuid.Parse(idStr)
