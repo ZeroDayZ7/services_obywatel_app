@@ -22,7 +22,8 @@ func LoadSecurityKeys(ctx context.Context, app *config.App, keyStore *httpserver
 		os.Exit(1)
 	}
 
-	loadKey := func(alias string, target config.KeyTarget) {
+	// Wszystkie klucze (TargetKeys, TrustedSenders, InternalKeys) są pobierane z jednej metody konfigu
+	for alias, target := range app.Config.GetAllSecurityKeys() {
 		keyBytes, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, target.TargetKey, 1, target.Algorithm)
 		if err != nil {
 			log.Error("❌ Nie udało się pobrać klucza z KMS",
@@ -41,32 +42,6 @@ func LoadSecurityKeys(ctx context.Context, app *config.App, keyStore *httpserver
 			"algorithm", target.Algorithm,
 			"version", version,
 		)
-	}
-
-	// 1. Zewnętrzni nadawcy (API Gateway, BFF)
-	for senderID, keyTarget := range app.Config.HMAC.TargetKeys {
-		loadKey(senderID, keyTarget)
-	}
-
-	// 2. Zaufani nadawcy RabbitMQ
-	for senderID, keyTarget := range app.Config.RabbitConsumers.TrustedSenders {
-		loadKey(senderID, keyTarget)
-	}
-
-	// 3. Klucze wewnętrzne serwisu
-	// Jeśli dodasz nowy klucz w configu, musisz go dopisać również tutaj (chyba że przeniesiesz to do slice w configu)
-	internalKeys := map[string]config.KeyTarget{
-		"pesel":      app.Config.HMAC.PeselKey,
-		"phone":      app.Config.HMAC.PhoneKey,
-		"email":      app.Config.HMAC.EmailKey,
-		"puk":        app.Config.HMAC.PukKey,
-		"rabbitmq":   app.Config.HMAC.RabbitMQKey,
-		"audit":      app.Config.HMAC.AuditKey,
-		"agreements": app.Config.HMAC.AgreementsKey,
-	}
-
-	for alias, keyTarget := range internalKeys {
-		loadKey(alias, keyTarget)
 	}
 
 	if _, _, ok := keyStore.GetKey("rabbitmq"); !ok {

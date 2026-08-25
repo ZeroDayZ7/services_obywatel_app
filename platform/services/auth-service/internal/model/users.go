@@ -41,7 +41,7 @@ type User struct {
 	Username            string     `gorm:"size:30;not null;unique"`
 	Email               string     `gorm:"size:100;not null;unique"`
 	Password            string     `gorm:"size:128;not null"`
-	Role                UserRole   `gorm:"type:varchar(20);not null;default:'user'"`
+	Role                UserRole   `gorm:"type:varchar(20);not null;default:'CITIZEN'"`
 	Status              UserStatus `gorm:"type:varchar(20);not null;default:'ACTIVE'"`
 	FailedLoginAttempts int8       `gorm:"not null;default:0"`
 	LockedUntil         *time.Time `gorm:"index"`

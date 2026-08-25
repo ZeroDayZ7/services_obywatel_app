@@ -88,16 +88,11 @@ func main() {
 
 	container := di.BuildContainer(app, eventPublisher, app.Config.ToKMSServiceConfig(), keyStore, fileStorage)
 
-	auditWorker := worker.NewAuditWorker(app.DB, eventPublisher, worker.AuditWorkerConfig{
-		BatchSize:     app.Config.AuditWorker.BatchSize,
-		Interval:      app.Config.AuditWorker.Interval,
-		MaxRetries:    app.Config.AuditWorker.MaxRetries,
-		BackoffBase:   app.Config.AuditWorker.BackoffBase,
-		BackoffMax:    app.Config.AuditWorker.BackoffMax,
-		Concurrency:   app.Config.AuditWorker.Concurrency,
-		RoutingKey:    app.Config.AuditWorker.RoutingKey,
-		SourceService: app.Config.AuditWorker.SourceService,
-	})
+	auditWorker := worker.NewAuditWorker(
+		app.DB,
+		eventPublisher,
+		app.Config.AuditWorker.ToWorkerConfig(),
+	)
 
 	if app.Config.AuditWorker.Enabled {
 		log.Info("🚀 Uruchamianie Audit Workera w tle...",
@@ -109,17 +104,11 @@ func main() {
 		log.Warn("⚠️ Audit Worker jest wyłączony (Enabled=false).")
 	}
 
-	// Initialize and optionally start Registration Worker (sends user registration events to auth)
-	registrationWorker := worker.NewRegistrationWorker(app.DB, eventPublisher, worker.RegistrationWorkerConfig{
-		Enabled:     app.Config.RegistrationWorker.Enabled,
-		BatchSize:   app.Config.RegistrationWorker.BatchSize,
-		Interval:    app.Config.RegistrationWorker.Interval,
-		MaxRetries:  app.Config.RegistrationWorker.MaxRetries,
-		BackoffBase: app.Config.RegistrationWorker.BackoffBase,
-		BackoffMax:  app.Config.RegistrationWorker.BackoffMax,
-		Concurrency: app.Config.RegistrationWorker.Concurrency,
-		RoutingKey:  app.Config.RegistrationWorker.RoutingKey,
-	})
+	registrationWorker := worker.NewRegistrationWorker(
+		app.DB,
+		eventPublisher,
+		app.Config.RegistrationWorker.ToWorkerConfig(),
+	)
 
 	if app.Config.RegistrationWorker.Enabled {
 		log.Info("🚀 Uruchamianie Registration Workera w tle...",

@@ -10,7 +10,7 @@ import (
 
 type UserService interface {
 	GetSessions(ctx context.Context, userID uuid.UUID, fingerprint string) ([]model.UserSessionDTO, error)
-	RevokeSession(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID) error // <-- zmiana z uint na uuid.UUID
+	RevokeSession(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID) error
 }
 
 type userService struct {
