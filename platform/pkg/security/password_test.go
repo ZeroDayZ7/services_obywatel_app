@@ -7,6 +7,7 @@ import (
 	"github.com/zerodayz7/platform/pkg/security"
 )
 
+//#region TestHashAndVerifyPassword
 func TestHashAndVerifyPassword(t *testing.T) {
 	password := []byte("SuperSecretPassword123!")
 	pepper := []byte("server-side-secret-pepper")
@@ -41,6 +42,7 @@ func TestHashAndVerifyPassword(t *testing.T) {
 	}
 }
 
+//#region TestNeedsRehash
 func TestNeedsRehash(t *testing.T) {
 	password := []byte("SuperSecretPassword123!")
 	pepper := []byte("pepper")
@@ -61,6 +63,7 @@ func TestNeedsRehash(t *testing.T) {
 	}
 }
 
+//#region TestDoSBoundaryLimits
 func TestDoSBoundaryLimits(t *testing.T) {
 	// Próba podstawienia skrajnych parametrów (Memory > MaxMemory)
 	maliciousHash := "$argon2id$v=19$m=2097152,t=3,p=2$c2FsdHNhbHRzYWx0c2FsdA$aGFzaGhhc2hoYXNoaGFzaGhhc2hoYXNoaGFzaGhhc2g"

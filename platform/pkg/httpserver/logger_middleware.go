@@ -17,6 +17,7 @@ type responseWriterInterceptor struct {
 	body       *bytes.Buffer
 }
 
+//#region newResponseWriterInterceptor
 func newResponseWriterInterceptor(w http.ResponseWriter) *responseWriterInterceptor {
 	return &responseWriterInterceptor{
 		ResponseWriter: w,
@@ -25,17 +26,20 @@ func newResponseWriterInterceptor(w http.ResponseWriter) *responseWriterIntercep
 	}
 }
 
+//#region WriteHeader
 func (rwi *responseWriterInterceptor) WriteHeader(statusCode int) {
 	rwi.statusCode = statusCode
 	rwi.ResponseWriter.WriteHeader(statusCode)
 }
 
+//#region Write
 func (rwi *responseWriterInterceptor) Write(b []byte) (int, error) {
 	rwi.body.Write(b) // zapisujemy kopię do debuggowania
 	return rwi.ResponseWriter.Write(b)
 }
 
 // LoggerMiddleware zwraca handler HTTP logujący szczegóły nadchodzącego żądania i odpowiedzi.
+//#region LoggerMiddleware
 func LoggerMiddleware(logger LoggerInterface) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -117,6 +121,7 @@ type LoggerInterface interface {
 }
 
 // Helper pobierający adres IP klienta
+//#region getClientIP
 func getClientIP(r *http.Request) string {
 	if ip := r.Header.Get("X-Forwarded-For"); ip != "" {
 		return ip

@@ -7,6 +7,7 @@ import (
 )
 
 // SafeGo uruchamia funkcję w goroutine z mechanizmem recover
+//#region SafeGo
 func SafeGo(log *shared.Logger, fn func()) {
 	go func() {
 		defer func() {

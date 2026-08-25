@@ -5,6 +5,7 @@ import (
 )
 
 // SendAppError teraz przyjmuje interfejs error, co rozwiązuje błędy kompilacji w handlerach
+//#region SendAppError
 func SendAppError(c *fiber.Ctx, err error) error {
 	// 1. Sprawdzamy czy błąd jest typu *AppError (Type Assertion)
 	appErr, ok := err.(*AppError)

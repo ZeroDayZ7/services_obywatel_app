@@ -7,6 +7,7 @@ import (
 )
 
 // SendAppError mapuje AppError na kod HTTP i wysyła czysty JSON przez net/http
+//#region SendError
 func SendError(w http.ResponseWriter, r *http.Request, err error) {
 	appErr, ok := err.(*apperr.AppError)
 	if !ok {

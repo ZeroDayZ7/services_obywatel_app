@@ -21,12 +21,14 @@ type EnvelopeCryptor struct {
 }
 
 // #region NewEnvelopeCryptor
+//#region NewEnvelopeCryptor
 func NewEnvelopeCryptor(kmsCfg kms.Config) *EnvelopeCryptor {
 	return &EnvelopeCryptor{kmsCfg: kmsCfg}
 }
 
 // #region Seal
 // Seal wykonuje pełny proces szyfrowania kopertowego i automatycznie pakuje wersję klucza do DEK
+//#region Seal
 func (e *EnvelopeCryptor) Seal(ctx context.Context, keyAlias string, plaintext []byte) (*EncryptedPayload, error) {
 	dek, err := crypto.GenerateDEK(32)
 	if err != nil {
@@ -58,6 +60,7 @@ func (e *EnvelopeCryptor) Seal(ctx context.Context, keyAlias string, plaintext [
 
 // #region Unseal
 // Unseal automatycznie rozpakowuje wersję klucza z EncryptedDEK i odszyfrowuje dane
+//#region Unseal
 func (e *EnvelopeCryptor) Unseal(ctx context.Context, keyAlias string, encryptedData []byte, packedDEK []byte) ([]byte, error) {
 	if len(packedDEK) < 4 {
 		return nil, fmt.Errorf("envelope: packed DEK too short")

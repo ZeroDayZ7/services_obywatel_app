@@ -16,6 +16,7 @@ type Checker struct {
 	Upstreams map[string]string
 }
 
+//#region RunChecks
 func (c *Checker) RunChecks(ctx context.Context) map[string]string {
 	checks := make(map[string]string)
 
@@ -51,6 +52,7 @@ func (c *Checker) RunChecks(ctx context.Context) map[string]string {
 	return checks
 }
 
+//#region Handler
 func (c *Checker) Handler(ctx *fiber.Ctx) error {
 	checks := c.RunChecks(ctx.UserContext())
 	resp := NewResponse(c.Service, c.Version, checks)

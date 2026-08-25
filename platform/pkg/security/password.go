@@ -47,6 +47,7 @@ var (
 
 // HashPassword generuje hash Argon2id w formacie PHC ($argon2id$v=19$m=...,t=...,p=...$salt$hash).
 // Opcjonalny pepper dodaje kolejną warstwę ochrony (trzymany np. w Vault / Envs, nie w DB).
+//#region HashPassword
 func HashPassword(password []byte, pepper []byte) (string, error) {
 	params := DefaultParams
 
@@ -88,6 +89,7 @@ func HashPassword(password []byte, pepper []byte) (string, error) {
 }
 
 // VerifyPassword weryfikuje hasło z hashem przy zachowaniu Constant-Time Compare.
+//#region VerifyPassword
 func VerifyPassword(password []byte, encoded string, pepper []byte) (bool, error) {
 	params, salt, hash, err := decodeHash(encoded)
 	if err != nil {
@@ -116,6 +118,7 @@ func VerifyPassword(password []byte, encoded string, pepper []byte) (bool, error
 }
 
 // NeedsRehash sprawdza, czy hash wymaga aktualizacji ze względu na nieaktualne parametry.
+//#region NeedsRehash
 func NeedsRehash(encoded string) bool {
 	params, _, _, err := decodeHash(encoded)
 	if err != nil {
@@ -131,6 +134,7 @@ func NeedsRehash(encoded string) bool {
 }
 
 // decodeHash parsuje i waliduje ciąg PHC pod kątem bezpiecznych limitów zasobów.
+//#region decodeHash
 func decodeHash(encoded string) (Params, []byte, []byte, error) {
 	var params Params
 
@@ -195,6 +199,7 @@ func decodeHash(encoded string) (Params, []byte, []byte, error) {
 }
 
 // pepperPassword łączy hasło z pepperczykiem przy użyciu HMAC-SHA256
+//#region pepperPassword
 func pepperPassword(password []byte, pepper []byte) []byte {
 	if len(pepper) == 0 {
 		buf := make([]byte, len(password))

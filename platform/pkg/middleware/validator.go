@@ -97,6 +97,7 @@ func GetParams[T any](c *fiber.Ctx) T {
 }
 
 // Pomocnicza funkcja tworząca bezpieczną kopię błędu walidacji (Thread-Safe)
+//#region formatValidationError
 func formatValidationError(errs map[string]string) *errors.AppError {
 	meta := make(map[string]any, len(errs))
 	for k, v := range errs {

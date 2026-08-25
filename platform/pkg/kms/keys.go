@@ -12,12 +12,14 @@ import (
 )
 
 // CheckHealth sprawdza status dostępności serwisu KMS (bez podpisu HMAC).
+//#region CheckHealth
 func CheckHealth(ctx context.Context, cfg Config) error {
 	_, err := executeRequest(ctx, cfg, http.MethodGet, EndpointHealth, nil, false)
 	return err
 }
 
 // FetchPublicKey pobiera klucz publiczny.
+//#region FetchPublicKey
 func FetchPublicKey(ctx context.Context, cfg Config, targetService string, algorithm ...string) (ed25519.PublicKey, error) {
 	if targetService == "" {
 		targetService = cfg.ServiceName
@@ -63,16 +65,19 @@ func FetchPublicKey(ctx context.Context, cfg Config, targetService string, algor
 }
 
 // FetchSymmetricKey pobiera klucz symetryczny dla wskazanego serwisu/celu.
+//#region FetchSymmetricKey
 func FetchSymmetricKey(ctx context.Context, cfg Config, serviceID string, algorithm ...string) ([]byte, error) {
 	rawKey, _, err := fetchSymmetricKeyInternal(ctx, cfg, serviceID, algorithm...)
 	return rawKey, err
 }
 
 // FetchSymmetricKeyWithVersion zachowuje wsteczną kompatybilność z wywołaniami przesyłającymi wersję (np. version=1).
+//#region FetchSymmetricKeyWithVersion
 func FetchSymmetricKeyWithVersion(ctx context.Context, cfg Config, serviceID string, version int, algorithm ...string) ([]byte, int, error) {
 	return fetchSymmetricKeyInternal(ctx, cfg, serviceID, algorithm...)
 }
 
+//#region fetchSymmetricKeyInternal
 func fetchSymmetricKeyInternal(ctx context.Context, cfg Config, serviceID string, algorithm ...string) ([]byte, int, error) {
 	algo := "AES256GCM"
 	if len(algorithm) > 0 && algorithm[0] != "" {

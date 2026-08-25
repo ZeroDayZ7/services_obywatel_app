@@ -17,6 +17,7 @@ type RabbitMQPublisher struct {
 	hmacKey  []byte
 }
 
+//#region NewLivePublisher
 func NewLivePublisher(url string, senderID string, hmacKey []byte) (*RabbitMQPublisher, error) {
 	conn, err := amqp.Dial(url)
 	if err != nil {
@@ -35,12 +36,14 @@ func NewLivePublisher(url string, senderID string, hmacKey []byte) (*RabbitMQPub
 	}, nil
 }
 
+//#region ComputeHMAC
 func ComputeHMAC(payload []byte, key []byte) string {
 	h := hmac.New(sha256.New, key)
 	h.Write(payload)
 	return hex.EncodeToString(h.Sum(nil))
 }
 
+//#region Publish
 func (p *RabbitMQPublisher) Publish(ctx context.Context, routingKey string, payload []byte) error {
 	headers := amqp.Table{
 		"X-Sender-ID": p.senderID,
@@ -63,6 +66,7 @@ func (p *RabbitMQPublisher) Publish(ctx context.Context, routingKey string, payl
 	)
 }
 
+//#region Consume
 func (p *RabbitMQPublisher) Consume(queueName string, routingKey string) (<-chan amqp.Delivery, error) {
 	q, err := p.ch.QueueDeclare(
 		queueName,
@@ -103,6 +107,7 @@ func (p *RabbitMQPublisher) Consume(queueName string, routingKey string) (<-chan
 	)
 }
 
+//#region Subscribe
 func (p *RabbitMQPublisher) Subscribe(ctx context.Context, queueName string, routingKey string, handler HandlerFunc) error {
 	log := shared.GetLogger()
 
@@ -131,6 +136,7 @@ func (p *RabbitMQPublisher) Subscribe(ctx context.Context, queueName string, rou
 	}
 }
 
+//#region Close
 func (p *RabbitMQPublisher) Close() error {
 	if p.ch != nil {
 		_ = p.ch.Close()

@@ -8,6 +8,7 @@ type Server struct {
 	httpServer *http.Server
 }
 
+//#region New
 func New(handler http.Handler) *Server {
 	return &Server{
 		httpServer: &http.Server{
@@ -16,6 +17,7 @@ func New(handler http.Handler) *Server {
 	}
 }
 
+//#region Start
 func (s *Server) Start(addr string) error {
 	s.httpServer.Addr = addr
 	return s.httpServer.ListenAndServe()

@@ -5,6 +5,7 @@ import (
 	"time"
 )
 
+//#region GenerateAgreementNumber
 func GenerateAgreementNumber(t time.Time) string {
 	return fmt.Sprintf("AGR/%s/%d", t.Format("20060102"), t.Unix()%100000)
 }

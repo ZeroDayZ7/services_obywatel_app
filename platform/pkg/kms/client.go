@@ -23,6 +23,7 @@ var defaultHTTPClient = &http.Client{
 	},
 }
 
+//#region getHTTPClient
 func getHTTPClient(cfg Config) *http.Client {
 	if cfg.HTTPClient != nil {
 		return cfg.HTTPClient
@@ -30,6 +31,7 @@ func getHTTPClient(cfg Config) *http.Client {
 	return defaultHTTPClient
 }
 
+//#region executeRequest
 func executeRequest(ctx context.Context, cfg Config, method, path string, body []byte, sign bool) ([]byte, error) {
 	timeout := cfg.Timeout
 	if timeout == 0 {
@@ -79,6 +81,7 @@ func executeRequest(ctx context.Context, cfg Config, method, path string, body [
 	return bodyBytes, nil
 }
 
+//#region signAndSetHeaders
 func signAndSetHeaders(req *http.Request, method, path string, body []byte, cfg Config) {
 	// 1. Obcinamy nanosekundy do pełnych sekund (eliminuje rozbieżności RFC3339 między Go a Rustem)
 	timestamp := time.Now().UTC().Truncate(time.Second).Format(time.RFC3339)

@@ -36,6 +36,7 @@ type AppError struct {
 	Meta    map[string]any
 }
 
+//#region Error
 func (e *AppError) Error() string {
 	if e.Message != "" {
 		return e.Message
@@ -46,6 +47,7 @@ func (e *AppError) Error() string {
 	return "An unknown error occurred"
 }
 
+//#region WithMeta
 func (e AppError) WithMeta(key string, value any) *AppError {
 	newMeta := maps.Clone(e.Meta)
 
@@ -63,6 +65,7 @@ func (e AppError) WithMeta(key string, value any) *AppError {
 	}
 }
 
+//#region newErr
 func newErr(code string, errType ErrorType, msg string) *AppError {
 	return &AppError{Code: code, Type: errType, Message: msg}
 }

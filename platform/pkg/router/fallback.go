@@ -9,6 +9,7 @@ import (
 )
 
 // SetupFallbackHandlers - obsługa 404 i favicon
+//#region SetupFallbackHandlers
 func SetupFallbackHandlers(app *fiber.App) {
 	app.Get("/favicon.ico", func(c *fiber.Ctx) error {
 		return c.SendStatus(fiber.StatusNoContent)

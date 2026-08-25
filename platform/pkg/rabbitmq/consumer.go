@@ -9,6 +9,7 @@ import (
 	"github.com/zerodayz7/platform/pkg/shared"
 )
 
+//#region SubscribeWithAuth
 func (p *RabbitMQPublisher) SubscribeWithAuth(
 	ctx context.Context,
 	queueName string,
@@ -56,6 +57,7 @@ func (p *RabbitMQPublisher) SubscribeWithAuth(
 	}
 }
 
+//#region verifyHMAC
 func verifyHMAC(payload []byte, key []byte, signature string) bool {
 	expectedSig := ComputeHMAC(payload, key)
 	return hmac.Equal([]byte(expectedSig), []byte(signature))

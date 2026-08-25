@@ -29,6 +29,7 @@ type Client struct {
 	*goredis.Client
 }
 
+//#region New
 func New(cfg Config) (*Client, error) {
 	rdb := goredis.NewClient(&goredis.Options{
 		Addr:         fmt.Sprintf("%s:%s", cfg.Host, cfg.Port),
@@ -49,10 +50,12 @@ func New(cfg Config) (*Client, error) {
 	return &Client{rdb}, nil
 }
 
+//#region Close
 func (c *Client) Close() error {
 	return c.Client.Close()
 }
 
+//#region AsFiberStorage
 func (c *Client) AsFiberStorage() fiber.Storage {
 	return fiberRedis.NewFromConnection(c.Client)
 }
@@ -61,6 +64,7 @@ func (c *Client) AsFiberStorage() fiber.Storage {
 // STREAM BATCH METHODS
 // ----------------------------
 
+//#region ReadStreamBatch
 func (c *Client) ReadStreamBatch(
 	ctx context.Context,
 	stream, group, consumer string,
@@ -90,6 +94,7 @@ func (c *Client) ReadStreamBatch(
 	return result[0].Messages, nil
 }
 
+//#region AckStreamBatch
 func (c *Client) AckStreamBatch(
 	ctx context.Context,
 	stream, group string,
@@ -101,6 +106,7 @@ func (c *Client) AckStreamBatch(
 	return c.XAck(ctx, stream, group, ids...).Err()
 }
 
+//#region SendAuditLog
 func (c *Client) SendAuditLog(ctx context.Context, stream string, values map[string]any) error {
 	if c == nil || c.Client == nil {
 		return errors.New("redis client is not initialized")
@@ -112,6 +118,7 @@ func (c *Client) SendAuditLog(ctx context.Context, stream string, values map[str
 	return err
 }
 
+//#region EnsureGroup
 func (c *Client) EnsureGroup(ctx context.Context, stream, group string) error {
 	if c == nil || c.Client == nil {
 		return errors.New("redis client is not initialized")

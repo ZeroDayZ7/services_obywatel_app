@@ -26,6 +26,7 @@ type signDataResponse struct {
 }
 
 // #region SignData
+//#region SignData
 func SignData(ctx context.Context, cfg Config, targetService string, algorithm string, payload []byte) ([]byte, uint32, error) {
 	if targetService == "" {
 		targetService = cfg.ServiceName

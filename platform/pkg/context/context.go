@@ -24,11 +24,13 @@ type RequestContext struct {
 	Username      string
 }
 
+//#region FromContext
 func FromContext(ctx context.Context) (*RequestContext, bool) {
 	reqCtx, ok := ctx.Value(RequestContextKey).(*RequestContext)
 	return reqCtx, ok
 }
 
+//#region GetIP
 func GetIP(ctx context.Context) string {
 	if reqCtx, ok := FromContext(ctx); ok && reqCtx != nil {
 		return reqCtx.IP
@@ -36,6 +38,7 @@ func GetIP(ctx context.Context) string {
 	return ""
 }
 
+//#region GetUserID
 func GetUserID(ctx context.Context) uuid.UUID {
 	if reqCtx, ok := FromContext(ctx); ok && reqCtx != nil && reqCtx.UserID != nil {
 		return *reqCtx.UserID

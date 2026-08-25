@@ -28,18 +28,22 @@ type UserSession struct {
 
 // --- Metody dla Sesji Głównej ---
 
+//#region SetSession
 func (c *Cache) SetSession(ctx context.Context, sid string, sess UserSession, ttl time.Duration) error {
 	return SetJSON(c, ctx, constants.SessionPrefix+sid, sess, ttl)
 }
 
+//#region GetSession
 func (c *Cache) GetSession(ctx context.Context, sid string) (*UserSession, error) {
 	return GetJSON[UserSession](c, ctx, constants.SessionPrefix+sid)
 }
 
+//#region DeleteSession
 func (c *Cache) DeleteSession(ctx context.Context, sid string) error {
 	return c.Del(ctx, constants.SessionPrefix+sid)
 }
 
+//#region UpdateSession
 func (c *Cache) UpdateSession(ctx context.Context, sid string, updateFn func(*UserSession)) error {
 	session, err := c.GetSession(ctx, sid)
 	if err != nil {
@@ -58,28 +62,34 @@ func (c *Cache) UpdateSession(ctx context.Context, sid string, updateFn func(*Us
 
 // --- Metody dla Challenge (Ed25519) ---
 
+//#region SetChallenge
 func (c *Cache) SetChallenge(ctx context.Context, sid string, challenge string, ttl time.Duration) error {
 	return c.Set(ctx, constants.ChallengePrefix+sid, challenge, ttl)
 }
 
+//#region GetChallenge
 func (c *Cache) GetChallenge(ctx context.Context, sid string) (string, error) {
 	return c.Get(ctx, constants.ChallengePrefix+sid)
 }
 
+//#region DeleteChallenge
 func (c *Cache) DeleteChallenge(ctx context.Context, sid string) error {
 	return c.Del(ctx, constants.ChallengePrefix+sid)
 }
 
 // --- Metody dla Sesji Tymczasowej (Setup/2FA) ---
 
+//#region SetSetupSession
 func (c *Cache) SetSetupSession(ctx context.Context, sid string, sess UserSession, ttl time.Duration) error {
 	return SetJSON(c, ctx, constants.SetupSessionPrefix+sid, sess, ttl)
 }
 
+//#region GetSetupSession
 func (c *Cache) GetSetupSession(ctx context.Context, sid string) (*UserSession, error) {
 	return GetJSON[UserSession](c, ctx, constants.SetupSessionPrefix+sid)
 }
 
+//#region DeleteSetupSession
 func (c *Cache) DeleteSetupSession(ctx context.Context, sid string) error {
 	return c.Del(ctx, constants.SetupSessionPrefix+sid)
 }

@@ -21,6 +21,7 @@ var errorMessages = map[string]string{
 	"numeric_byte": "This field must contain only digits",
 }
 
+//#region init
 func init() {
 	if err := validate.RegisterValidation("passwd", validatePassword); err != nil {
 		panic("failed to register passwd validation: " + err.Error())
@@ -33,6 +34,7 @@ func init() {
 }
 
 // Walidator dla []byte lub string - sprawdza czy są same cyfry
+//#region validateNumericByte
 func validateNumericByte(fl validator.FieldLevel) bool {
 	field := fl.Field()
 	var val []byte
@@ -55,6 +57,7 @@ func validateNumericByte(fl validator.FieldLevel) bool {
 	return true
 }
 
+//#region validatePassword
 func validatePassword(fl validator.FieldLevel) bool {
 	field := fl.Field()
 	var pw string
@@ -86,6 +89,7 @@ func validatePassword(fl validator.FieldLevel) bool {
 	return hasUpper && hasLower && hasDigit && hasSpecial
 }
 
+//#region Validate
 func Validate(s any) map[string]string {
 	err := validate.Struct(s)
 	if err == nil {

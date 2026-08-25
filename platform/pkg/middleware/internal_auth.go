@@ -12,6 +12,7 @@ import (
 )
 
 // InternalAuthMiddleware weryfikuje podpis HMAC-SHA256 na podstawie nadawcy żądania.
+//#region InternalAuthMiddleware
 func InternalAuthMiddleware(keyStore *httpserver.KeyStore) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		log := shared.GetLogger()

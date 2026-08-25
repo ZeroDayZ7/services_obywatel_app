@@ -11,6 +11,7 @@ type HealthResponse struct {
 }
 
 // NewResponse to pomocnik do tworzenia odpowiedzi
+//#region NewResponse
 func NewResponse(service, version string, checks map[string]string) HealthResponse {
 	status := "ok"
 	for _, v := range checks {

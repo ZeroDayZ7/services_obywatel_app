@@ -24,10 +24,7 @@ func VerifyEd25519Signature(publicKeyBase64 string, message []byte, signatureBas
 	return ed25519.Verify(pubKey, message, sig)
 }
 
-//#endregion
-
 // #region VerifyEd25519SignatureHex
-// VerifyEd25519SignatureHex weryfikuje podpis dla klucza publicznego podanego w formacie Hex.
 func VerifyEd25519SignatureHex(publicKeyHex string, message []byte, signatureBase64 string) bool {
 	pubKey, err := hex.DecodeString(publicKeyHex)
 	if err != nil || len(pubKey) != ed25519.PublicKeySize {
@@ -42,8 +39,6 @@ func VerifyEd25519SignatureHex(publicKeyHex string, message []byte, signatureBas
 	return ed25519.Verify(pubKey, message, sig)
 }
 
-//#endregion
-
 // #region ComputeHMACSHA256
 func ComputeHMACSHA256(data []byte, key []byte) string {
 	h := hmac.New(sha256.New, key)
@@ -51,16 +46,12 @@ func ComputeHMACSHA256(data []byte, key []byte) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-//#endregion
-
 // #region ComputeHMACSHA256Base64
 func ComputeHMACSHA256Base64(data []byte, key []byte) string {
 	h := hmac.New(sha256.New, key)
 	h.Write(data)
 	return base64.StdEncoding.EncodeToString(h.Sum(nil))
 }
-
-//#endregion
 
 // #region VerifyHMACSHA256
 func VerifyHMACSHA256(data []byte, expectedMAC []byte, key []byte) bool {
@@ -70,8 +61,6 @@ func VerifyHMACSHA256(data []byte, expectedMAC []byte, key []byte) bool {
 	return subtle.ConstantTimeCompare(actualMAC, expectedMAC) == 1
 }
 
-//#endregion
-
 // #region HashSHA256
 func HashSHA256(data string) string {
 	if data == "" {
@@ -80,5 +69,3 @@ func HashSHA256(data string) string {
 	h := sha256.Sum256([]byte(data))
 	return hex.EncodeToString(h[:])
 }
-
-//#endregion

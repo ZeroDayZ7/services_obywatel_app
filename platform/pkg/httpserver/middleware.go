@@ -12,6 +12,7 @@ import (
 )
 
 // InternalAuthMiddleware weryfikuje podpis HMAC-SHA256 nagłówka kontekstu wewnętrznego.
+//#region InternalAuthMiddleware
 func InternalAuthMiddleware(hmacKey []byte) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

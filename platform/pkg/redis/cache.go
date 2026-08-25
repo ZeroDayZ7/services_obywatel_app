@@ -19,6 +19,7 @@ type Cache struct {
 	ttl    time.Duration
 }
 
+//#region NewCache
 func NewCache(client *Client, defaultTTL time.Duration) *Cache {
 	return &Cache{
 		client: client,
@@ -26,6 +27,7 @@ func NewCache(client *Client, defaultTTL time.Duration) *Cache {
 	}
 }
 
+//#region Set
 func (c *Cache) Set(ctx context.Context, key string, value any, ttl ...time.Duration) error {
 	d := c.ttl
 	if len(ttl) > 0 {
@@ -34,6 +36,7 @@ func (c *Cache) Set(ctx context.Context, key string, value any, ttl ...time.Dura
 	return c.client.Set(ctx, key, value, d).Err()
 }
 
+//#region Get
 func (c *Cache) Get(ctx context.Context, key string) (string, error) {
 	val, err := c.client.Get(ctx, key).Result()
 	if errors.Is(err, goredis.Nil) {
@@ -45,10 +48,12 @@ func (c *Cache) Get(ctx context.Context, key string) (string, error) {
 	return val, nil
 }
 
+//#region Del
 func (c *Cache) Del(ctx context.Context, key string) error {
 	return c.client.Del(ctx, key).Err()
 }
 
+//#region Exists
 func (c *Cache) Exists(ctx context.Context, key string) (bool, error) {
 	n, err := c.client.Exists(ctx, key).Result()
 	return n > 0, err
@@ -70,6 +75,7 @@ func GetJSON[T any](c *Cache, ctx context.Context, key string) (*T, error) {
 }
 
 // SetJSON serializuje podaną strukturę do JSON i zapisuje w Redisie
+//#region SetJSON
 func SetJSON(c *Cache, ctx context.Context, key string, value any, ttl ...time.Duration) error {
 	data, err := json.Marshal(value)
 	if err != nil {
@@ -78,6 +84,7 @@ func SetJSON(c *Cache, ctx context.Context, key string, value any, ttl ...time.D
 	return c.Set(ctx, key, data, ttl...)
 }
 
+//#region SendNotification
 func (c *Cache) SendNotification(ctx context.Context, data any) error {
 	return c.client.SendNotification(ctx, data)
 }
@@ -86,6 +93,7 @@ func (c *Cache) SendNotification(ctx context.Context, data any) error {
 // ================ AUDIT ==================
 // =========================================
 
+//#region ReadStream
 func (c *Client) ReadStream(
 	ctx context.Context,
 	stream string,
@@ -113,10 +121,12 @@ func (c *Client) ReadStream(
 	return res[0].Messages, nil
 }
 
+//#region AckStream
 func (c *Client) AckStream(ctx context.Context, stream, group, messageID string) error {
 	return c.XAck(ctx, stream, group, messageID).Err()
 }
 
+//#region SendNotification
 func (c *Client) SendNotification(ctx context.Context, data any) error {
 	if m, ok := data.(map[string]any); ok {
 		if b, exists := m["_bootstrap"]; exists {
@@ -143,6 +153,7 @@ func (c *Client) SendNotification(ctx context.Context, data any) error {
 // ============ EVENT PUBLISHER =============
 // =========================================
 
+//#region Publish
 func (c *Cache) Publish(ctx context.Context, stream string, payload any) error {
 	jsonData, err := json.Marshal(payload)
 	if err != nil {

@@ -26,6 +26,7 @@ var (
 	limitersLock sync.RWMutex
 )
 
+//#region GetLimiter
 func GetLimiter(group LimitGroup, storage fiber.Storage) fiber.Handler {
 	limitersLock.RLock()
 	if l, exists := limiters[group]; exists {
@@ -46,6 +47,7 @@ func GetLimiter(group LimitGroup, storage fiber.Storage) fiber.Handler {
 	return l
 }
 
+//#region createLimiter
 func createLimiter(group LimitGroup, storage fiber.Storage) fiber.Handler {
 	presets := map[LimitGroup]struct {
 		Max    int

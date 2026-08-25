@@ -8,6 +8,7 @@ import (
 	"github.com/zerodayz7/platform/pkg/shared"
 )
 
+//#region ErrorHandler
 func ErrorHandler() fiber.ErrorHandler {
 	log := shared.GetLogger()
 	return func(c *fiber.Ctx, err error) error {

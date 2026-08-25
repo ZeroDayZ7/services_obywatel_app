@@ -9,6 +9,7 @@ import (
 	"gorm.io/gorm"
 )
 
+//#region NewPostgres
 func NewPostgres(cfg viper.DBConfig, models ...any) (*gorm.DB, func(), error) {
 	log := shared.GetLogger()
 
