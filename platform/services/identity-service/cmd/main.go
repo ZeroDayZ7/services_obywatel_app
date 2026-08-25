@@ -23,7 +23,13 @@ import (
 func main() {
 	log := shared.GetLogger()
 
-	app, closeDB := config.InitApp()
+	cfg, err := config.Load()
+	if err != nil {
+		log.Error("❌ Błąd wczytywania konfiguracji", "error", err)
+		os.Exit(1)
+	}
+
+	dbPool, closeDB := config.MustInitDB(cfg.Database)
 	defer closeDB()
 
 	keyStore := httpserver.NewKeyStore()
@@ -35,7 +41,7 @@ func main() {
 	defer cancel()
 
 	// Załaduj klucze bezpieczeństwa z KMS do KeyStore
-	if err := security.LoadSecurityKeys(securityCtx, app, keyStore); err != nil {
+	if err := security.LoadSecurityKeys(securityCtx, cfg, keyStore); err != nil {
 		log.Error("❌ Błąd ładowania kluczy bezpieczeństwa", "error", err)
 		os.Exit(1)
 	}
@@ -43,7 +49,7 @@ func main() {
 	var eventPublisher rabbitmq.EventPublisher
 	var err error
 
-	if app.Config.RabbitMQ.Enabled {
+	if cfg.RabbitMQ.Enabled {
 		log.Info("RabbitMQ is ENABLED. Connecting...")
 
 		rabbitHMACKey, _, ok := keyStore.GetKey("rabbitmq")
@@ -53,8 +59,8 @@ func main() {
 		}
 
 		eventPublisher, err = rabbitmq.NewLivePublisher(
-			app.Config.RabbitMQ.GetURL(),
-			app.Config.Server.AppName,
+			cfg.RabbitMQ.GetURL(),
+			cfg.Server.AppName,
 			rabbitHMACKey,
 		)
 		if err != nil {
@@ -73,14 +79,14 @@ func main() {
 	}()
 
 	var fileStorage storage.StorageClient
-	if app.Config.S3.Enabled {
+	if cfg.S3.Enabled {
 		log.Info("S3 Storage is ENABLED. Connecting...")
 		s3, err := storage.NewS3Storage(
-			app.Config.S3.Endpoint,
-			app.Config.S3.AccessKey,
-			app.Config.S3.SecretKey,
-			app.Config.S3.Bucket,
-			app.Config.S3.UseSSL,
+			cfg.S3.Endpoint,
+			cfg.S3.AccessKey,
+			cfg.S3.SecretKey,
+			cfg.S3.Bucket,
+			cfg.S3.UseSSL,
 		)
 		if err != nil {
 			log.Error("❌ S3 initialization failed", "error", err)
@@ -92,18 +98,18 @@ func main() {
 		fileStorage = &storage.NoOpStorage{}
 	}
 
-	container := di.BuildContainer(app, eventPublisher, app.Config.ToKMSServiceConfig(), keyStore, fileStorage)
+	container := di.BuildContainer(cfg, dbPool, eventPublisher, cfg.ToKMSServiceConfig(), keyStore, fileStorage)
 
 	auditWorker := worker.NewAuditWorker(
-		app.DB,
+		dbPool,
 		eventPublisher,
-		app.Config.AuditWorker.ToWorkerConfig(),
+		cfg.AuditWorker.ToWorkerConfig(),
 	)
 
-	if app.Config.AuditWorker.Enabled {
+	if cfg.AuditWorker.Enabled {
 		log.Info("🚀 Uruchamianie Audit Workera w tle...",
-			"batch_size", app.Config.AuditWorker.BatchSize,
-			"interval", app.Config.AuditWorker.Interval,
+			"batch_size", cfg.AuditWorker.BatchSize,
+			"interval", cfg.AuditWorker.Interval,
 		)
 		go auditWorker.Start(ctx)
 	} else {
@@ -111,15 +117,15 @@ func main() {
 	}
 
 	registrationWorker := worker.NewRegistrationWorker(
-		app.DB,
+		dbPool,
 		eventPublisher,
-		app.Config.RegistrationWorker.ToWorkerConfig(),
+		cfg.RegistrationWorker.ToWorkerConfig(),
 	)
 
-	if app.Config.RegistrationWorker.Enabled {
+	if cfg.RegistrationWorker.Enabled {
 		log.Info("🚀 Uruchamianie Registration Workera w tle...",
-			"batch_size", app.Config.RegistrationWorker.BatchSize,
-			"interval", app.Config.RegistrationWorker.Interval,
+			"batch_size", cfg.RegistrationWorker.BatchSize,
+			"interval", cfg.RegistrationWorker.Interval,
 		)
 		go registrationWorker.Start(ctx)
 	} else {
@@ -128,14 +134,14 @@ func main() {
 
 	r := router.NewRouter(container)
 	server := &http.Server{
-		Addr:         ":" + app.Config.Server.Port,
+		Addr:         ":" + cfg.Server.Port,
 		Handler:      r,
-		ReadTimeout:  app.Config.Server.ReadTimeout,
-		WriteTimeout: app.Config.Server.WriteTimeout,
-		IdleTimeout:  app.Config.Server.IdleTimeout,
+		ReadTimeout:  cfg.Server.ReadTimeout,
+		WriteTimeout: cfg.Server.WriteTimeout,
+		IdleTimeout:  cfg.Server.IdleTimeout,
 	}
 
-	if err := httpserver.Run(server, app.Config.Shutdown); err != nil {
+	if err := httpserver.Run(server, cfg.Shutdown); err != nil {
 		log.Error("Server forced shutdown with error", "error", err)
 	}
 }

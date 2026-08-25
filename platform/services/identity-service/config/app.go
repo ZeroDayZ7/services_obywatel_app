@@ -1,26 +1,11 @@
 package config
 
-import (
-	"github.com/jackc/pgx/v5/pgxpool"
-)
-
-type App struct {
-	Config *Config
-	DB     *pgxpool.Pool
-}
-
-//#region InitApp
-func InitApp() (*App, func()) {
+// Load loads configuration and returns a `Config` instance.
+// It delegates to the existing LoadConfigGlobal implementation for now.
+func Load() (*Config, error) {
 	if err := LoadConfigGlobal(); err != nil {
-		panic(err)
+		return nil, err
 	}
 
-	dbPool, closeDB := MustInitDB(AppConfig.Database)
-
-	app := &App{
-		Config: &AppConfig,
-		DB:     dbPool,
-	}
-
-	return app, closeDB
+	return &AppConfig, nil
 }

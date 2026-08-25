@@ -27,7 +27,8 @@ type Container struct {
 
 //#region BuildContainer
 func BuildContainer(
-	app *config.App,
+	cfg *config.Config,
+	db *pgxpool.Pool,
 	eventPublisher rabbitmq.EventPublisher,
 	kmsCfg kms.Config,
 	keyStore *httpserver.KeyStore,
@@ -60,8 +61,8 @@ func BuildContainer(
 	}
 
 	// Repozytoria
-	citizenRepo := repository.NewCitizenRepository(app.DB, auditHmacKey)
-	outboxRepo := repository.NewOutboxRepository(app.DB)
+	citizenRepo := repository.NewCitizenRepository(db, auditHmacKey)
+	outboxRepo := repository.NewOutboxRepository(db)
 
 	cryptor := envelope.NewEnvelopeCryptor(kmsCfg)
 
@@ -90,8 +91,8 @@ func BuildContainer(
 	citizenHdl := handler.NewCitizenHandler(citizenSvc)
 
 	return &Container{
-		Config:         app.Config,
-		DB:             app.DB,
+		Config:         cfg,
+		DB:             db,
 		EventPublisher: eventPublisher,
 		CitizenHandler: citizenHdl,
 		KeyStore:       keyStore,
