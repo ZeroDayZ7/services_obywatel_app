@@ -18,7 +18,7 @@
     "**/.github": true,
     "**/.dockerignore": true,
     "**/Dockerfile": true,
-    "**/obywatel-app.code-workspace": true,
+    // "**/obywatel-app.code-workspace": true,
 
     "**/admin-bff": true,
     "**/audit-service": true,
@@ -62,5 +62,6 @@
   "go.formatTool": "gofumpt",
   "go.lintTool": "golangci-lint",
   "go.lintOnSave": "package",
-  "editor.rulers": [120, 150]
+  "editor.rulers": [120, 150],
+  
 }

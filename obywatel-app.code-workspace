@@ -11,34 +11,35 @@
     }
   ],
   "settings": {
-    "go.formatTool": "gofmt",
-    "editor.formatOnSave": false,
-
-    "files.exclude": {
-      "**/.env.example": true,
-      "**/.env.dev.example": true,
-      "**/.gitattributes": true,
-      // "**/logs": true,
-      "**/bin": true,
-      "**/LICENSE": true,
-      "**/go.sum": true,
-      "**/go.mod": true,
-      "**/go.work.sum": true,
-      "**/.gitignore": true,
-      "**/README.md": true,
-      "**/.env.dev": true,
+    // Definowanie profili terminali (z kolorami i ikonami) MUSI być w tym pliku
+    "terminal.integrated.profiles.windows": {
+      "Gateway Profile": {
+        "path": "cmd.exe",
+        "icon": "shield",
+        "color": "terminal.ansiGreen"
+      },
+      "Auth Profile": {
+        "path": "cmd.exe",
+        "icon": "key",
+        "color": "terminal.ansiRed"
+      },
+      "Identity Profile": {
+        "path": "cmd.exe",
+        "icon": "account",
+        "color": "terminal.ansiYellow"
+      },
+      "Notification Profile": {
+        "path": "cmd.exe",
+        "icon": "bell",
+        "color": "terminal.ansiCyan"
+      },
+      "Citizen Docs Profile": {
+        "path": "cmd.exe",
+        "icon": "file-text",
+        "color": "terminal.ansiBlue"
+      }
     },
 
-    "search.exclude": {
-      "**/.env.example": true,
-      "**/.env.dev.example": true,
-      "**/.gitattributes": true,
-      "**/logs": true,
-      "**/bin": true,
-      "**/LICENSE": true,
-      "**/go.sum": true,
-      "**/README.md": true,
-    },
     "sqltools.connections": [
       {
         "ssh": "Disabled",

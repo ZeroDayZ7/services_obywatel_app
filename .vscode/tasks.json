@@ -1,13 +1,14 @@
 {
   "version": "2.0.0",
   "tasks": [
+    // ==========================================
+    // TASKI DLA DOCKERA (BEZ ZMIAN)
+    // ==========================================
     {
       "label": "docker:start-gateway-deps",
       "type": "shell",
       "command": "docker compose up -d cache-redis rabbitmq minio",
-      "options": {
-        "cwd": "${workspaceFolder}/platform/docker"
-      },
+      "options": { "cwd": "${workspaceFolder}/platform/docker" },
       "presentation": {
         "reveal": "silent",
         "close": true,
@@ -16,14 +17,24 @@
       },
       "problemMatcher": []
     },
-
     {
       "label": "docker:start-auth-deps",
       "type": "shell",
       "command": "docker compose up -d db-auth",
-      "options": {
-        "cwd": "${workspaceFolder}/platform/docker"
+      "options": { "cwd": "${workspaceFolder}/platform/docker" },
+      "presentation": {
+        "reveal": "silent",
+        "close": true,
+        "clear": true,
+        "panel": "shared"
       },
+      "problemMatcher": []
+    },
+    {
+      "label": "docker:start-officer-deps",
+      "type": "shell",
+      "command": "docker compose up -d db-audit",
+      "options": { "cwd": "${workspaceFolder}/platform/docker" },
       "presentation": {
         "reveal": "silent",
         "close": true,
@@ -36,9 +47,7 @@
       "label": "docker:start-identity-deps",
       "type": "shell",
       "command": "docker compose up -d db-identity rabbitmq",
-      "options": {
-        "cwd": "${workspaceFolder}/platform/docker"
-      },
+      "options": { "cwd": "${workspaceFolder}/platform/docker" },
       "presentation": {
         "reveal": "silent",
         "close": true,
@@ -47,66 +56,95 @@
       },
       "problemMatcher": []
     },
-    {
-      "label": "docker:start-notification-deps",
-      "type": "shell",
-      "command": "docker compose up -d db-notification rabbitmq",
-      "options": {
-        "cwd": "${workspaceFolder}/platform/docker"
-      },
 
-      "presentation": {
-        "reveal": "silent",
-        "close": true,
-        "clear": true,
-        "panel": "shared"
+    // ==========================================
+    // TASKI RUN DLA MIKROSERWISÓW (Z KOLORAMI I IKONAMI)
+    // ==========================================
+    {
+      "label": "Gateway",
+      "type": "shell",
+      "command": "go build -o bin/gateway.exe ./cmd && ./bin/gateway.exe",
+      "options": { "cwd": "${workspaceFolder}/platform/services/gateway" },
+      "dependsOn": ["docker:start-gateway-deps"],
+      "problemMatcher": {
+        "pattern": { "regexp": "^$" },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".*Service starting.*",
+          "endsPattern": ".*Service started.*"
+        }
       },
-      "problemMatcher": []
+      "presentation": {
+        "echo": true, // Wypisuje wywołaną komendę w terminalu przed jej wykonaniem
+        "reveal": "always", // Zawsze otwiera/pokazuje panel terminala po uruchomieniu zadania
+        "focus": false, // Kursor pozostaje w edytorze kodu (terminal nie zabiera ostrości)
+        "panel": "dedicated", // Tworzy osobny, dedykowany terminal tylko dla tego zadania
+        "showReuseMessage": false // Ukrywa komunikat "Terminal will be reused by tasks..." po zakończeniu
+      },
+      "icon": { "id": "shield", "color": "terminal.ansiGreen" }
     },
     {
-      "label": "docker:start-citizen-docs-deps",
+      "label": "Auth",
       "type": "shell",
-      "command": "docker compose up -d db-citizen-docs minio",
-      "options": {
-        "cwd": "${workspaceFolder}/platform/docker"
+      "command": "go build -o bin/auth.exe ./cmd && ./bin/auth.exe",
+      "options": { "cwd": "${workspaceFolder}/platform/services/auth-service" },
+      "dependsOn": ["docker:start-auth-deps"],
+      "problemMatcher": {
+        "pattern": { "regexp": "^$" },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".*Service starting.*",
+          "endsPattern": ".*Service started.*"
+        }
       },
       "presentation": {
-        "reveal": "silent",
-        "close": true,
-        "clear": true,
-        "panel": "shared"
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "dedicated",
+        "showReuseMessage": false
       },
-      "problemMatcher": []
+      "icon": { "id": "key", "color": "terminal.ansiBlue" }
     },
     {
-      "label": "docker:start-audit-deps",
+      "label": "Officer-BFF",
       "type": "shell",
-      "command": "docker compose up -d db-audit",
-      "options": {
-        "cwd": "${workspaceFolder}/platform/docker"
+      "command": "go build -o bin/officer-bff.exe ./cmd && ./bin/officer-bff.exe",
+      "options": { "cwd": "${workspaceFolder}/platform/services/officer-bff" },
+      "dependsOn": ["docker:start-officer-deps"],
+      "problemMatcher": {
+        "pattern": { "regexp": "^$" },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".*Service starting.*",
+          "endsPattern": ".*Service started.*"
+        }
       },
       "presentation": {
-        "reveal": "silent",
-        "close": true,
-        "clear": true,
-        "panel": "shared"
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "dedicated",
+        "showReuseMessage": false
       },
-      "problemMatcher": []
+      "icon": { "id": "law", "color": "terminal.ansiYellow" }
     },
     {
-      "label": "docker:start-messaging-deps",
+      "label": "Identity",
       "type": "shell",
-      "command": "docker compose up -d db-messaging rabbitmq",
+      "command": "go run ./cmd",
       "options": {
-        "cwd": "${workspaceFolder}/platform/docker"
+        "cwd": "${workspaceFolder}/platform/services/identity-service"
       },
+      "dependsOn": ["docker:start-identity-deps"],
       "presentation": {
-        "reveal": "silent",
-        "close": true,
-        "clear": true,
-        "panel": "shared"
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "dedicated",
+        "showReuseMessage": false
       },
-      "problemMatcher": []
+      "icon": { "id": "account", "color": "terminal.ansiMagenta" }
     }
   ]
 }
