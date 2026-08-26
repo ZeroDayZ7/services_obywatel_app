@@ -33,6 +33,10 @@ func ContextBuilder(container *di.Container) fiber.Handler {
 			return c.Next()
 		}
 
+		log.DebugJSON("[Context Builder]", map[string]any{
+			"userSession": userLocal,
+		})
+
 		sessionData, ok := userLocal.(*rdy.UserSession)
 		if !ok || sessionData == nil {
 			log.ErrorObj("[ContextBuilder] Failed to cast 'userSession' from locals", map[string]any{"local": userLocal})

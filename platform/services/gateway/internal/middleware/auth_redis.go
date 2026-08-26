@@ -89,9 +89,6 @@ func AuthRedisMiddleware(cache *rdy.Cache) fiber.Handler {
 			return apperr.SendAppError(c, apperr.ErrUnauthorized)
 		}
 
-		// Ustawienie sessionID w kontekście
-		c.Locals("sessionID", claimsData.SessionID)
-
 		// 6. Walidacja sesji z Redisa (weryfikacja czy sesja istnieje i czy dane w Redisie są zgodne)
 		if isDeviceVerifyPath {
 			setupSess, err := cache.GetSetupSession(c.Context(), claimsData.SessionID)
@@ -119,7 +116,13 @@ func AuthRedisMiddleware(cache *rdy.Cache) fiber.Handler {
 				return apperr.SendAppError(c, apperr.ErrUntrustedDevice)
 			}
 
+			// Ustawienie sessionID w kontekście
+			c.Locals("sessionID", claimsData.SessionID)
 			c.Locals("setupSession", setupSess)
+			log.DebugJSON("[AuthRedisMiddleware] Final", map[string]any{
+				"sessionID from Token": claimsData.SessionID,
+				"userSession":          setupSess,
+			})
 
 		} else {
 			userSess, err := cache.GetSession(c.Context(), claimsData.SessionID)
@@ -148,8 +151,16 @@ func AuthRedisMiddleware(cache *rdy.Cache) fiber.Handler {
 			}
 
 			c.Locals("userSession", userSess)
+			c.Locals("sessionID", claimsData.SessionID)
+			log.DebugJSON("[AuthRedisMiddleware] Final", map[string]any{
+				"sessionID from Token": claimsData.SessionID,
+				"userSession":          userSess,
+			})
+
 		}
 
 		return c.Next()
+
 	}
+
 }
