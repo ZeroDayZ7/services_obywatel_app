@@ -68,6 +68,7 @@ func (h *AuthHandler) LoginStep2(c *fiber.Ctx) error {
 	rc := reqctx.MustFromFiber(c)
 
 	fingerprint := rc.DeviceID
+
 	if fingerprint == "" {
 		return apperr.SendAppError(c, apperr.ErrInvalidDeviceFingerprint)
 	}
@@ -191,8 +192,6 @@ func (h *AuthHandler) RegisterDevice(c *fiber.Ctx) error {
 	if err != nil {
 		return apperr.SendAppError(c, err)
 	}
-
-	log.DebugJSON("response", response)
 
 	return c.Status(fiber.StatusOK).JSON(response)
 }

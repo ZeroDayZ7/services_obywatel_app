@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/zerodayz7/platform/pkg/crypto"
 	"github.com/zerodayz7/platform/pkg/errors"
 	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/schemas"
@@ -68,24 +67,7 @@ func NewAuthService(
 func (s *authService) AttemptLoginStep2(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID, signature string, fingerprint string, clientIP string) (*http.LoginResponse, error) {
 	log := shared.GetLogger()
 
-	log.InfoMap("[AttemptLoginStep2] Rozpoczęcie weryfikacji Step 2", map[string]any{
-		"user_id":    userID,
-		"session_id": sessionID,
-		"client_ip":  clientIP,
-	})
-
-	// 1. Pobranie wyzwania z Redisa (konwersja uuid na string dzieje się wewnątrz GetChallenge)
-	storedChallenge, err := s.cache.GetChallenge(ctx, sessionID)
-	if err != nil || storedChallenge == "" {
-		log.WarnMap("[AttemptLoginStep2] Challenge nie znaleziony w Redis lub wygasł", map[string]any{
-			"user_id": userID,
-			"sid":     sessionID,
-			"err":     err,
-		})
-		return nil, errors.ErrInvalidChallenge
-	}
-
-	// 2. Pobranie aktywnego poświadczenia pracownika
+	// 1. Pobranie aktywnego poświadczenia pracownika (klucz publiczny z DB)
 	cred, err := s.employeeRepo.GetActiveCredentialByUserID(ctx, userID)
 	if err != nil || cred == nil {
 		log.WarnMap("[AttemptLoginStep2] Nie znaleziono aktywnego poświadczenia w DB", map[string]any{
@@ -104,7 +86,6 @@ func (s *authService) AttemptLoginStep2(ctx context.Context, userID uuid.UUID, s
 		return nil, errors.ErrUntrustedDevice
 	}
 
-	// 3. Weryfikacja podpisu kryptograficznego z użyciem Domain Binding (Ed25519)
 	pubKeyBytes, err := hex.DecodeString(cred.PublicKey)
 	if err != nil {
 		log.WarnMap("[AttemptLoginStep2] Nieprawidłowy format klucza publicznego w DB", map[string]any{
@@ -114,20 +95,17 @@ func (s *authService) AttemptLoginStep2(ctx context.Context, userID uuid.UUID, s
 		return nil, errors.ErrInvalidSignature
 	}
 
-	if err := security.VerifyEd25519Challenge(pubKeyBytes, storedChallenge, signature, s.cfg.Auth.Domain); err != nil {
-		log.WarnMap("SECURITY ALERT: Nieprawidłowy podpis pracownika", map[string]any{
-			"user_id":       userID,
-			"card_sn":       cred.CardSerialNumber,
-			"pub_key_in_db": cred.PublicKey,
-			"err":           err,
+	// 2. Weryfikacja challenge, podpisu i usunięcie z Redisa w jednej funkcji
+	if err := s.verifyChallengeSession(ctx, sessionID, signature, pubKeyBytes); err != nil {
+		log.WarnMap("SECURITY ALERT: Nieprawidłowy podpis pracownika lub wygasłe wyzwanie", map[string]any{
+			"user_id": userID,
+			"card_sn": cred.CardSerialNumber,
+			"err":     err,
 		})
 		return nil, errors.ErrInvalidSignature
 	}
 
-	// 4. Usunięcie wyzwania z Redisa (Replay Attack Protection)
-	_ = s.cache.DeleteChallenge(ctx, sessionID)
-
-	// 5. Pobranie użytkownika
+	// 3. Pobranie użytkownika
 	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil || user == nil {
 		log.WarnMap("[AttemptLoginStep2] Nie znaleziono konta użytkownika", map[string]any{
@@ -145,7 +123,7 @@ func (s *authService) AttemptLoginStep2(ctx context.Context, userID uuid.UUID, s
 		return nil, err
 	}
 
-	// 6. Pobranie metadanych profilu pracownika
+	// 4. Metadane profilu pracownika
 	var permissions []string
 	var instID, deptID, empNumber string
 
@@ -159,7 +137,7 @@ func (s *authService) AttemptLoginStep2(ctx context.Context, userID uuid.UUID, s
 		}
 	}
 
-	// 7. Tworzenie tokenów i pełnej sesji w Redis
+	// 5. Generowanie tokenów i sesji
 	accessToken, newSessionID, err := s.CreateAccessToken(ctx, user.ID, fingerprint)
 	if err != nil {
 		return nil, errors.ErrInternal
@@ -179,7 +157,7 @@ func (s *authService) AttemptLoginStep2(ctx context.Context, userID uuid.UUID, s
 		InstitutionID:  instID,
 		DepartmentID:   deptID,
 		Permissions:    permissions,
-		Fingerprint:    crypto.HashSHA256(fingerprint),
+		Fingerprint:    fingerprint,
 		PublicKey:      cred.PublicKey,
 	}
 
@@ -212,7 +190,7 @@ func (s *authService) RegisterDevice(ctx context.Context, userID uuid.UUID, sess
 		return nil, errors.ErrSessionExpired
 	}
 
-	if setupSess.Fingerprint != crypto.HashSHA256(req.DeviceFingerprint) {
+	if setupSess.Fingerprint != req.DeviceFingerprint {
 		log.WarnMap("[RegisterDevice] Fingerprint mismatch", map[string]any{"sid": sessionID})
 		return nil, errors.ErrInvalidDeviceFingerprint
 	}
@@ -247,7 +225,7 @@ func (s *authService) RegisterDevice(ctx context.Context, userID uuid.UUID, sess
 	// 4. Utworzenie lub aktualizacja rekordu urządzenia
 	device := &model.UserDevice{
 		UserID:              userID,
-		DeviceFingerprint:   crypto.HashSHA256(req.DeviceFingerprint),
+		DeviceFingerprint:   req.DeviceFingerprint,
 		PublicKey:           req.PublicKey,
 		DeviceNameEncrypted: req.DeviceNameEncrypted,
 		Platform:            req.Platform,
@@ -388,7 +366,7 @@ func (s *authService) Verify2FA(ctx context.Context, token string, code []byte, 
 
 	err = s.cache.SetSetupSession(ctx, sessionID, &redis.SetupSession{
 		UserID:      session.UserID,
-		Fingerprint: crypto.HashSHA256(fingerprint),
+		Fingerprint: fingerprint,
 	}, s.cfg.Session.TTL)
 	if err != nil {
 		return nil, errors.ErrInternal
@@ -557,7 +535,7 @@ func (s *authService) prepareEmployeeLogin(ctx context.Context, user *model.User
 	// 4. Konstruujemy dane sesji z kontekstem urzędnika i kluczem z KARTY
 	sessionData := redis.SetupSession{
 		UserID:      user.ID.String(),
-		Fingerprint: crypto.HashSHA256(fingerprint),
+		Fingerprint: fingerprint,
 		PublicKey:   credential.PublicKey,
 		Role:        string(user.Role),
 	}
@@ -599,7 +577,7 @@ func (s *authService) prepare2FASession(ctx context.Context, user *model.User, f
 		Email:       user.Email,
 		Token:       token.String(),
 		CodeHash:    hashedCode,
-		Fingerprint: crypto.HashSHA256(fingerprint),
+		Fingerprint: fingerprint,
 		Attempts:    0,
 	}
 
@@ -731,7 +709,7 @@ func (s *authService) preparePreTrustSession(ctx context.Context, user *model.Us
 	// 2. Dane sesji dla zwykłego urządzenia
 	sessionData := redis.SetupSession{
 		UserID:      user.ID.String(),
-		Fingerprint: crypto.HashSHA256(fingerprint),
+		Fingerprint: fingerprint,
 		PublicKey:   publicKey,
 		Role:        string(user.Role),
 	}

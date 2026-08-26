@@ -59,7 +59,7 @@ func (s *authService) CreateAccessToken(ctx context.Context, userID uuid.UUID, f
 	claims := jwt.MapClaims{
 		"uid":   userID.String(),
 		"sid":   sessionID.String(),
-		"fpt":   crypto.HashSHA256(fingerprint),
+		"fpt":   fingerprint,
 		"scope": constants.ScopeAccess.String(),
 	}
 
@@ -77,7 +77,7 @@ func (s *authService) CreateSetupToken(ctx context.Context, userID uuid.UUID, fi
 	claims := jwt.MapClaims{
 		"uid":   userID.String(),
 		"sid":   sessionID.String(),
-		"fpt":   crypto.HashSHA256(fingerprint),
+		"fpt":   fingerprint,
 		"scope": constants.ScopeDeviceVerify.String(),
 	}
 
@@ -101,7 +101,7 @@ func (s *authService) CreateRefreshToken(userID uuid.UUID, fingerprint string, d
 	rt := &model.RefreshToken{
 		UserID:            userID,
 		DeviceID:          deviceID,
-		DeviceFingerprint: crypto.HashSHA256(fingerprint),
+		DeviceFingerprint: fingerprint,
 		Token:             crypto.HashSHA256(rawToken),
 		ExpiresAt:         time.Now().Add(s.cfg.JWT.RefreshTTL),
 		Revoked:           false,
@@ -163,17 +163,23 @@ func (s *authService) verifyChallengeSession(ctx context.Context, sessionID uuid
 	// 1. Odczyt challenge z Redisa
 	storedChallenge, err := s.cache.GetChallenge(ctx, sessionID)
 	if err != nil || storedChallenge == "" {
-		log.Warn("Challenge session expired or not found in Redis", "sessionID", sessionID)
+		log.WarnMap("Challenge session expired or not found in Redis", map[string]any{
+			"sessionID": sessionID,
+			"err":       err,
+		})
 		return errors.ErrChallengeExpired
 	}
 
-	// 2. Bezwzględne usunięcie z Redisa (Atomic Burn - zapobieganie Replay Attack)
+	// 2. Bezwzględne usunięcie z Redisa
 	_ = s.cache.DeleteChallenge(ctx, sessionID)
 
 	// 3. Kryptograficzne sprawdzenie podpisu z użyciem funkcji z pkg/security
 	domain := s.cfg.Auth.Domain
 	if err := security.VerifyEd25519Challenge(pubKeyBytes, storedChallenge, signatureB64, domain); err != nil {
-		log.Warn("Cryptographic signature verification failed", "sessionID", sessionID, "error", err)
+		log.WarnMap("Cryptographic signature verification failed", map[string]any{
+			"sessionID": sessionID,
+			"error":     err,
+		})
 		return errors.ErrInvalidSignature
 	}
 
@@ -207,7 +213,7 @@ func (s *authService) buildUserSession(user *model.User, fingerprint, pubKey str
 		InstitutionID:  instID,
 		DepartmentID:   deptID,
 		Permissions:    permissions,
-		Fingerprint:    crypto.HashSHA256(fingerprint),
+		Fingerprint:    fingerprint,
 		PublicKey:      pubKey,
 	}
 }

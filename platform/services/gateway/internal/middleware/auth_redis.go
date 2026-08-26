@@ -119,12 +119,6 @@ func AuthRedisMiddleware(cache *rdy.Cache) fiber.Handler {
 			// Ustawienie sessionID w kontekście
 			c.Locals("setupSession", setupSess)
 			c.Locals("sessionID", claimsData.SessionID)
-
-			log.DebugJSON("[AuthRedisMiddleware] Final", map[string]any{
-				"sessionID from Token": claimsData.SessionID,
-				"userSession":          setupSess,
-			})
-
 		} else {
 			userSess, err := cache.GetSession(c.Context(), claimsData.SessionID)
 			if err != nil {
@@ -153,12 +147,6 @@ func AuthRedisMiddleware(cache *rdy.Cache) fiber.Handler {
 
 			c.Locals("userSession", userSess)
 			c.Locals("sessionID", claimsData.SessionID)
-
-			log.DebugJSON("[AuthRedisMiddleware] Final", map[string]any{
-				"sessionID from Token": claimsData.SessionID,
-				"userSession":          userSess,
-			})
-
 		}
 
 		return c.Next()

@@ -4,7 +4,9 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 
+	"github.com/zerodayz7/platform/pkg/constants"
 	appcontext "github.com/zerodayz7/platform/pkg/context"
+	"github.com/zerodayz7/platform/pkg/crypto"
 	apperr "github.com/zerodayz7/platform/pkg/errors"
 	rdy "github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/shared"
@@ -29,8 +31,10 @@ func ContextBuilder(container *di.Container) fiber.Handler {
 
 		// 1. ŚCIEŻKI PUBLICZNE (Brak jakiejkolwiek sesji w c.Locals)
 		if userLocal == nil && setupLocal == nil {
-			// Na ścieżkach publicznych zapisujemy surowy/hashowany fingerprint z nagłówka
-			reqCtx.DeviceID = c.Get("X-Device-Fingerprint")
+			rawFP := c.Get(constants.HeaderDeviceFingerprint)
+			if rawFP != "" {
+				reqCtx.DeviceID = crypto.HashSHA256(rawFP)
+			}
 			c.Locals("requestContext", reqCtx)
 			return c.Next()
 		}
@@ -86,10 +90,6 @@ func ContextBuilder(container *di.Container) fiber.Handler {
 
 			reqCtx.Role = setupData.Role
 		}
-
-		log.DebugJSON("[ContextBuilder] Successfully built RequestContext", map[string]any{
-			"reqCtx": reqCtx,
-		})
 
 		c.Locals("requestContext", reqCtx)
 		return c.Next()

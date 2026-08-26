@@ -19,12 +19,12 @@ func ConstructChallengePayload(challengeBytes []byte, domain string) []byte {
 
 // VerifyEd25519Challenge weryfikuje podpis kluczem Ed25519.
 func VerifyEd25519Challenge(pubKeyBytes []byte, challengeB64 string, signatureB64 string, domain string) error {
-	challengeBytes, err := base64.RawURLEncoding.DecodeString(challengeB64)
+	challengeBytes, err := base64.StdEncoding.DecodeString(challengeB64)
 	if err != nil {
 		return fmt.Errorf("%w: challenge", ErrInvalidEncoding)
 	}
 
-	sigBytes, err := base64.RawURLEncoding.DecodeString(signatureB64)
+	sigBytes, err := base64.StdEncoding.DecodeString(signatureB64)
 	if err != nil {
 		return fmt.Errorf("%w: signature", ErrInvalidEncoding)
 	}
