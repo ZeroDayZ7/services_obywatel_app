@@ -47,7 +47,6 @@ func main() {
 	}
 
 	var eventPublisher rabbitmq.EventPublisher
-	var err error
 
 	if cfg.RabbitMQ.Enabled {
 		log.Info("RabbitMQ is ENABLED. Connecting...")

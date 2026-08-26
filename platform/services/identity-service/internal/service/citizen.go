@@ -23,7 +23,11 @@ import (
 
 // #region Interface
 type CitizenService interface {
-	RegisterCitizen(ctx context.Context, payload model.CitizenPayload) (*model.RegisterCitizenResponse, error)
+	RegisterCitizen(
+		ctx context.Context,
+		actor model.Actor,
+		payload model.CitizenPayload,
+	) (*model.RegisterCitizenResponse, error)
 	GetCitizenByID(ctx context.Context, userID uuid.UUID) (*model.CitizenPayload, error)
 	DownloadAgreementPDF(ctx context.Context, agreementID uuid.UUID) ([]byte, error)
 }
@@ -43,7 +47,7 @@ type citizenService struct {
 	emailKeyAlias      string
 }
 
-//#region NewCitizenService
+// #region NewCitizenService
 func NewCitizenService(
 	repo repository.CitizenRepository,
 	cryptor *envelope.EnvelopeCryptor,
@@ -75,8 +79,12 @@ func NewCitizenService(
 }
 
 // #region RegisterCitizen
-//#region RegisterCitizen
-func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.CitizenPayload) (*model.RegisterCitizenResponse, error) {
+// #region RegisterCitizen
+func (s *citizenService) RegisterCitizen(
+	ctx context.Context,
+	actor model.Actor,
+	payload model.CitizenPayload,
+) (*model.RegisterCitizenResponse, error) {
 	log := shared.GetLogger()
 	// log.Debug("🔍 Przed obliczeniem haszy",
 	// 	"pesel_raw_len", len(payload.PESEL),
@@ -155,15 +163,6 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 		}
 	}
 
-	actorID := reqctx.GetUserID(ctx)
-	if actorID == uuid.Nil {
-		return nil, &apperr.AppError{
-			Code:    "UNAUTHORIZED",
-			Type:    apperr.Unauthorized,
-			Message: "Brak identyfikatora pracownika wykonującego operację.",
-		}
-	}
-
 	citizen := &model.Citizen{
 		UserID:        userID,
 		PESELHash:     peselHash,
@@ -192,24 +191,6 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 	docHashBytes := sha256.Sum256(plaintextBytes)
 	documentHash := hex.EncodeToString(docHashBytes[:])
 
-	reqCtx, ok := reqctx.FromContext(ctx)
-
-	officerName := "System Automatyczny"
-	departmentIDStr := "-"
-	institutionIDStr := "-"
-
-	if ok && reqCtx != nil && reqCtx.Role == "OFFICER" {
-		if reqCtx.Username != "" {
-			officerName = reqCtx.Username
-		}
-		if reqCtx.DepartmentID != nil {
-			departmentIDStr = reqCtx.DepartmentID.String()
-		}
-		if reqCtx.InstitutionID != nil {
-			institutionIDStr = reqCtx.InstitutionID.String()
-		}
-	}
-
 	templateData := AgreementTemplateData{
 		AgreementID:     agreementID.String(),
 		AgreementNumber: agreementNumber,
@@ -227,10 +208,10 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 		SignedAt:        now.Format("02.01.2006 15:04"),
 		KeyVersion:      int(encryptedPayload.KeyVersion),
 		DocumentHash:    documentHash,
-		OfficerName:     officerName,
-		OfficerID:       actorID.String(),
-		DepartmentID:    departmentIDStr,
-		InstitutionID:   institutionIDStr,
+		OfficerName:     actor.Name,
+		OfficerID:       actor.ID.String(),
+		DepartmentID:    actor.DepartmentIDString(),
+		InstitutionID:   actor.InstitutionIDString(),
 	}
 
 	// log.DebugJSON("Pełny payload danych do generowania umowy PDF", templateData)
@@ -330,7 +311,7 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 		ID:          shared.NewUUIDv7(),
 		UserID:      userID,
 		Action:      model.ActionCitizenRegistered,
-		ActorID:     actorID,
+		ActorID:     actor.ID,
 		IPAddress:   clientIP,
 		PayloadHash: payloadHash,
 	}
@@ -401,7 +382,7 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 }
 
 // #region GetCitizenByID
-//#region GetCitizenByID
+// #region GetCitizenByID
 func (s *citizenService) GetCitizenByID(ctx context.Context, userID uuid.UUID) (*model.CitizenPayload, error) {
 	citizen, err := s.repo.GetByID(ctx, userID)
 	if err != nil {
@@ -440,7 +421,7 @@ func (s *citizenService) GetCitizenByID(ctx context.Context, userID uuid.UUID) (
 }
 
 // #region GenerateAndSaveAgreement
-//#region GenerateAndSaveAgreement
+// #region GenerateAndSaveAgreement
 func (s *citizenService) GenerateAndSaveAgreement(ctx context.Context, userID uuid.UUID, pdfBytes []byte) (*model.UserAgreement, error) {
 	encryptedPayload, err := s.cryptor.Seal(ctx, s.agreementsKeyAlias, pdfBytes)
 	if err != nil {
@@ -476,7 +457,7 @@ func (s *citizenService) GenerateAndSaveAgreement(ctx context.Context, userID uu
 }
 
 // #region DownloadAgreementPDF
-//#region DownloadAgreementPDF
+// #region DownloadAgreementPDF
 func (s *citizenService) DownloadAgreementPDF(ctx context.Context, agreementID uuid.UUID) ([]byte, error) {
 	// log := shared.GetLogger()
 	agreement, err := s.repo.GetAgreementByID(ctx, agreementID)

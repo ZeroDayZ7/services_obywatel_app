@@ -6,6 +6,7 @@
     "**/go.mod": true,
     "**/logs/": true,
     "**/bin/": true,
+    // "**/dbgen/": true,
     "**/backup/": true,
     "platform/templates/": true,
     "**/.env.example": true,
