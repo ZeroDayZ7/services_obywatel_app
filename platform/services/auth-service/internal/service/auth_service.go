@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/base64"
+	"encoding/hex"
 	"strings"
 	"time"
 
@@ -103,13 +104,22 @@ func (s *authService) AttemptLoginStep2(ctx context.Context, userID uuid.UUID, s
 		return nil, errors.ErrUntrustedDevice
 	}
 
-	// 3. Weryfikacja podpisu cryptographic (Ed25519)
-	challengeBytes := []byte(storedChallenge)
-	if !shared.VerifyEd25519SignatureHex(cred.PublicKey, challengeBytes, signature) {
+	// 3. Weryfikacja podpisu kryptograficznego z użyciem Domain Binding (Ed25519)
+	pubKeyBytes, err := hex.DecodeString(cred.PublicKey)
+	if err != nil {
+		log.WarnMap("[AttemptLoginStep2] Nieprawidłowy format klucza publicznego w DB", map[string]any{
+			"user_id": userID,
+			"err":     err,
+		})
+		return nil, errors.ErrInvalidSignature
+	}
+
+	if err := security.VerifyEd25519Challenge(pubKeyBytes, storedChallenge, signature, s.cfg.Auth.Domain); err != nil {
 		log.WarnMap("SECURITY ALERT: Nieprawidłowy podpis pracownika", map[string]any{
 			"user_id":       userID,
 			"card_sn":       cred.CardSerialNumber,
 			"pub_key_in_db": cred.PublicKey,
+			"err":           err,
 		})
 		return nil, errors.ErrInvalidSignature
 	}

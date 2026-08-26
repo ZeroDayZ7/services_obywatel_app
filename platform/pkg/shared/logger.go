@@ -37,7 +37,7 @@ const (
 	colorRed    = "\x1b[31m"
 )
 
-//#region InitBootstrapLogger
+// #region InitBootstrapLogger
 func InitBootstrapLogger(env string, saveToFile bool) *Logger {
 	env = strings.ToLower(env)
 	isProd := env == "production" || env == "staging"
@@ -93,7 +93,7 @@ func InitBootstrapLogger(env string, saveToFile bool) *Logger {
 	return &Logger{zap.New(core, zap.AddCaller())}
 }
 
-//#region InitLogger
+// #region InitLogger
 func InitLogger(env string, saveToFile bool) *Logger {
 	once.Do(func() {
 		env = strings.ToLower(env)
@@ -157,7 +157,7 @@ func InitLogger(env string, saveToFile bool) *Logger {
 	return instance
 }
 
-//#region GetLogger
+// #region GetLogger
 func GetLogger() *Logger {
 	if instance == nil {
 		InitLogger("development", false)
@@ -167,38 +167,47 @@ func GetLogger() *Logger {
 
 // --- Metody logowania ---
 // region METODY
-//#region Info
-func (l *Logger) Info(msg string, args ...any)  { l.Logger.Info(msg, l.parseArgs(args...)...) }
-//#region Debug
+// #region Info
+func (l *Logger) Info(msg string, args ...any) { l.Logger.Info(msg, l.parseArgs(args...)...) }
+
+// #region Debug
 func (l *Logger) Debug(msg string, args ...any) { l.Logger.Debug(msg, l.parseArgs(args...)...) }
-//#region Warn
-func (l *Logger) Warn(msg string, args ...any)  { l.Logger.Warn(msg, l.parseArgs(args...)...) }
-//#region Error
+
+// #region Warn
+func (l *Logger) Warn(msg string, args ...any) { l.Logger.Warn(msg, l.parseArgs(args...)...) }
+
+// #region Error
 func (l *Logger) Error(msg string, args ...any) { l.Logger.Error(msg, l.parseArgs(args...)...) }
 
-//#region InfoMap
-func (l *Logger) InfoMap(msg string, m map[string]any)  { l.Logger.Info(msg, toFields(m)...) }
-//#region DebugMap
+// #region InfoMap
+func (l *Logger) InfoMap(msg string, m map[string]any) { l.Logger.Info(msg, toFields(m)...) }
+
+// #region DebugMap
 func (l *Logger) DebugMap(msg string, m map[string]any) { l.Logger.Debug(msg, toFields(m)...) }
-//#region WarnMap
-func (l *Logger) WarnMap(msg string, m map[string]any)  { l.Logger.Warn(msg, toFields(m)...) }
-//#region ErrorMap
+
+// #region WarnMap
+func (l *Logger) WarnMap(msg string, m map[string]any) { l.Logger.Warn(msg, toFields(m)...) }
+
+// #region ErrorMap
 func (l *Logger) ErrorMap(msg string, m map[string]any) { l.Logger.Error(msg, toFields(m)...) }
 
-//#region InfoObj
-func (l *Logger) InfoObj(msg string, obj any)  { l.Logger.Info(msg, convertStructToFields(obj)...) }
-//#region DebugObj
+// #region InfoObj
+func (l *Logger) InfoObj(msg string, obj any) { l.Logger.Info(msg, convertStructToFields(obj)...) }
+
+// #region DebugObj
 func (l *Logger) DebugObj(msg string, obj any) { l.Logger.Debug(msg, convertStructToFields(obj)...) }
-//#region WarnObj
-func (l *Logger) WarnObj(msg string, obj any)  { l.Logger.Warn(msg, convertStructToFields(obj)...) }
-//#region ErrorObj
+
+// #region WarnObj
+func (l *Logger) WarnObj(msg string, obj any) { l.Logger.Warn(msg, convertStructToFields(obj)...) }
+
+// #region ErrorObj
 func (l *Logger) ErrorObj(msg string, obj any) { l.Logger.Error(msg, convertStructToFields(obj)...) }
 
 // region DEBUG
 const colorCyan = "\x1b[36m"
 
 // DebugDB - Niebieska ramka (idealna do logowania modeli z bazy, query result itp.)
-//#region DebugDB
+// #region DebugDB
 func (l *Logger) DebugDB(msg string, data any) {
 	if !l.Core().Enabled(zapcore.DebugLevel) {
 		return
@@ -218,18 +227,18 @@ func (l *Logger) DebugDB(msg string, data any) {
 	fmt.Printf("%s------------------------------------------\x1b[0m\n\n", colorCyan)
 }
 
-//#region DebugPretty
+// #region DebugPretty
 func (l *Logger) DebugPretty(msg string, m map[string]any) {
 	l.Logger.Debug(msg, toFields(m)...)
 }
 
-//#region DebugEmpty
+// #region DebugEmpty
 func (l *Logger) DebugEmpty(msg string, key string) {
 	l.Logger.Debug(msg, zap.String(key, "NULL/EMPTY ∅"))
 }
 
 // Dodaj to do shared/logger.go
-//#region DebugResponse
+// #region DebugResponse
 func (l *Logger) DebugResponse(msg string, res any) {
 	if !l.Core().Enabled(zap.DebugLevel) {
 		return
@@ -247,7 +256,7 @@ func (l *Logger) DebugResponse(msg string, res any) {
 }
 
 // DebugRequest ładnie formatuje przetworzone żądanie w konsoli (kolory ANSI)
-//#region DebugRequest
+// #region DebugRequest
 func (l *Logger) DebugRequest(msg string, method, path string, status int, latency string, body any) {
 	if !l.Core().Enabled(zapcore.DebugLevel) {
 		return
@@ -274,24 +283,24 @@ func (l *Logger) DebugRequest(msg string, method, path string, status int, laten
 }
 
 // DebugInfo - Zielona ramka (idealna do kodów 2FA, sukcesów w testach)
-//#region DebugInfo
+// #region DebugInfo
 func (l *Logger) DebugInfo(msg string, data any) {
 	l.printFramedLog("INFO", msg, data, colorGreen)
 }
 
 // DebugWarn - Żółta ramka (ostrzeżenia, ważne punkty w logice)
-//#region DebugWarn
+// #region DebugWarn
 func (l *Logger) DebugWarn(msg string, data any) {
 	l.printFramedLog("WARN", msg, data, colorYellow)
 }
 
 // DebugError - Czerwona ramka (błędy, które chcesz widzieć wizualnie)
-//#region DebugError
+// #region DebugError
 func (l *Logger) DebugError(msg string, data any) {
 	l.printFramedLog("ERROR", msg, data, colorRed)
 }
 
-//#region DebugJSON
+// #region DebugJSON
 func (l *Logger) DebugJSON(msg string, obj any) {
 	if !l.Core().Enabled(zapcore.DebugLevel) {
 		return
@@ -314,17 +323,17 @@ func (l *Logger) DebugJSON(msg string, obj any) {
 // ===========================================
 // region FATAL
 // ===========================================
-//#region Fatal
+// #region Fatal
 func (l *Logger) Fatal(msg string, args ...any) {
 	l.Logger.Fatal(msg, l.parseArgs(args...)...)
 }
 
-//#region FatalMap
+// #region FatalMap
 func (l *Logger) FatalMap(msg string, m map[string]any) {
 	l.Logger.Fatal(msg, toFields(m)...)
 }
 
-//#region FatalObj
+// #region FatalObj
 func (l *Logger) FatalObj(msg string, obj any) {
 	l.Logger.Fatal(msg, convertStructToFields(obj)...)
 }
@@ -332,7 +341,7 @@ func (l *Logger) FatalObj(msg string, obj any) {
 // region = HELPERY =
 
 // region printFramedLog
-//#region printFramedLog
+// #region printFramedLog
 func (l *Logger) printFramedLog(label, msg string, data any, color string) {
 	if !l.Core().Enabled(zapcore.DebugLevel) {
 		return
@@ -353,7 +362,7 @@ func (l *Logger) printFramedLog(label, msg string, data any, color string) {
 }
 
 // region printValue
-//#region printValue
+// #region printValue
 func (l *Logger) printValue(f zap.Field, indent int) {
 	switch f.Type {
 	case zapcore.StringType:
@@ -381,7 +390,7 @@ func (l *Logger) printValue(f zap.Field, indent int) {
 }
 
 // region convertStructToFields
-//#region convertStructToFields
+// #region convertStructToFields
 func convertStructToFields(obj any) []zap.Field {
 	fields := []zap.Field{}
 
@@ -454,7 +463,7 @@ func convertStructToFields(obj any) []zap.Field {
 }
 
 // region isSensitive
-//#region isSensitive
+// #region isSensitive
 func isSensitive(name string) bool {
 	n := strings.ToLower(name)
 
@@ -469,7 +478,7 @@ func isSensitive(name string) bool {
 
 // region toFields
 // --- Helper konwertujący mapy na zap.Fields (również z maskowaniem) ---
-//#region toFields
+// #region toFields
 func toFields(m map[string]any) []zap.Field {
 	fields := make([]zap.Field, 0, len(m))
 	for k, v := range m {
@@ -488,7 +497,7 @@ func toFields(m map[string]any) []zap.Field {
 }
 
 // region parseArgs
-//#region parseArgs
+// #region parseArgs
 func (l *Logger) parseArgs(args ...any) []zap.Field {
 	var fields []zap.Field
 	n := len(args)

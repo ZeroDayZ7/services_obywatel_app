@@ -21,14 +21,41 @@ type EnvelopeCryptor struct {
 }
 
 // #region NewEnvelopeCryptor
-//#region NewEnvelopeCryptor
 func NewEnvelopeCryptor(kmsCfg kms.Config) *EnvelopeCryptor {
 	return &EnvelopeCryptor{kmsCfg: kmsCfg}
 }
 
+func (e *EnvelopeCryptor) SealWithDataKey(ctx context.Context, keyAlias string, plaintext []byte) (*EncryptedPayload, error) {
+	// 1. Odpytujemy KMS o nowy klucz DEK (zwraca zarówno czysty, jak i zaszyfrowany DEK)
+	dataKey, err := kms.GenerateDataKey(ctx, e.kmsCfg, keyAlias)
+	if err != nil {
+		return nil, fmt.Errorf("envelope: failed to generate DataKey via KMS: %w", err)
+	}
+
+	// 2. Bezwzględne czyszczenie czystego klucza z pamięci RAM po zakończeniu funkcji
+	defer kms.ZeroBytes(dataKey.Plaintext)
+
+	// 3. Szyfrowanie lokalne AES-GCM za pomocą otrzymanego z KMS klucza czystego
+	encryptedData, err := crypto.EncryptAESGCM(plaintext, dataKey.Plaintext)
+	if err != nil {
+		return nil, fmt.Errorf("envelope: failed to encrypt payload: %w", err)
+	}
+
+	// 4. Pakowanie wersji klucza (4 bajty) + zaszyfrowany DEK (dataKey.Ciphertext)
+	packedDEK := make([]byte, 4+len(dataKey.Ciphertext))
+	binary.BigEndian.PutUint32(packedDEK[0:4], uint32(dataKey.MasterKeyVersion))
+	copy(packedDEK[4:], dataKey.Ciphertext)
+
+	return &EncryptedPayload{
+		EncryptedData: encryptedData,
+		EncryptedDEK:  packedDEK,
+		KeyVersion:    dataKey.MasterKeyVersion,
+	}, nil
+}
+
 // #region Seal
 // Seal wykonuje pełny proces szyfrowania kopertowego i automatycznie pakuje wersję klucza do DEK
-//#region Seal
+// #region Seal
 func (e *EnvelopeCryptor) Seal(ctx context.Context, keyAlias string, plaintext []byte) (*EncryptedPayload, error) {
 	dek, err := crypto.GenerateDEK(32)
 	if err != nil {
@@ -60,7 +87,7 @@ func (e *EnvelopeCryptor) Seal(ctx context.Context, keyAlias string, plaintext [
 
 // #region Unseal
 // Unseal automatycznie rozpakowuje wersję klucza z EncryptedDEK i odszyfrowuje dane
-//#region Unseal
+// #region Unseal
 func (e *EnvelopeCryptor) Unseal(ctx context.Context, keyAlias string, encryptedData []byte, packedDEK []byte) ([]byte, error) {
 	if len(packedDEK) < 4 {
 		return nil, fmt.Errorf("envelope: packed DEK too short")

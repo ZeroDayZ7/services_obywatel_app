@@ -421,9 +421,9 @@ func (s *citizenService) GetCitizenByID(ctx context.Context, userID uuid.UUID) (
 }
 
 // #region GenerateAndSaveAgreement
-// #region GenerateAndSaveAgreement
 func (s *citizenService) GenerateAndSaveAgreement(ctx context.Context, userID uuid.UUID, pdfBytes []byte) (*model.UserAgreement, error) {
-	encryptedPayload, err := s.cryptor.Seal(ctx, s.agreementsKeyAlias, pdfBytes)
+	// 1. Prosimy KMS o wygenerowanie DataKey i szyfrujemy dokument
+	encryptedPayload, err := s.cryptor.SealWithDataKey(ctx, s.agreementsKeyAlias, pdfBytes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encrypt agreement pdf: %w", err)
 	}
