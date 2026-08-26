@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/zerodayz7/platform/pkg/crypto"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/citizen-docs/internal/model"
 	"gorm.io/datatypes"
@@ -169,7 +170,7 @@ func SeedData(db *gorm.DB) error {
 		UserID:        testUserID1,
 		EncryptedData: bytesCitizenData1,
 		EncryptedDEK:  mockDEK("profile_jan"),
-		PeselHash:     shared.ComputeHMACSHA256([]byte("90010112345"), seedSecret),
+		PeselHash:     crypto.ComputeHMAC256Hex([]byte("90010112345"), seedSecret),
 		Documents:     []model.UserDocument{doc1, doc2, doc3},
 	}
 
@@ -266,7 +267,7 @@ func SeedData(db *gorm.DB) error {
 		UserID:        testUserID2,
 		EncryptedData: bytesCitizenData2,
 		EncryptedDEK:  mockDEK("profile_anna"),
-		PeselHash:     shared.ComputeHMACSHA256([]byte("95050554321"), seedSecret),
+		PeselHash:     crypto.ComputeHMAC256Hex([]byte("95050554321"), seedSecret),
 		Documents:     []model.UserDocument{doc4, doc5},
 	}
 

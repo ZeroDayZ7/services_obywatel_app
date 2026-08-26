@@ -8,6 +8,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/pkg/constants"
+	"github.com/zerodayz7/platform/pkg/crypto"
 	"github.com/zerodayz7/platform/pkg/errors"
 	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/security"
@@ -58,7 +59,7 @@ func (s *authService) CreateAccessToken(ctx context.Context, userID uuid.UUID, f
 	claims := jwt.MapClaims{
 		"uid":   userID.String(),
 		"sid":   sessionID.String(),
-		"fpt":   shared.HashSHA256(fingerprint),
+		"fpt":   crypto.HashSHA256(fingerprint),
 		"scope": constants.ScopeAccess.String(),
 	}
 
@@ -76,7 +77,7 @@ func (s *authService) CreateSetupToken(ctx context.Context, userID uuid.UUID, fi
 	claims := jwt.MapClaims{
 		"uid":   userID.String(),
 		"sid":   sessionID.String(),
-		"fpt":   shared.HashSHA256(fingerprint),
+		"fpt":   crypto.HashSHA256(fingerprint),
 		"scope": constants.ScopeDeviceVerify.String(),
 	}
 
@@ -100,8 +101,8 @@ func (s *authService) CreateRefreshToken(userID uuid.UUID, fingerprint string, d
 	rt := &model.RefreshToken{
 		UserID:            userID,
 		DeviceID:          deviceID,
-		DeviceFingerprint: shared.HashSHA256(fingerprint),
-		Token:             shared.HashSHA256(rawToken),
+		DeviceFingerprint: crypto.HashSHA256(fingerprint),
+		Token:             crypto.HashSHA256(rawToken),
 		ExpiresAt:         time.Now().Add(s.cfg.JWT.RefreshTTL),
 		Revoked:           false,
 	}
@@ -206,7 +207,7 @@ func (s *authService) buildUserSession(user *model.User, fingerprint, pubKey str
 		InstitutionID:  instID,
 		DepartmentID:   deptID,
 		Permissions:    permissions,
-		Fingerprint:    shared.HashSHA256(fingerprint),
+		Fingerprint:    crypto.HashSHA256(fingerprint),
 		PublicKey:      pubKey,
 	}
 }

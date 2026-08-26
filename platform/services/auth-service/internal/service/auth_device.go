@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/zerodayz7/platform/pkg/crypto"
 	"github.com/zerodayz7/platform/pkg/errors"
 	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/schemas"
@@ -14,7 +15,6 @@ import (
 )
 
 // #region VerifyDeviceSignature
-//
 //
 // #region VerifyDeviceSignature
 func (s *authService) VerifyDeviceSignature(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID, signature, fingerprint string) (*http.LoginResponse, error) {
@@ -88,7 +88,7 @@ func (s *authService) VerifyDeviceSignature(ctx context.Context, userID uuid.UUI
 		InstitutionID:  instID,
 		DepartmentID:   deptID,
 		Permissions:    permissions,
-		Fingerprint:    shared.HashSHA256(fingerprint),
+		Fingerprint:    crypto.HashSHA256(fingerprint),
 		PublicKey:      device.PublicKey,
 	}
 

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/zerodayz7/platform/pkg/crypto"
 	"github.com/zerodayz7/platform/pkg/errors"
 	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/schemas"
@@ -168,7 +169,7 @@ func (s *authService) AttemptLoginStep2(ctx context.Context, userID uuid.UUID, s
 		InstitutionID:  instID,
 		DepartmentID:   deptID,
 		Permissions:    permissions,
-		Fingerprint:    shared.HashSHA256(fingerprint),
+		Fingerprint:    crypto.HashSHA256(fingerprint),
 		PublicKey:      cred.PublicKey,
 	}
 
@@ -201,7 +202,7 @@ func (s *authService) RegisterDevice(ctx context.Context, userID uuid.UUID, sess
 		return nil, errors.ErrSessionExpired
 	}
 
-	if setupSess.Fingerprint != shared.HashSHA256(req.DeviceFingerprint) {
+	if setupSess.Fingerprint != crypto.HashSHA256(req.DeviceFingerprint) {
 		log.WarnMap("[RegisterDevice] Fingerprint mismatch", map[string]any{"sid": sessionID})
 		return nil, errors.ErrInvalidDeviceFingerprint
 	}
@@ -236,7 +237,7 @@ func (s *authService) RegisterDevice(ctx context.Context, userID uuid.UUID, sess
 	// 4. Utworzenie lub aktualizacja rekordu urządzenia
 	device := &model.UserDevice{
 		UserID:              userID,
-		DeviceFingerprint:   shared.HashSHA256(req.DeviceFingerprint),
+		DeviceFingerprint:   crypto.HashSHA256(req.DeviceFingerprint),
 		PublicKey:           req.PublicKey,
 		DeviceNameEncrypted: req.DeviceNameEncrypted,
 		Platform:            req.Platform,
@@ -377,7 +378,7 @@ func (s *authService) Verify2FA(ctx context.Context, token string, code []byte, 
 
 	err = s.cache.SetSetupSession(ctx, sessionID, &redis.UserSession{
 		UserID:      session.UserID,
-		Fingerprint: shared.HashSHA256(fingerprint),
+		Fingerprint: crypto.HashSHA256(fingerprint),
 	}, s.cfg.Session.TTL)
 	if err != nil {
 		return nil, errors.ErrInternal
@@ -546,7 +547,7 @@ func (s *authService) prepareEmployeeLogin(ctx context.Context, user *model.User
 	// 4. Konstruujemy dane sesji z kontekstem urzędnika i kluczem z KARTY
 	sessionData := redis.UserSession{
 		UserID:      user.ID.String(),
-		Fingerprint: shared.HashSHA256(fingerprint),
+		Fingerprint: crypto.HashSHA256(fingerprint),
 		PublicKey:   credential.PublicKey,
 		Role:        string(user.Role),
 	}
@@ -588,7 +589,7 @@ func (s *authService) prepare2FASession(ctx context.Context, user *model.User, f
 		Email:       user.Email,
 		Token:       token.String(),
 		CodeHash:    hashedCode,
-		Fingerprint: shared.HashSHA256(fingerprint),
+		Fingerprint: crypto.HashSHA256(fingerprint),
 		Attempts:    0,
 	}
 
@@ -720,7 +721,7 @@ func (s *authService) preparePreTrustSession(ctx context.Context, user *model.Us
 	// 2. Dane sesji dla zwykłego urządzenia
 	sessionData := redis.UserSession{
 		UserID:      user.ID.String(),
-		Fingerprint: shared.HashSHA256(fingerprint),
+		Fingerprint: crypto.HashSHA256(fingerprint),
 		PublicKey:   publicKey,
 		Role:        string(user.Role),
 	}

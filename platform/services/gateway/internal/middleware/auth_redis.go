@@ -9,12 +9,13 @@ import (
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"github.com/zerodayz7/platform/pkg/constants"
+	"github.com/zerodayz7/platform/pkg/crypto"
 	apperr "github.com/zerodayz7/platform/pkg/errors"
 	rdy "github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/shared"
 )
 
-//#region AuthRedisMiddleware
+// #region AuthRedisMiddleware
 func AuthRedisMiddleware(cache *rdy.Cache) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		log := shared.GetLogger()
@@ -30,7 +31,7 @@ func AuthRedisMiddleware(cache *rdy.Cache) fiber.Handler {
 			return apperr.SendAppError(c, apperr.ErrInvalidDeviceFingerprint)
 		}
 
-		hashedClientFingerprint := shared.HashSHA256(clientFingerprint)
+		hashedClientFingerprint := crypto.HashSHA256(clientFingerprint)
 
 		jwtPayload := c.Locals("user")
 		if jwtPayload == nil {

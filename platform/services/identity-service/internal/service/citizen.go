@@ -93,8 +93,6 @@ func (s *citizenService) RegisterCitizen(
 	// )
 
 	peselHash := crypto.ComputeHMAC256Hex([]byte(payload.PESEL), s.hmacPeselSecret)
-	emailHash := crypto.ComputeHMAC256Hex([]byte(payload.Email), s.hmacEmailSecret)
-	phoneHash := crypto.ComputeHMAC256Hex([]byte(payload.PhoneNumber), s.hmacPhoneSecret)
 
 	// log.Debug("✅ Po obliczeniu haszy",
 	// 	"pesel_hash", peselHash,
@@ -119,7 +117,6 @@ func (s *citizenService) RegisterCitizen(
 		}
 	}
 
-	userID := shared.NewUUIDv7()
 	plaintextBytes, err := json.Marshal(payload)
 	if err != nil {
 		return nil, &apperr.AppError{
@@ -163,6 +160,10 @@ func (s *citizenService) RegisterCitizen(
 		}
 	}
 
+	userID := shared.NewUUIDv7()
+	emailHash := crypto.ComputeHMAC256Hex([]byte(payload.Email), s.hmacEmailSecret)
+	phoneHash := crypto.ComputeHMAC256Hex([]byte(payload.PhoneNumber), s.hmacPhoneSecret)
+
 	citizen := &model.Citizen{
 		UserID:        userID,
 		PESELHash:     peselHash,
@@ -189,6 +190,7 @@ func (s *citizenService) RegisterCitizen(
 	// Najpierw generujemy wstępny PDF lub potrzebujemy hasha
 	// Obliczamy hash dokumentu (np. z zaszyfrowanego payloadu danych lub samej struktury)
 	docHashBytes := sha256.Sum256(plaintextBytes)
+	// docHashBytes := crypto.HashSHA256(plaintextBytes)
 	documentHash := hex.EncodeToString(docHashBytes[:])
 
 	templateData := AgreementTemplateData{
@@ -303,8 +305,7 @@ func (s *citizenService) RegisterCitizen(
 		MaxAttempts:     3,
 	}
 
-	payloadSum := sha256.Sum256(plaintextBytes)
-	payloadHash := hex.EncodeToString(payloadSum[:])
+	payloadHash := hex.EncodeToString(docHashBytes[:])
 
 	auditLog := &model.CitizenAuditLog{
 		ID:          shared.NewUUIDv7(),
@@ -455,7 +456,6 @@ func (s *citizenService) GenerateAndSaveAgreement(ctx context.Context, userID uu
 	return agreement, nil
 }
 
-// #region DownloadAgreementPDF
 // #region DownloadAgreementPDF
 func (s *citizenService) DownloadAgreementPDF(ctx context.Context, agreementID uuid.UUID) ([]byte, error) {
 	// log := shared.GetLogger()

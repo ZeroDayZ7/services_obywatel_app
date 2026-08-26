@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"time"
 
+	"github.com/zerodayz7/platform/pkg/crypto"
 	"github.com/zerodayz7/platform/pkg/errors"
 	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/shared"
@@ -82,7 +83,7 @@ func (s *authService) RefreshToken(ctx context.Context, tokenStr string, fingerp
 	// 8. Zapis sesji w Redis
 	sessionData := redis.UserSession{
 		UserID:      user.ID.String(),
-		Fingerprint: shared.HashSHA256(fingerprint),
+		Fingerprint: crypto.HashSHA256(fingerprint),
 		PublicKey:   device.PublicKey,
 		Role:        string(user.Role),
 	}
