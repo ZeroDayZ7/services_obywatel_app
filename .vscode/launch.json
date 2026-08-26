@@ -2,7 +2,7 @@
   "version": "0.2.0",
   "compounds": [
     {
-      "name": "Wybrane 4 Serwisy",
+      "name": "RUN Serwis",
       "configurations": [
         "Gateway Service",
         "Auth Service",
@@ -24,10 +24,13 @@
         "ENV": "development",
         "APP_ENV": "dev"
       },
+      // "envFile": "${workspaceFolder}/platform/services/gateway/.env",
       "buildFlags": "-tags=dev",
       "cwd": "${workspaceFolder}/platform/services/gateway",
       "showLog": false,
-      "output": "${workspaceFolder}/platform/services/gateway/bin/gateway_debug.exe"
+      "output": "${workspaceFolder}/platform/services/gateway/bin/gateway_debug.exe",
+      "preLaunchTask": "docker:start-gateway-deps",
+      "console": "integratedTerminal"
     },
     {
       "name": "Auth Service",
@@ -40,10 +43,12 @@
         "ENV": "development",
         "APP_ENV": "dev"
       },
+      "envFile": "${workspaceFolder}/platform/services/auth-service/.env",
       "buildFlags": "-tags=dev",
       "cwd": "${workspaceFolder}/platform/services/auth-service",
       "showLog": false,
-      "output": "${workspaceFolder}/platform/services/auth-service/bin/auth_debug.exe"
+      "output": "${workspaceFolder}/platform/services/auth-service/bin/auth_debug.exe",
+      "console": "integratedTerminal"
     },
     {
       "name": "Citizen Docs Service",
@@ -56,10 +61,12 @@
         "ENV": "development",
         "APP_ENV": "dev"
       },
+      "envFile": "${workspaceFolder}/platform/services/citizen-docs/.env",
       "buildFlags": "-tags=dev",
       "cwd": "${workspaceFolder}/platform/services/citizen-docs",
       "showLog": false,
-      "output": "${workspaceFolder}/platform/services/citizen-docs/bin/citizen-docs_debug.exe"
+      "output": "${workspaceFolder}/platform/services/citizen-docs/bin/citizen-docs_debug.exe",
+      "console": "integratedTerminal"
     },
     {
       "name": "Version Service",
@@ -72,10 +79,12 @@
         "ENV": "development",
         "APP_ENV": "dev"
       },
+      "envFile": "${workspaceFolder}/platform/services/auth-service/.env",
       "buildFlags": "-tags=dev",
       "cwd": "${workspaceFolder}/platform/services/version-service",
       "showLog": false,
-      "output": "${workspaceFolder}/platform/services/version-service/bin/version_service_debug.exe"
+      "output": "${workspaceFolder}/platform/services/version-service/bin/version_service_debug.exe",
+      "console": "integratedTerminal"
     },
     {
       "name": "Notification Service",
@@ -88,10 +97,12 @@
         "ENV": "development",
         "APP_ENV": "dev"
       },
+      "envFile": "${workspaceFolder}/platform/services/notification-service/.env",
       "buildFlags": "-tags=dev",
       "cwd": "${workspaceFolder}/platform/services/notification-service",
       "showLog": false,
-      "output": "${workspaceFolder}/platform/services/notification-service/bin/notification_debug.exe"
+      "output": "${workspaceFolder}/platform/services/notification-service/bin/notification_debug.exe",
+      "console": "integratedTerminal"
     },
     {
       "name": "Audit Service",
@@ -104,10 +115,12 @@
         "ENV": "development",
         "APP_ENV": "dev"
       },
+      "envFile": "${workspaceFolder}/platform/services/audit-service/.env",
       "buildFlags": "-tags=dev",
       "cwd": "${workspaceFolder}/platform/services/audit-service",
       "showLog": false,
-      "output": "${workspaceFolder}/platform/services/audit-service/bin/audit_debug.exe"
+      "output": "${workspaceFolder}/platform/services/audit-service/bin/audit_debug.exe",
+      "console": "integratedTerminal"
     },
     {
       "name": "Messaging Service",
@@ -120,10 +133,12 @@
         "ENV": "development",
         "APP_ENV": "dev"
       },
+      "envFile": "${workspaceFolder}/platform/services/messaging-service/.env",
       "buildFlags": "-tags=dev",
       "cwd": "${workspaceFolder}/platform/services/messaging-service",
       "showLog": false,
-      "output": "${workspaceFolder}/platform/services/messaging-service/bin/messaging_debug.exe"
+      "output": "${workspaceFolder}/platform/services/messaging-service/bin/messaging_debug.exe",
+      "console": "integratedTerminal"
     },
     {
       "name": "Identity Service",
@@ -136,11 +151,14 @@
         "ENV": "development",
         "APP_ENV": "dev"
       },
+      "envFile": "${workspaceFolder}/platform/services/identity-service/.env",
       "buildFlags": "-tags=dev",
       "cwd": "${workspaceFolder}/platform/services/identity-service",
       "showLog": false,
-      "output": "${workspaceFolder}/platform/services/identity-service/bin/identity_debug.exe"
+      "output": "${workspaceFolder}/platform/services/identity-service/bin/identity_debug.exe",
+      "console": "integratedTerminal"
     },
+
     {
       "name": "Officer BFF Service",
       "type": "go",
@@ -152,6 +170,7 @@
         "ENV": "development",
         "APP_ENV": "dev"
       },
+      "envFile": "${workspaceFolder}/platform/services/officer-bff/.env",
       "buildFlags": "-tags=dev",
       "cwd": "${workspaceFolder}/platform/services/officer-bff",
       "showLog": false,
