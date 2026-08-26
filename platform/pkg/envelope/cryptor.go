@@ -20,11 +20,14 @@ type EnvelopeCryptor struct {
 	kmsCfg kms.Config
 }
 
-// #region NewEnvelopeCryptor
+// region NewEnvelopeCryptor
 func NewEnvelopeCryptor(kmsCfg kms.Config) *EnvelopeCryptor {
 	return &EnvelopeCryptor{kmsCfg: kmsCfg}
 }
 
+// region SealWithDataKey
+
+// SealWithDataKey pobiera nowy klucz DEK z KMS, szyfruje nim dane algorytmem AES-GCM i automatycznie zeruje klucz w pamięci.
 func (e *EnvelopeCryptor) SealWithDataKey(ctx context.Context, keyAlias string, plaintext []byte) (*EncryptedPayload, error) {
 	// 1. Odpytujemy KMS o nowy klucz DEK (zwraca zarówno czysty, jak i zaszyfrowany DEK)
 	dataKey, err := kms.GenerateDataKey(ctx, e.kmsCfg, keyAlias)
@@ -54,8 +57,8 @@ func (e *EnvelopeCryptor) SealWithDataKey(ctx context.Context, keyAlias string, 
 }
 
 // #region Seal
+
 // Seal wykonuje pełny proces szyfrowania kopertowego i automatycznie pakuje wersję klucza do DEK
-// #region Seal
 func (e *EnvelopeCryptor) Seal(ctx context.Context, keyAlias string, plaintext []byte) (*EncryptedPayload, error) {
 	dek, err := crypto.GenerateDEK(32)
 	if err != nil {
@@ -80,14 +83,14 @@ func (e *EnvelopeCryptor) Seal(ctx context.Context, keyAlias string, plaintext [
 
 	return &EncryptedPayload{
 		EncryptedData: encryptedData,
-		EncryptedDEK:  packedDEK, // Tutaj jest już spakowane!
+		EncryptedDEK:  packedDEK,
 		KeyVersion:    keyVersion,
 	}, nil
 }
 
 // #region Unseal
+
 // Unseal automatycznie rozpakowuje wersję klucza z EncryptedDEK i odszyfrowuje dane
-// #region Unseal
 func (e *EnvelopeCryptor) Unseal(ctx context.Context, keyAlias string, encryptedData []byte, packedDEK []byte) ([]byte, error) {
 	if len(packedDEK) < 4 {
 		return nil, fmt.Errorf("envelope: packed DEK too short")

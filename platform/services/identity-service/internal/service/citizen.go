@@ -128,7 +128,7 @@ func (s *citizenService) RegisterCitizen(
 	}
 
 	// 1. Szyfrowanie danych wrażliwych obywatela
-	encryptedPayload, err := s.cryptor.Seal(ctx, s.dataKeyAlias, plaintextBytes)
+	encryptedPayload, err := s.cryptor.SealWithDataKey(ctx, s.dataKeyAlias, plaintextBytes)
 	if err != nil {
 		return nil, &apperr.AppError{
 			Code:    "ENCRYPTION_FAILED",
@@ -139,7 +139,7 @@ func (s *citizenService) RegisterCitizen(
 	}
 
 	// 2. Niezależne szyfrowanie numeru telefonu (do 2FA)
-	phoneEncryptedPayload, err := s.cryptor.Seal(ctx, s.phoneKeyAlias, []byte(payload.PhoneNumber))
+	phoneEncryptedPayload, err := s.cryptor.SealWithDataKey(ctx, s.phoneKeyAlias, []byte(payload.PhoneNumber))
 	if err != nil {
 		return nil, &apperr.AppError{
 			Code:    "PHONE_ENCRYPTION_FAILED",
@@ -150,7 +150,7 @@ func (s *citizenService) RegisterCitizen(
 	}
 
 	// 3. Niezależne szyfrowanie adresu e-mail (do 2FA / powiadomień)
-	emailEncryptedPayload, err := s.cryptor.Seal(ctx, s.emailKeyAlias, []byte(payload.Email))
+	emailEncryptedPayload, err := s.cryptor.SealWithDataKey(ctx, s.emailKeyAlias, []byte(payload.Email))
 	if err != nil {
 		return nil, &apperr.AppError{
 			Code:    "EMAIL_ENCRYPTION_FAILED",
@@ -230,7 +230,7 @@ func (s *citizenService) RegisterCitizen(
 	}
 
 	// 3. Szyfrowanie pliku PDF umowy (Envelope Encryption)
-	pdfEncryptedPayload, err := s.cryptor.Seal(ctx, s.agreementsKeyAlias, pdfBytes)
+	pdfEncryptedPayload, err := s.cryptor.SealWithDataKey(ctx, s.agreementsKeyAlias, pdfBytes)
 	if err != nil {
 		return nil, &apperr.AppError{
 			Code:    "PDF_ENCRYPTION_FAILED",
