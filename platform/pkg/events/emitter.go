@@ -22,6 +22,7 @@ type Emitter struct {
 	stream    string
 }
 
+//#region NewEmitter
 func NewEmitter(publisher StreamPublisher, source string) *Emitter {
 	return &Emitter{
 		publisher: publisher,
@@ -30,6 +31,7 @@ func NewEmitter(publisher StreamPublisher, source string) *Emitter {
 	}
 }
 
+//#region Emit
 func (e *Emitter) Emit(
 	ctx context.Context,
 	eventType EventType,

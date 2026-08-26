@@ -36,6 +36,7 @@ type decryptResponse struct {
 }
 
 // #region EncryptDEK
+//#region EncryptDEK
 func EncryptDEK(ctx context.Context, cfg Config, keyAlias string, plaintextDEK []byte) ([]byte, int, error) {
 	reqBody, err := json.Marshal(encryptRequest{
 		KeyAlias:  keyAlias,
@@ -61,6 +62,7 @@ func EncryptDEK(ctx context.Context, cfg Config, keyAlias string, plaintextDEK [
 }
 
 // #region DecryptDEK
+//#region DecryptDEK
 func DecryptDEK(ctx context.Context, cfg Config, keyAlias string, encryptedDEK []byte, masterKeyVersion int) ([]byte, error) {
 	reqBody, err := json.Marshal(decryptRequest{
 		KeyAlias:         keyAlias,

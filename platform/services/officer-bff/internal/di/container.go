@@ -13,6 +13,7 @@ type Container struct {
 	OfficialHandler *handler.OfficialHandler
 }
 
+//#region BuildContainer
 func BuildContainer(cfg *config.Config, keyStore *httpserver.KeyStore) *Container {
 	officialSvc := service.NewOfficialService()
 	officialHdl := handler.NewOfficialHandler(officialSvc)

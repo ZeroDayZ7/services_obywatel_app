@@ -31,6 +31,7 @@ type CreateAuditLogParams struct {
 	Hash        string    `json:"hash"`
 }
 
+//#region CreateAuditLog
 func (q *Queries) CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) error {
 	_, err := q.db.Exec(ctx, createAuditLog,
 		arg.ID,
@@ -55,6 +56,7 @@ type GetLastAuditLogRow struct {
 	Hash string    `json:"hash"`
 }
 
+//#region GetLastAuditLog
 func (q *Queries) GetLastAuditLog(ctx context.Context) (GetLastAuditLogRow, error) {
 	row := q.db.QueryRow(ctx, getLastAuditLog)
 	var i GetLastAuditLogRow
@@ -81,6 +83,7 @@ type GetUnsyncedAuditLogsRow struct {
 	CreatedAt   time.Time `json:"created_at"`
 }
 
+//#region GetUnsyncedAuditLogs
 func (q *Queries) GetUnsyncedAuditLogs(ctx context.Context, limit int) ([]GetUnsyncedAuditLogsRow, error) {
 	rows, err := q.db.Query(ctx, getUnsyncedAuditLogs, limit)
 	if err != nil {
@@ -117,6 +120,7 @@ SET synced_to_global_audit = TRUE
 WHERE id = ANY($1::uuid[])
 `
 
+//#region MarkAuditLogsAsSynced
 func (q *Queries) MarkAuditLogsAsSynced(ctx context.Context, dollar_1 []uuid.UUID) error {
 	_, err := q.db.Exec(ctx, markAuditLogsAsSynced, dollar_1)
 	return err

@@ -12,6 +12,7 @@ import (
 
 var RedisClient *redis.Client
 
+//#region InitRedis
 func InitRedis(host, port, password string, db int) (*redis.Client, error) {
 	if host == "" || port == "" {
 		return nil, fmt.Errorf("redis host or port is empty (host: %s, port: %s)", host, port)
@@ -34,6 +35,7 @@ func InitRedis(host, port, password string, db int) (*redis.Client, error) {
 	return client, nil
 }
 
+//#region IsTokenValid
 func IsTokenValid(token string) bool {
 	val, err := RedisClient.Get(context.Background(), token).Result()
 	if err != nil {

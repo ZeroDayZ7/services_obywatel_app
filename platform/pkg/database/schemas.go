@@ -8,6 +8,7 @@ import (
 
 // EnsureSchemas creates provided schemas in PostgreSQL if they don't already exist.
 // Ignores empty schema names or "public" as it always exists by default.
+//#region EnsureSchemas
 func EnsureSchemas(db *gorm.DB, schemas ...string) error {
 	for _, schema := range schemas {
 		if schema == "" || schema == "public" {

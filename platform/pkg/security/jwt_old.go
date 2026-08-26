@@ -1,3 +1,5 @@
+// cmdr: security\jwt_old.go
+
 package security
 
 import (
@@ -9,6 +11,7 @@ import (
 
 // ------------------- ACCESS TOKEN (JWT) -------------------
 
+//#region GenerateJWT
 func GenerateJWT(claims jwt.MapClaims, privKey ed25519.PrivateKey, ttl time.Duration) (string, error) {
 	claims["exp"] = jwt.NewNumericDate(time.Now().Add(ttl))
 	claims["iat"] = jwt.NewNumericDate(time.Now())

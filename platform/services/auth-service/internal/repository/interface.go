@@ -44,3 +44,7 @@ type EmployeeRepository interface {
 	GetProfileByUserID(ctx context.Context, userID uuid.UUID) (*model.EmployeeProfile, error)
 	GetActiveCredentialByUserID(ctx context.Context, userID uuid.UUID) (*model.EmployeeCredential, error)
 }
+
+type ConsumerRepository interface {
+	CreatePendingCitizen(ctx context.Context, user *model.User) error
+}

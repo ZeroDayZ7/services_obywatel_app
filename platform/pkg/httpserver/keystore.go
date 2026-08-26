@@ -12,18 +12,21 @@ type KeyStore struct {
 	keys map[string]Key
 }
 
+//#region NewKeyStore
 func NewKeyStore() *KeyStore {
 	return &KeyStore{
 		keys: make(map[string]Key),
 	}
 }
 
+//#region SetKey
 func (s *KeyStore) SetKey(serviceID string, secret []byte, version uint32) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.keys[serviceID] = Key{Secret: secret, Version: version}
 }
 
+//#region GetKey
 func (s *KeyStore) GetKey(serviceID string) ([]byte, uint32, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

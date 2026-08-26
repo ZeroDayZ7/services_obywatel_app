@@ -8,6 +8,7 @@ import (
 
 const ServiceOfficerBFF = "officer-bff"
 
+//#region RegisterOfficerRoutes
 func RegisterOfficerRoutes(app *fiber.App, container *di.Container) {
 	target := container.Config.Services.OfficerBFF
 

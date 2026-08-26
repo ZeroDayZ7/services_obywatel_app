@@ -17,6 +17,7 @@ type Config struct {
 	HMACKey  []byte
 }
 
+//#region URL
 func (c Config) URL() string {
 	vhost := c.VHost
 	if vhost != "" && vhost[0] != '/' {
@@ -25,6 +26,7 @@ func (c Config) URL() string {
 	return fmt.Sprintf("amqp://%s:%s@%s:%d%s", c.User, c.Password, c.Host, c.Port, vhost)
 }
 
+//#region NewPublisher
 func NewPublisher(cfg Config) (EventPublisher, error) {
 	log := shared.GetLogger()
 

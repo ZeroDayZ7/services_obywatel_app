@@ -36,12 +36,14 @@ type Config struct {
 	RefreshTokenTTL time.Duration `mapstructure:"AUTH_REFRESH_TOKEN_TTL" validate:"required"`
 }
 
+//#region ToKMSServiceConfig
 func (c *Config) ToKMSServiceConfig() kms.Config {
 	return c.KMS.ToKMSServiceConfig()
 }
 
 var AppConfig Config
 
+//#region SetBFFDefaults
 func SetBFFDefaults() {
 	viper.SetBaseDefaults("officer_bff")
 	viper.SetRedisDefaults()
@@ -75,6 +77,7 @@ func SetBFFDefaults() {
 	})
 }
 
+//#region LoadConfigGlobal
 func LoadConfigGlobal() error {
 	log := shared.GetLogger()
 

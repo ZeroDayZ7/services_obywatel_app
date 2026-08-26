@@ -24,6 +24,7 @@ var (
 	testDepartmentID  = uuid.MustParse("22222222-2222-2222-2222-222222222222")
 )
 
+//#region SeedUsers
 func SeedUsers(db *gorm.DB) error {
 	log := shared.GetLogger()
 

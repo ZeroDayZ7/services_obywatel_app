@@ -12,6 +12,7 @@ import (
 )
 
 // RequirePermissions weryfikuje, czy użytkownik posiada wszystkie wymagane uprawnienia.
+//#region RequirePermissions
 func RequirePermissions(requiredPermissions ...string) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		log := shared.GetLogger()
@@ -54,6 +55,7 @@ func RequirePermissions(requiredPermissions ...string) fiber.Handler {
 }
 
 // hasAllPermissions sprawdza czy userPerms zawiera KAŻDE z requiredPerms
+//#region hasAllPermissions
 func hasAllPermissions(userPerms []string, requiredPerms []string) bool {
 	for _, req := range requiredPerms {
 		if !slices.Contains(userPerms, req) {

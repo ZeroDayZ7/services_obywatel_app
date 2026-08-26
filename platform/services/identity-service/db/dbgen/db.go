@@ -17,6 +17,7 @@ type DBTX interface {
 	QueryRow(context.Context, string, ...interface{}) pgx.Row
 }
 
+//#region New
 func New(db DBTX) *Queries {
 	return &Queries{db: db}
 }
@@ -25,6 +26,7 @@ type Queries struct {
 	db DBTX
 }
 
+//#region WithTx
 func (q *Queries) WithTx(tx pgx.Tx) *Queries {
 	return &Queries{
 		db: tx,

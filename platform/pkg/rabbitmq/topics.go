@@ -1,3 +1,4 @@
+// platform/pkg/rabbitmq/topics.go
 package rabbitmq
 
 const (

@@ -6,6 +6,7 @@ import "gorm.io/gorm"
 type Seeder func(*gorm.DB) error
 
 // RunSeed uruchamia seeder tylko jeśli baza spełnia warunek (np. brak rekordów w podanej tabeli)
+//#region RunSeed
 func RunSeed(db *gorm.DB, model any, seeder Seeder) error {
 	var count int64
 	// Sprawdzamy czy tabela dla danego modelu jest pusta

@@ -4,6 +4,7 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/cors"
 )
 
+//#region CorsConfig
 func CorsConfig() cors.Config {
 	return cors.Config{
 		AllowOrigins:     AppConfig.CORSAllowOrigins,

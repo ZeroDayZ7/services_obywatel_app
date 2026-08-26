@@ -36,9 +36,9 @@ WHERE id = $1 AND deleted_at IS NULL;
 
 -- name: CreateUserAgreement :one
 INSERT INTO user_agreements (
-    id, user_id, agreement_number, s3_key, s3_bucket, encrypted_dek, key_version, pesel_encrypted, verified_phone, status, signed_at, verified_at, verified_via
+    id, user_id, agreement_number, s3_key, s3_bucket, encrypted_dek, encrypted_email, encrypted_phone, status, signed_at, verified_at, verified_via
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
 ) RETURNING *;
 
 -- name: GetAgreementByID :one

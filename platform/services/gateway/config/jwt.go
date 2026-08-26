@@ -6,6 +6,8 @@ import (
 	"github.com/zerodayz7/platform/pkg/shared"
 )
 
+//#region NewJWTConfig
+
 // NewJWTConfig — konfiguracja middleware JWT dla Fiber z użyciem Ed25519 (EdDSA)
 func NewJWTConfig() jwtware.Config {
 	return jwtware.Config{
@@ -19,6 +21,8 @@ func NewJWTConfig() jwtware.Config {
 		ErrorHandler: jwtErrorHandler,
 	}
 }
+
+//#region jwtErrorHandler
 
 // jwtErrorHandler — standardowa obsługa błędów JWT
 func jwtErrorHandler(c *fiber.Ctx, err error) error {

@@ -14,6 +14,7 @@ import (
 	"github.com/zerodayz7/services/officer-bff/internal/router"
 )
 
+//#region main
 func main() {
 	log := shared.GetLogger()
 

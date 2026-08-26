@@ -1,3 +1,4 @@
+// internal/di/consumers.go
 package di
 
 import (
@@ -8,8 +9,9 @@ type Consumers struct {
 	CitizenConsumer *consumer.CitizenConsumer
 }
 
+//#region NewConsumers
 func NewConsumers(services *Services) *Consumers {
 	return &Consumers{
-		CitizenConsumer: consumer.NewCitizenConsumer(services.UserService),
+		CitizenConsumer: consumer.NewCitizenConsumer(services.ConsumerService),
 	}
 }

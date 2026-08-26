@@ -41,6 +41,7 @@ type AuditEvent struct {
 }
 
 type AuditWorkerConfig struct {
+	Enabled       bool
 	BatchSize     int
 	Interval      time.Duration
 	MaxRetries    int
@@ -72,6 +73,7 @@ type AuditWorker struct {
 	tracer    trace.Tracer
 }
 
+//#region normalizeAuditWorkerConfig
 func normalizeAuditWorkerConfig(cfg AuditWorkerConfig) AuditWorkerConfig {
 	if cfg.BatchSize <= 0 {
 		cfg.BatchSize = defaultAuditWorkerBatchSize
@@ -100,10 +102,12 @@ func normalizeAuditWorkerConfig(cfg AuditWorkerConfig) AuditWorkerConfig {
 	return cfg
 }
 
+//#region NewAuditWorker
 func NewAuditWorker(db *pgxpool.Pool, publisher AuditPublisher, cfg AuditWorkerConfig) *AuditWorker {
 	return NewAuditWorkerWithDeps(newPostgresAuditRepository(db), publisher, cfg)
 }
 
+//#region NewAuditWorkerWithDeps
 func NewAuditWorkerWithDeps(repo AuditRepository, publisher AuditPublisher, cfg AuditWorkerConfig) *AuditWorker {
 	cfg = normalizeAuditWorkerConfig(cfg)
 	return &AuditWorker{
@@ -115,6 +119,7 @@ func NewAuditWorkerWithDeps(repo AuditRepository, publisher AuditPublisher, cfg 
 	}
 }
 
+//#region Start
 func (w *AuditWorker) Start(ctx context.Context) {
 	if w.repo == nil || w.publisher == nil {
 		w.log.Error("audit worker cannot start without repository or publisher")
@@ -137,10 +142,12 @@ func (w *AuditWorker) Start(ctx context.Context) {
 	}
 }
 
+//#region ProcessOnce
 func (w *AuditWorker) ProcessOnce(ctx context.Context) error {
 	return w.processOnce(ctx)
 }
 
+//#region processOnce
 func (w *AuditWorker) processOnce(ctx context.Context) error {
 	ctx, span := w.tracer.Start(ctx, "audit_worker.process_once")
 	defer span.End()
@@ -182,6 +189,7 @@ func (w *AuditWorker) processOnce(ctx context.Context) error {
 	return nil
 }
 
+//#region publishWithRetry
 func (w *AuditWorker) publishWithRetry(ctx context.Context, batchID uuid.UUID, event AuditEvent) error {
 	for attempt := 0; attempt <= w.cfg.MaxRetries; attempt++ {
 		if err := w.publishSingle(ctx, batchID, event); err != nil {
@@ -219,6 +227,7 @@ func (w *AuditWorker) publishWithRetry(ctx context.Context, batchID uuid.UUID, e
 	return nil
 }
 
+//#region publishSingle
 func (w *AuditWorker) publishSingle(ctx context.Context, batchID uuid.UUID, event AuditEvent) error {
 	ctx, span := w.tracer.Start(ctx, "audit_worker.publish")
 	defer span.End()
@@ -240,6 +249,7 @@ func (w *AuditWorker) publishSingle(ctx context.Context, batchID uuid.UUID, even
 	return nil
 }
 
+//#region buildAuditEnvelope
 func buildAuditEnvelope(event AuditEvent, batchID uuid.UUID, sourceService string) ([]byte, error) {
 	payload := map[string]any{
 		"message_id":     uuid.NewString(),
@@ -263,6 +273,7 @@ func buildAuditEnvelope(event AuditEvent, batchID uuid.UUID, sourceService strin
 	return json.Marshal(payload)
 }
 
+//#region isRetryableAuditError
 func isRetryableAuditError(err error) bool {
 	if err == nil {
 		return false
@@ -294,6 +305,7 @@ func isRetryableAuditError(err error) bool {
 	return false
 }
 
+//#region computeBackoff
 func computeBackoff(attempt int, base, max time.Duration) time.Duration {
 	if base <= 0 {
 		base = time.Second
@@ -306,7 +318,8 @@ func computeBackoff(attempt int, base, max time.Duration) time.Duration {
 		delay = max
 	}
 	if attempt > 0 {
-		jitter := time.Duration(rand.Int63n(int64(base)))
+		rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+		jitter := time.Duration(rng.Int63n(int64(base)))
 		delay += jitter
 	}
 	if delay > max {
@@ -319,10 +332,12 @@ type postgresAuditRepository struct {
 	db *pgxpool.Pool
 }
 
+//#region newPostgresAuditRepository
 func newPostgresAuditRepository(db *pgxpool.Pool) *postgresAuditRepository {
 	return &postgresAuditRepository{db: db}
 }
 
+//#region FetchPending
 func (r *postgresAuditRepository) FetchPending(ctx context.Context, limit int, leaseWindow time.Duration) ([]AuditEvent, error) {
 	if r.db == nil {
 		return nil, errors.New("database pool is nil")
@@ -369,6 +384,7 @@ func (r *postgresAuditRepository) FetchPending(ctx context.Context, limit int, l
 	return events, rows.Err()
 }
 
+//#region MarkSynced
 func (r *postgresAuditRepository) MarkSynced(ctx context.Context, ids []uuid.UUID) error {
 	if len(ids) == 0 {
 		return nil
@@ -385,6 +401,7 @@ func (r *postgresAuditRepository) MarkSynced(ctx context.Context, ids []uuid.UUI
 	return err
 }
 
+//#region MarkRetry
 func (r *postgresAuditRepository) MarkRetry(ctx context.Context, id uuid.UUID, retryCount int, reason string) error {
 	_, err := r.db.Exec(ctx, `
 		UPDATE citizen_audit_logs
@@ -397,6 +414,7 @@ func (r *postgresAuditRepository) MarkRetry(ctx context.Context, id uuid.UUID, r
 	return err
 }
 
+//#region MarkFailed
 func (r *postgresAuditRepository) MarkFailed(ctx context.Context, id uuid.UUID, retryCount int, reason string) error {
 	_, err := r.db.Exec(ctx, `
 		UPDATE citizen_audit_logs
@@ -410,6 +428,7 @@ func (r *postgresAuditRepository) MarkFailed(ctx context.Context, id uuid.UUID, 
 	return err
 }
 
+//#region PendingStats
 func (r *postgresAuditRepository) PendingStats(ctx context.Context) (pending int, oldestAge time.Duration, err error) {
 	row := r.db.QueryRow(ctx, `
 		SELECT COUNT(*)::int,
@@ -423,6 +442,7 @@ func (r *postgresAuditRepository) PendingStats(ctx context.Context) (pending int
 	return pending, time.Duration(ageSeconds * float64(time.Second)), nil
 }
 
+//#region Close
 func (w *AuditWorker) Close() error {
 	if w.publisher != nil {
 		return w.publisher.Close()
@@ -430,21 +450,22 @@ func (w *AuditWorker) Close() error {
 	return nil
 }
 
+//#region Shutdown
 func (w *AuditWorker) Shutdown() error {
 	return w.Close()
 }
 
-func init() {
-	rand.Seed(time.Now().UnixNano())
-}
-
 type noopAuditPublisher struct{}
 
+//#region Publish
 func (n *noopAuditPublisher) Publish(ctx context.Context, routingKey string, payload []byte) error {
 	return nil
 }
 
+//#region Close
 func (n *noopAuditPublisher) Close() error { return nil }
 
-var _ AuditRepository = (*postgresAuditRepository)(nil)
-var _ AuditPublisher = (*noopAuditPublisher)(nil)
+var (
+	_ AuditRepository = (*postgresAuditRepository)(nil)
+	_ AuditPublisher  = (*noopAuditPublisher)(nil)
+)

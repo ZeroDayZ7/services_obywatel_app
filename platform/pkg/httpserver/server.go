@@ -13,6 +13,7 @@ import (
 )
 
 // Run uruchamia serwer HTTP z wbudowaną obsługą Graceful Shutdown.
+//#region Run
 func Run(srv *http.Server, shutdownTimeout time.Duration) error {
 	log := shared.GetLogger()
 

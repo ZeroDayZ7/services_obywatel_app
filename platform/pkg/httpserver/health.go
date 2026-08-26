@@ -17,6 +17,7 @@ type healthResponse struct {
 }
 
 // NewHealthHandler tworzy generyczny, uniwersalny handler HTTP dla sprawdzenia stanu usługi
+//#region NewHealthHandler
 func NewHealthHandler(checkers ...HealthChecker) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)

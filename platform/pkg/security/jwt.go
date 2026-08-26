@@ -15,6 +15,7 @@ import (
 // ------------------- ACCESS TOKEN (JWT VIA KMS) -------------------
 
 // GenerateJWTLocal podpisuje token lokalnie w pamięci mikroserwisu przy użyciu klucza prywatnego Ed25519.
+// #region GenerateJWTLocal
 func GenerateJWTLocal(claims jwt.MapClaims, ttl time.Duration, privKey ed25519.PrivateKey) (string, error) {
 	if len(privKey) == 0 {
 		return "", fmt.Errorf("security: private key is empty")
@@ -33,6 +34,7 @@ func GenerateJWTLocal(claims jwt.MapClaims, ttl time.Duration, privKey ed25519.P
 }
 
 // GenerateJWTViaKMS tworzy i podpisuje token JWT zdalnie w KMS bez posiadania klucza prywatnego w pamięci.
+// #region GenerateJWTViaKMS
 func GenerateJWTViaKMS(ctx context.Context, kmsCfg kms.Config, targetService string, claims jwt.MapClaims, ttl time.Duration) (string, error) {
 	claims["exp"] = jwt.NewNumericDate(time.Now().Add(ttl))
 	claims["iat"] = jwt.NewNumericDate(time.Now())
@@ -53,6 +55,7 @@ func GenerateJWTViaKMS(ctx context.Context, kmsCfg kms.Config, targetService str
 	return fmt.Sprintf("%s.%s", signingString, sigB64), nil
 }
 
+// #region ValidateJWT
 func ValidateJWT(tokenString string, pubKey ed25519.PublicKey) (*jwt.Token, error) {
 	return jwt.Parse(tokenString, func(token *jwt.Token) (any, error) {
 		if token.Method.Alg() != jwt.SigningMethodEdDSA.Alg() {

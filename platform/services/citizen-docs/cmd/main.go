@@ -3,10 +3,12 @@ package main
 import (
 	"context"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/zerodayz7/platform/pkg/envelope"
-	"github.com/zerodayz7/platform/pkg/kms"
+	"github.com/zerodayz7/platform/pkg/httpserver"
 	"github.com/zerodayz7/platform/pkg/server"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/citizen-docs/app"
@@ -16,65 +18,39 @@ import (
 )
 
 func main() {
-	// 0. Bootstrap Logger
-	bootLog := shared.InitBootstrapLogger(os.Getenv("ENV"), false)
-	defer func() { _ = bootLog.Sync() }()
-
-	// 1. Load Config
+	// 1. Ładowanie Konfiguracji
 	if err := config.LoadConfigGlobal(); err != nil {
-		bootLog.Fatal("Config load failed", "error", err)
+		shared.GetLogger().Error("Config load failed", "error", err)
+		os.Exit(1)
 	}
 
-	log := shared.InitLogger(config.AppConfig.Server.Env, false)
+	log := shared.GetLogger()
 
-	// =========================================================================
-	// 2. KMS SETUP & HEALTH CHECK
-	// =========================================================================
-	kmsCfg := kms.Config{
-		Endpoint:      config.AppConfig.KMS.Endpoint,
-		ServiceName:   config.AppConfig.Server.AppName, // "citizen-docs-service"
-		ServiceSecret: config.AppConfig.KMS.ServiceSecret,
-	}
+	// 2. Inicjalizacja KeyStore i Kontekstu
+	keyStore := httpserver.NewKeyStore()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	securityCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	bootLog.Info("🔍 Sprawdzanie stanu serwisu KMS...")
-	if err := kms.HealthCheck(ctx, kmsCfg); err != nil {
-		bootLog.Fatal("❌ KMS Health Check nie powiódł się. Przerywanie startu serwisu", "error", err)
-	}
-	bootLog.Info("✅ KMS jest dostępny i gotowy do pracy")
+	// 3. Ładowanie Kluczy z KMS
+	LoadSecurityKeys(securityCtx, &config.AppConfig, keyStore)
 
-	// =========================================================================
-	// 3. FETCH INTERNAL HMAC SECRET Z KMS
-	// =========================================================================
-	bootLog.Info("🔑 Pobieranie klucza 'hmac-gateway-docs' z KMS...")
-
-	// Poprawiono wywołanie: FetchSymmetricKey przyjmuje tylko ctx, cfg i purpose
-	internalHMACKey, err := kms.FetchSymmetricKey(ctx, kmsCfg, "hmac-gateway-docs")
-	if err != nil {
-		bootLog.Fatal("❌ Nie udało się pobrać klucza HMAC z KMS", "error", err)
-	}
-
-	config.AppConfig.Internal.HMACSecret = string(internalHMACKey)
-	bootLog.Info("✅ Klucz HMAC komunikacji wewnętrznej pobrany pomyślnie")
-
-	// =========================================================================
-	// 4. INICJALIZACJA CRYPTOR, BAZY DANYCH I DI
-	// =========================================================================
-	cryptor := envelope.NewEnvelopeCryptor(kmsCfg)
+	// 4. Inicjalizacja Cryptor, Baza Danych i DI Container
+	cryptor := envelope.NewEnvelopeCryptor(config.AppConfig.ToKMSServiceConfig())
 
 	db, closeDB := config.MustInitDB(config.AppConfig.Database)
 	defer closeDB()
 
 	container := di.NewContainer(db, log, &config.AppConfig, cryptor)
 
+	// 5. Aplikacja i Router
 	docsApp := app.NewDocsApp(container)
 	router.SetupDocsRoutes(docsApp, container)
 
-	// =========================================================================
-	// 5. URUCHOMIENIE SERWERA
-	// =========================================================================
+	// 6. Start Serwera
 	server.Run(
 		docsApp,
 		server.Config{

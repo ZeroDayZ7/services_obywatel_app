@@ -16,6 +16,7 @@ type fakeAuditRepo struct {
 	failFetch     error
 }
 
+//#region FetchPending
 func (f *fakeAuditRepo) FetchPending(ctx context.Context, limit int, leaseWindow time.Duration) ([]AuditEvent, error) {
 	if f.failFetch != nil {
 		return nil, f.failFetch
@@ -26,20 +27,24 @@ func (f *fakeAuditRepo) FetchPending(ctx context.Context, limit int, leaseWindow
 	return out, nil
 }
 
+//#region MarkSynced
 func (f *fakeAuditRepo) MarkSynced(ctx context.Context, ids []uuid.UUID) error {
 	f.markSyncedIDs = append(f.markSyncedIDs, ids...)
 	return nil
 }
 
+//#region MarkRetry
 func (f *fakeAuditRepo) MarkRetry(ctx context.Context, id uuid.UUID, retryCount int, lastErr string) error {
 	f.markRetryIDs = append(f.markRetryIDs, id)
 	return nil
 }
 
+//#region MarkFailed
 func (f *fakeAuditRepo) MarkFailed(ctx context.Context, id uuid.UUID, retryCount int, lastErr string) error {
 	return nil
 }
 
+//#region PendingStats
 func (f *fakeAuditRepo) PendingStats(ctx context.Context) (int, time.Duration, error) {
 	return 0, 0, nil
 }
@@ -49,13 +54,16 @@ type fakeAuditPublisher struct {
 	calls      int
 }
 
+//#region Publish
 func (f *fakeAuditPublisher) Publish(ctx context.Context, routingKey string, payload []byte) error {
 	f.calls++
 	return f.publishErr
 }
 
+//#region Close
 func (f *fakeAuditPublisher) Close() error { return nil }
 
+//#region TestAuditWorker_EmptyQueue
 func TestAuditWorker_EmptyQueue(t *testing.T) {
 	repo := &fakeAuditRepo{}
 	pub := &fakeAuditPublisher{}
@@ -69,6 +77,7 @@ func TestAuditWorker_EmptyQueue(t *testing.T) {
 	}
 }
 
+//#region TestAuditWorker_ProcessesBatch
 func TestAuditWorker_ProcessesBatch(t *testing.T) {
 	eventID := uuid.New()
 	repo := &fakeAuditRepo{pending: []AuditEvent{{ID: eventID, Action: "CITIZEN_REGISTERED", UserID: uuid.New(), ActorID: uuid.New(), CreatedAt: time.Now()}}}
@@ -86,6 +95,7 @@ func TestAuditWorker_ProcessesBatch(t *testing.T) {
 	}
 }
 
+//#region TestAuditWorker_RetryableFailure
 func TestAuditWorker_RetryableFailure(t *testing.T) {
 	eventID := uuid.New()
 	repo := &fakeAuditRepo{pending: []AuditEvent{{ID: eventID, Action: "CITIZEN_REGISTERED", UserID: uuid.New(), ActorID: uuid.New(), CreatedAt: time.Now()}}}

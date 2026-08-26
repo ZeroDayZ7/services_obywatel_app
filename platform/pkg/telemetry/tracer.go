@@ -14,6 +14,7 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 )
 
+//#region InitTracer
 func InitTracer(serviceName string, otlpEndpoint string) func() {
 	ctx := context.Background()
 

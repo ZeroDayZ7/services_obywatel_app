@@ -17,6 +17,7 @@ import (
 	"github.com/zerodayz7/platform/services/gateway/internal/middleware"
 )
 
+//#region NewGatewayApp
 func NewGatewayApp(container *di.Container) (*fiber.App, error) {
 	if container == nil {
 		return nil, fmt.Errorf("container is nil")
@@ -61,7 +62,7 @@ func NewGatewayApp(container *di.Container) (*fiber.App, error) {
 	app.Use(shared.RequestLoggerMiddleware())
 
 	app.Use(config.JWTMiddlewareWithExclusions())
-	app.Use(middleware.AuthRedisMiddleware(container.Redis.Client))
+	app.Use(middleware.AuthRedisMiddleware(container.Cache))
 	app.Use(middleware.ContextBuilder(container))
 
 	return app, nil

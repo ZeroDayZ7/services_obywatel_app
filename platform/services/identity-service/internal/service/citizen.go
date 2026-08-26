@@ -3,7 +3,6 @@ package service
 import (
 	"bytes"
 	"context"
-	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -11,7 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	reqctx "github.com/zerodayz7/platform/pkg/context"
+	"github.com/zerodayz7/platform/pkg/crypto"
 	"github.com/zerodayz7/platform/pkg/envelope"
 	apperr "github.com/zerodayz7/platform/pkg/errors"
 	"github.com/zerodayz7/platform/pkg/rabbitmq"
@@ -22,8 +21,13 @@ import (
 	"github.com/zerodayz7/services/identity-service/internal/repository"
 )
 
+// #region Interface
 type CitizenService interface {
-	RegisterCitizen(ctx context.Context, payload model.CitizenPayload) (*model.RegisterCitizenResponse, error)
+	RegisterCitizen(
+		ctx context.Context,
+		actor model.Actor,
+		payload model.CitizenPayload,
+	) (*model.RegisterCitizenResponse, error)
 	GetCitizenByID(ctx context.Context, userID uuid.UUID) (*model.CitizenPayload, error)
 	DownloadAgreementPDF(ctx context.Context, agreementID uuid.UUID) ([]byte, error)
 }
@@ -33,35 +37,68 @@ type citizenService struct {
 	cryptor            *envelope.EnvelopeCryptor
 	storage            storage.StorageClient
 	pdfGen             PDFGenerator
-	hmacSecret         []byte
-	keyAlias           string
+	hmacPeselSecret    []byte
+	hmacPhoneSecret    []byte
+	hmacEmailSecret    []byte
+	hmacPukSecret      []byte
+	dataKeyAlias       string
 	agreementsKeyAlias string
+	phoneKeyAlias      string
+	emailKeyAlias      string
 }
 
+// #region NewCitizenService
 func NewCitizenService(
 	repo repository.CitizenRepository,
 	cryptor *envelope.EnvelopeCryptor,
 	storage storage.StorageClient,
 	pdfGen PDFGenerator,
-	hmacSecret []byte,
-	keyAlias string,
+	hmacPeselSecret []byte,
+	hmacPhoneSecret []byte,
+	hmacEmailSecret []byte,
+	hmacPukSecret []byte,
+	dataKeyAlias string,
 	agreementsKeyAlias string,
+	phoneKeyAlias string,
+	emailKeyAlias string,
 ) CitizenService {
 	return &citizenService{
 		repo:               repo,
 		cryptor:            cryptor,
 		storage:            storage,
 		pdfGen:             pdfGen,
-		hmacSecret:         hmacSecret,
-		keyAlias:           keyAlias,
+		hmacPeselSecret:    hmacPeselSecret,
+		hmacPhoneSecret:    hmacPhoneSecret,
+		hmacEmailSecret:    hmacEmailSecret,
+		hmacPukSecret:      hmacPukSecret,
+		dataKeyAlias:       dataKeyAlias,
 		agreementsKeyAlias: agreementsKeyAlias,
+		phoneKeyAlias:      phoneKeyAlias,
+		emailKeyAlias:      emailKeyAlias,
 	}
 }
 
 // #region RegisterCitizen
-func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.CitizenPayload) (*model.RegisterCitizenResponse, error) {
+// #region RegisterCitizen
+func (s *citizenService) RegisterCitizen(
+	ctx context.Context,
+	actor model.Actor,
+	payload model.CitizenPayload,
+) (*model.RegisterCitizenResponse, error) {
 	log := shared.GetLogger()
-	peselHash := s.hashPESEL(payload.PESEL)
+	// log.Debug("🔍 Przed obliczeniem haszy",
+	// 	"pesel_raw_len", len(payload.PESEL),
+	// 	"email_raw_len", len(payload.Email),
+	// 	"phone_raw_len", len(payload.PhoneNumber),
+	// )
+
+	peselHash := crypto.ComputeHMAC256Hex([]byte(payload.PESEL), s.hmacPeselSecret)
+
+	// log.Debug("✅ Po obliczeniu haszy",
+	// 	"pesel_hash", peselHash,
+	// 	"email_hash", emailHash,
+	// 	"phone_hash", phoneHash,
+	// )
 
 	existingCitizen, err := s.repo.GetByPESELHash(ctx, peselHash)
 	if err != nil {
@@ -80,7 +117,6 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 		}
 	}
 
-	userID := shared.NewUUIDv7()
 	plaintextBytes, err := json.Marshal(payload)
 	if err != nil {
 		return nil, &apperr.AppError{
@@ -92,7 +128,7 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 	}
 
 	// 1. Szyfrowanie danych wrażliwych obywatela
-	encryptedPayload, err := s.cryptor.Seal(ctx, s.keyAlias, plaintextBytes)
+	encryptedPayload, err := s.cryptor.SealWithDataKey(ctx, s.dataKeyAlias, plaintextBytes)
 	if err != nil {
 		return nil, &apperr.AppError{
 			Code:    "ENCRYPTION_FAILED",
@@ -102,17 +138,39 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 		}
 	}
 
-	actorID := reqctx.GetUserID(ctx)
-	if actorID == uuid.Nil {
-		actorID = userID
+	// 2. Niezależne szyfrowanie numeru telefonu (do 2FA)
+	phoneEncryptedPayload, err := s.cryptor.SealWithDataKey(ctx, s.phoneKeyAlias, []byte(payload.PhoneNumber))
+	if err != nil {
+		return nil, &apperr.AppError{
+			Code:    "PHONE_ENCRYPTION_FAILED",
+			Type:    apperr.Internal,
+			Message: "Błąd szyfrowania numeru telefonu.",
+			Err:     err,
+		}
 	}
+
+	// 3. Niezależne szyfrowanie adresu e-mail (do 2FA / powiadomień)
+	emailEncryptedPayload, err := s.cryptor.SealWithDataKey(ctx, s.emailKeyAlias, []byte(payload.Email))
+	if err != nil {
+		return nil, &apperr.AppError{
+			Code:    "EMAIL_ENCRYPTION_FAILED",
+			Type:    apperr.Internal,
+			Message: "Błąd szyfrowania adresu e-mail.",
+			Err:     err,
+		}
+	}
+
+	userID := shared.NewUUIDv7()
+	emailHash := crypto.ComputeHMAC256Hex([]byte(payload.Email), s.hmacEmailSecret)
+	phoneHash := crypto.ComputeHMAC256Hex([]byte(payload.PhoneNumber), s.hmacPhoneSecret)
 
 	citizen := &model.Citizen{
 		UserID:        userID,
 		PESELHash:     peselHash,
+		EmailHash:     emailHash,
+		PhoneHash:     phoneHash,
 		EncryptedData: encryptedPayload.EncryptedData,
 		EncryptedDEK:  encryptedPayload.EncryptedDEK,
-		KeyVersion:    encryptedPayload.KeyVersion,
 	}
 
 	agreementID := shared.NewUUIDv7()
@@ -132,25 +190,8 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 	// Najpierw generujemy wstępny PDF lub potrzebujemy hasha
 	// Obliczamy hash dokumentu (np. z zaszyfrowanego payloadu danych lub samej struktury)
 	docHashBytes := sha256.Sum256(plaintextBytes)
+	// docHashBytes := crypto.HashSHA256(plaintextBytes)
 	documentHash := hex.EncodeToString(docHashBytes[:])
-
-	reqCtx, ok := reqctx.FromContext(ctx)
-
-	officerName := "System Automatyczny"
-	departmentIDStr := "-"
-	institutionIDStr := "-"
-
-	if ok && reqCtx != nil && reqCtx.Role == "OFFICER" {
-		if reqCtx.Username != "" {
-			officerName = reqCtx.Username
-		}
-		if reqCtx.DepartmentID != nil {
-			departmentIDStr = reqCtx.DepartmentID.String()
-		}
-		if reqCtx.InstitutionID != nil {
-			institutionIDStr = reqCtx.InstitutionID.String()
-		}
-	}
 
 	templateData := AgreementTemplateData{
 		AgreementID:     agreementID.String(),
@@ -169,13 +210,13 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 		SignedAt:        now.Format("02.01.2006 15:04"),
 		KeyVersion:      int(encryptedPayload.KeyVersion),
 		DocumentHash:    documentHash,
-		OfficerName:     officerName,
-		OfficerID:       actorID.String(),
-		DepartmentID:    departmentIDStr,
-		InstitutionID:   institutionIDStr,
+		OfficerName:     actor.Name,
+		OfficerID:       actor.ID.String(),
+		DepartmentID:    actor.DepartmentIDString(),
+		InstitutionID:   actor.InstitutionIDString(),
 	}
 
-	log.DebugJSON("Pełny payload danych do generowania umowy PDF", templateData)
+	// log.DebugJSON("Pełny payload danych do generowania umowy PDF", templateData)
 
 	pdfBytes, err := s.pdfGen.GenerateAgreementPDF(ctx, templateData)
 	if err != nil {
@@ -189,7 +230,7 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 	}
 
 	// 3. Szyfrowanie pliku PDF umowy (Envelope Encryption)
-	pdfEncryptedPayload, err := s.cryptor.Seal(ctx, s.keyAlias, pdfBytes)
+	pdfEncryptedPayload, err := s.cryptor.SealWithDataKey(ctx, s.agreementsKeyAlias, pdfBytes)
 	if err != nil {
 		return nil, &apperr.AppError{
 			Code:    "PDF_ENCRYPTION_FAILED",
@@ -235,9 +276,8 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 		S3Key:           s3Key,
 		S3Bucket:        s3Bucket,
 		EncryptedDEK:    pdfEncryptedPayload.EncryptedDEK,
-		KeyVersion:      pdfEncryptedPayload.KeyVersion,
-		PeselEncrypted:  encryptedPayload.EncryptedData,
-		VerifiedPhone:   payload.PhoneNumber,
+		EncryptedEmail:  emailEncryptedPayload.EncryptedData,
+		EncryptedPhone:  phoneEncryptedPayload.EncryptedData,
 		Status:          model.AgreementStatusActive,
 		SignedAt:        now,
 		VerifiedVia:     "SYSTEM",
@@ -252,7 +292,9 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 			Err:     err,
 		}
 	}
-	pukHash := s.hashPESEL(rawPUK)
+
+	pukHash := crypto.ComputeHMAC256Hex([]byte(rawPUK), s.hmacPukSecret)
+
 	puk := &model.UserPukCode{
 		ID:              shared.NewUUIDv7(),
 		UserAgreementID: agreementID,
@@ -263,25 +305,22 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 		MaxAttempts:     3,
 	}
 
-	payloadSum := sha256.Sum256(plaintextBytes)
-	payloadHash := hex.EncodeToString(payloadSum[:])
-	clientIP := reqctx.GetIP(ctx)
+	payloadHash := hex.EncodeToString(docHashBytes[:])
 
 	auditLog := &model.CitizenAuditLog{
 		ID:          shared.NewUUIDv7(),
 		UserID:      userID,
 		Action:      model.ActionCitizenRegistered,
-		ActorID:     actorID,
-		IPAddress:   clientIP,
+		ActorID:     actor.ID,
+		IPAddress:   actor.ClientIP,
 		PayloadHash: payloadHash,
 	}
 
-	log.DebugObj("Created audit log", auditLog)
+	// log.DebugObj("Created audit log", auditLog)
 
 	eventPayload, err := json.Marshal(map[string]any{
 		"user_id":          citizen.UserID,
 		"agreement_number": agreement.AgreementNumber,
-		"key_version":      citizen.KeyVersion,
 		"signed_at":        agreement.SignedAt,
 	})
 	if err != nil {
@@ -343,6 +382,7 @@ func (s *citizenService) RegisterCitizen(ctx context.Context, payload model.Citi
 }
 
 // #region GetCitizenByID
+// #region GetCitizenByID
 func (s *citizenService) GetCitizenByID(ctx context.Context, userID uuid.UUID) (*model.CitizenPayload, error) {
 	citizen, err := s.repo.GetByID(ctx, userID)
 	if err != nil {
@@ -357,12 +397,7 @@ func (s *citizenService) GetCitizenByID(ctx context.Context, userID uuid.UUID) (
 		return nil, apperr.ErrNotFound
 	}
 
-	encPayload := envelope.EncryptedPayload{
-		EncryptedData: citizen.EncryptedData,
-		EncryptedDEK:  citizen.EncryptedDEK,
-	}
-
-	plaintext, err := s.cryptor.Unseal(ctx, s.keyAlias, encPayload)
+	plaintext, err := s.cryptor.Unseal(ctx, s.dataKeyAlias, citizen.EncryptedData, citizen.EncryptedDEK)
 	if err != nil {
 		return nil, &apperr.AppError{
 			Code:    "DECRYPTION_FAILED",
@@ -387,7 +422,8 @@ func (s *citizenService) GetCitizenByID(ctx context.Context, userID uuid.UUID) (
 
 // #region GenerateAndSaveAgreement
 func (s *citizenService) GenerateAndSaveAgreement(ctx context.Context, userID uuid.UUID, pdfBytes []byte) (*model.UserAgreement, error) {
-	encryptedPayload, err := s.cryptor.Seal(ctx, s.agreementsKeyAlias, pdfBytes)
+	// 1. Prosimy KMS o wygenerowanie DataKey i szyfrujemy dokument
+	encryptedPayload, err := s.cryptor.SealWithDataKey(ctx, s.agreementsKeyAlias, pdfBytes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encrypt agreement pdf: %w", err)
 	}
@@ -412,7 +448,6 @@ func (s *citizenService) GenerateAndSaveAgreement(ctx context.Context, userID uu
 		S3Key:        s3Key,
 		S3Bucket:     "citizens-data",
 		EncryptedDEK: encryptedPayload.EncryptedDEK,
-		KeyVersion:   encryptedPayload.KeyVersion,
 		Status:       model.AgreementStatusPending,
 		SignedAt:     time.Now(),
 	}
@@ -448,14 +483,7 @@ func (s *citizenService) DownloadAgreementPDF(ctx context.Context, agreementID u
 		}
 	}
 
-	// 3. Odszyfrowanie pliku w locie (Envelope Encryption)
-	encPayload := envelope.EncryptedPayload{
-		EncryptedData: encryptedPdfBytes,
-		EncryptedDEK:  agreement.EncryptedDEK,
-		KeyVersion:    agreement.KeyVersion,
-	}
-
-	decryptedPdf, err := s.cryptor.Unseal(ctx, s.keyAlias, encPayload)
+	decryptedPdf, err := s.cryptor.Unseal(ctx, s.agreementsKeyAlias, encryptedPdfBytes, agreement.EncryptedDEK)
 	if err != nil {
 		return nil, &apperr.AppError{
 			Code:    "DECRYPTION_FAILED",
@@ -466,11 +494,4 @@ func (s *citizenService) DownloadAgreementPDF(ctx context.Context, agreementID u
 	}
 
 	return decryptedPdf, nil
-}
-
-// #region hashPESEL
-func (s *citizenService) hashPESEL(pesel string) string {
-	h := hmac.New(sha256.New, s.hmacSecret)
-	h.Write([]byte(pesel))
-	return hex.EncodeToString(h.Sum(nil))
 }

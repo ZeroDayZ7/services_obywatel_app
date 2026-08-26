@@ -6,6 +6,7 @@ import (
 	"github.com/zerodayz7/platform/pkg/errors"
 )
 
+//#region GetUserID
 func GetUserID(c *fiber.Ctx) (uuid.UUID, error) {
 	idStr := c.Get("X-User-Id")
 	if idStr == "" {
@@ -25,6 +26,7 @@ func GetUserID(c *fiber.Ctx) (uuid.UUID, error) {
 }
 
 // ParseUUID extract and parses a UUID from a specific path parameter (e.g. /:id)
+//#region ParseUUID
 func ParseUUID(c *fiber.Ctx, paramName string) (uuid.UUID, error) {
 	idStr := c.Params(paramName)
 	id, err := uuid.Parse(idStr)

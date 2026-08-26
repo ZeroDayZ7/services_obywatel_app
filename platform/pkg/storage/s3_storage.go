@@ -15,6 +15,7 @@ type S3Storage struct {
 	bucket string
 }
 
+//#region NewS3Storage
 func NewS3Storage(endpoint, access, secret, bucket string, useSSL bool) (*S3Storage, error) {
 	client, err := minio.New(endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(access, secret, ""),
@@ -39,6 +40,7 @@ func NewS3Storage(endpoint, access, secret, bucket string, useSSL bool) (*S3Stor
 	return &S3Storage{client: client, bucket: bucket}, nil
 }
 
+//#region Upload
 func (s *S3Storage) Upload(ctx context.Context, name string, reader io.Reader, size int64, contentType string) (string, error) {
 	opts := minio.PutObjectOptions{
 		ContentType: contentType, // np. "application/pdf"
@@ -47,10 +49,12 @@ func (s *S3Storage) Upload(ctx context.Context, name string, reader io.Reader, s
 	return name, err
 }
 
+//#region Delete
 func (s *S3Storage) Delete(ctx context.Context, key string) error {
 	return s.client.RemoveObject(ctx, s.bucket, key, minio.RemoveObjectOptions{})
 }
 
+//#region Download
 func (s *S3Storage) Download(ctx context.Context, key string) ([]byte, error) {
 	object, err := s.client.GetObject(ctx, s.bucket, key, minio.GetObjectOptions{})
 	if err != nil {
@@ -62,6 +66,7 @@ func (s *S3Storage) Download(ctx context.Context, key string) ([]byte, error) {
 }
 
 // GetPresignedURL generuje tymczasowy link do bezpiecznego pobrania pliku przez obywatela/urzędnika
+//#region GetPresignedURL
 func (s *S3Storage) GetPresignedURL(ctx context.Context, key string, expires time.Duration) (string, error) {
 	presignedURL, err := s.client.PresignedGetObject(ctx, s.bucket, key, expires, nil)
 	if err != nil {

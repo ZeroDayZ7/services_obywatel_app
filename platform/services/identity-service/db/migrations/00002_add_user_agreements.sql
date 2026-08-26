@@ -10,13 +10,12 @@ CREATE TABLE IF NOT EXISTS user_agreements (
     s3_bucket VARCHAR(100) NOT NULL,
 
     -- Bezpieczeństwo i Kryptografia (Envelope Encryption)
-    -- Plik PDF w S3 jest zaszyfrowany, a jego DEK trafia tutaj:
     encrypted_dek BYTEA NOT NULL,
-    key_version INT NOT NULL DEFAULT 1,
 
-    -- Dane umowy i status
-    pesel_encrypted BYTEA NOT NULL,
-    verified_phone VARCHAR(20) NOT NULL,
+    -- Zaszyfrowane dane kontaktowe do 2FA / powiadomień
+    encrypted_email BYTEA NOT NULL,
+    encrypted_phone BYTEA NOT NULL,
+
     status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
     signed_at TIMESTAMP WITH TIME ZONE NOT NULL,
     verified_at TIMESTAMP WITH TIME ZONE,
@@ -26,7 +25,6 @@ CREATE TABLE IF NOT EXISTS user_agreements (
     deleted_at TIMESTAMP WITH TIME ZONE
 );
 
-CREATE INDEX IF NOT EXISTS idx_user_agreements_pesel_encrypted ON user_agreements(pesel_encrypted);
 CREATE INDEX IF NOT EXISTS idx_user_agreements_deleted_at ON user_agreements(deleted_at);
 
 CREATE TABLE IF NOT EXISTS user_puk_codes (

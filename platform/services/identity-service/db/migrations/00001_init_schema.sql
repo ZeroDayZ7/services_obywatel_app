@@ -3,14 +3,16 @@
 CREATE TABLE IF NOT EXISTS citizens (
     user_id UUID PRIMARY KEY,
     pesel_hash VARCHAR(64) UNIQUE NOT NULL,
+    email_hash VARCHAR(64) UNIQUE,
+    phone_hash VARCHAR(64) UNIQUE,
     encrypted_data BYTEA NOT NULL,
     encrypted_dek BYTEA NOT NULL,
-    key_version INT NOT NULL DEFAULT 1,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS idx_citizens_pesel_hash ON citizens(pesel_hash);
+CREATE INDEX IF NOT EXISTS idx_citizens_email_hash ON citizens(email_hash) WHERE email_hash IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_citizens_phone_hash ON citizens(phone_hash) WHERE phone_hash IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS citizen_audit_logs (
     id UUID PRIMARY KEY,

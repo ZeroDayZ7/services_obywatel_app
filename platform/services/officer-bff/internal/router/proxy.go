@@ -18,8 +18,8 @@ import (
 	"github.com/zerodayz7/platform/pkg/shared"
 )
 
-// #region signInternalContext
 // signInternalContext podpisuje kontekst wewnętrzny HMAC dla komunikacji między mikroserwisami
+//#region signInternalContext
 func signInternalContext(req *http.Request, keyStore *httpserver.KeyStore, targetServiceID string) {
 	log := shared.GetLogger()
 
@@ -49,7 +49,7 @@ func signInternalContext(req *http.Request, keyStore *httpserver.KeyStore, targe
 	req.Header.Set("X-Internal-Service", "officer-bff")
 }
 
-// #region NewSingleHostProxy
+//#region NewSingleHostProxy
 func NewSingleHostProxy(targetURL, targetPath, targetServiceID string, keyStore *httpserver.KeyStore) (http.HandlerFunc, error) {
 	log := shared.GetLogger()
 
@@ -91,8 +91,8 @@ func NewSingleHostProxy(targetURL, targetPath, targetServiceID string, keyStore 
 
 // #endregion
 
-// #region NewReverseProxy
 // NewReverseProxy tworzy zwykłe proxy przelotowe (np. dla GET /auth/me oraz Krok 1 logowania)
+//#region NewReverseProxy
 func NewReverseProxy(authServiceURL, targetPath string, keyStore *httpserver.KeyStore) (http.HandlerFunc, error) {
 	log := shared.GetLogger()
 
@@ -120,9 +120,9 @@ func NewReverseProxy(authServiceURL, targetPath string, keyStore *httpserver.Key
 
 // #endregion
 
-// #region NewAuthTokenProxy
 // NewAuthTokenProxy przechwytuje odpowiedź z auth-service, wyciąga access_token/refresh_token,
 // zapisuje je w bezpiecznych ciasteczkach HttpOnly oraz wycina je z odpowiedzi JSON dla Angulara.
+//#region NewAuthTokenProxy
 func NewAuthTokenProxy(authServiceURL, targetPath string, keyStore *httpserver.KeyStore, accessTokenTTL, refreshTokenTTL time.Duration) (http.HandlerFunc, error) {
 	log := shared.GetLogger()
 
@@ -193,8 +193,8 @@ func NewAuthTokenProxy(authServiceURL, targetPath string, keyStore *httpserver.K
 
 // #endregion
 
-// #region NewAuthLogoutProxy
 // NewAuthLogoutProxy przekazuje żądanie wylogowania i czyści ciasteczka w przeglądarce
+//#region NewAuthLogoutProxy
 func NewAuthLogoutProxy(authServiceURL, targetPath string, keyStore *httpserver.KeyStore) (http.HandlerFunc, error) {
 	log := shared.GetLogger()
 
@@ -229,8 +229,8 @@ func NewAuthLogoutProxy(authServiceURL, targetPath string, keyStore *httpserver.
 
 // #endregion
 
-// #region Helpers (Cookies)
 // setAuthCookie ustawia bezpieczne ciasteczko HttpOnly
+//#region setAuthCookie
 func setAuthCookie(resp *http.Response, name, value string, duration time.Duration, path string) {
 	cookie := &http.Cookie{
 		Name:     name,
@@ -245,6 +245,7 @@ func setAuthCookie(resp *http.Response, name, value string, duration time.Durati
 }
 
 // clearAuthCookie unieważnia ciasteczko w przeglądarce
+//#region clearAuthCookie
 func clearAuthCookie(resp *http.Response, name string) {
 	cookie := &http.Cookie{
 		Name:     name,

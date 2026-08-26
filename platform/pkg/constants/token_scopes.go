@@ -16,11 +16,13 @@ const (
 	ScopePasswordReset TokenScope = "password_reset"
 )
 
+//#region String
 func (s TokenScope) String() string {
 	return string(s)
 }
 
 // IsValid sprawdza, czy dany scope należy do dozwolonych w systemie.
+//#region IsValid
 func (s TokenScope) IsValid() bool {
 	switch s {
 	case ScopeDeviceVerify, ScopeAccess, Scope2FAOnboarding, ScopePasswordReset:

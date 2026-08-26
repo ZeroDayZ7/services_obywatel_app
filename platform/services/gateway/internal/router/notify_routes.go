@@ -7,6 +7,7 @@ import (
 
 const ServiceNotify = "notify-service"
 
+//#region RegisterNotifyRoutes
 func RegisterNotifyRoutes(app *fiber.App, container *di.Container) {
 	target := container.Config.Services.Notify
 

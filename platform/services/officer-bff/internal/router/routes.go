@@ -8,6 +8,7 @@ import (
 	"github.com/zerodayz7/services/officer-bff/internal/di"
 )
 
+//#region NewRouter
 func NewRouter(c *di.Container) http.Handler {
 	mux := http.NewServeMux()
 
@@ -18,6 +19,7 @@ func NewRouter(c *di.Container) http.Handler {
 	return applyGlobalMiddleware(mux, c)
 }
 
+//#region applyGlobalMiddleware
 func applyGlobalMiddleware(handler http.Handler, c *di.Container) http.Handler {
 	log := shared.GetLogger()
 

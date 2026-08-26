@@ -14,18 +14,19 @@ import (
 
 const createCitizenWithAudit = `-- name: CreateCitizenWithAudit :one
 INSERT INTO citizens (
-    user_id, pesel_hash, encrypted_data, encrypted_dek, key_version
+    user_id, pesel_hash, email_hash, phone_hash, encrypted_data, encrypted_dek
 ) VALUES (
-    $1, $2, $3, $4, $5
+    $1, $2, $3, $4, $5, $6
 ) RETURNING user_id, created_at
 `
 
 type CreateCitizenWithAuditParams struct {
 	UserID        uuid.UUID `json:"user_id"`
 	PeselHash     string    `json:"pesel_hash"`
+	EmailHash     string    `json:"email_hash"`
+	PhoneHash     string    `json:"phone_hash"`
 	EncryptedData []byte    `json:"encrypted_data"`
 	EncryptedDek  []byte    `json:"encrypted_dek"`
-	KeyVersion    int32     `json:"key_version"`
 }
 
 type CreateCitizenWithAuditRow struct {
@@ -33,70 +34,140 @@ type CreateCitizenWithAuditRow struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+//#region CreateCitizenWithAudit
 func (q *Queries) CreateCitizenWithAudit(ctx context.Context, arg CreateCitizenWithAuditParams) (CreateCitizenWithAuditRow, error) {
 	row := q.db.QueryRow(ctx, createCitizenWithAudit,
 		arg.UserID,
 		arg.PeselHash,
+		arg.EmailHash,
+		arg.PhoneHash,
 		arg.EncryptedData,
 		arg.EncryptedDek,
-		arg.KeyVersion,
 	)
 	var i CreateCitizenWithAuditRow
 	err := row.Scan(&i.UserID, &i.CreatedAt)
 	return i, err
 }
 
+const getCitizenByEmailHash = `-- name: GetCitizenByEmailHash :one
+SELECT user_id, pesel_hash, email_hash, phone_hash, encrypted_data, encrypted_dek, created_at
+FROM citizens WHERE email_hash = $1 LIMIT 1
+`
+
+type GetCitizenByEmailHashRow struct {
+	UserID        uuid.UUID `json:"user_id"`
+	PeselHash     string    `json:"pesel_hash"`
+	EmailHash     string    `json:"email_hash"`
+	PhoneHash     string    `json:"phone_hash"`
+	EncryptedData []byte    `json:"encrypted_data"`
+	EncryptedDek  []byte    `json:"encrypted_dek"`
+	CreatedAt     time.Time `json:"created_at"`
+}
+
+//#region GetCitizenByEmailHash
+func (q *Queries) GetCitizenByEmailHash(ctx context.Context, emailHash string) (GetCitizenByEmailHashRow, error) {
+	row := q.db.QueryRow(ctx, getCitizenByEmailHash, emailHash)
+	var i GetCitizenByEmailHashRow
+	err := row.Scan(
+		&i.UserID,
+		&i.PeselHash,
+		&i.EmailHash,
+		&i.PhoneHash,
+		&i.EncryptedData,
+		&i.EncryptedDek,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getCitizenByPeselHash = `-- name: GetCitizenByPeselHash :one
-SELECT user_id, pesel_hash, encrypted_data, encrypted_dek, key_version, created_at
+SELECT user_id, pesel_hash, email_hash, phone_hash, encrypted_data, encrypted_dek, created_at
 FROM citizens WHERE pesel_hash = $1 LIMIT 1
 `
 
 type GetCitizenByPeselHashRow struct {
 	UserID        uuid.UUID `json:"user_id"`
 	PeselHash     string    `json:"pesel_hash"`
+	EmailHash     string    `json:"email_hash"`
+	PhoneHash     string    `json:"phone_hash"`
 	EncryptedData []byte    `json:"encrypted_data"`
 	EncryptedDek  []byte    `json:"encrypted_dek"`
-	KeyVersion    int32     `json:"key_version"`
 	CreatedAt     time.Time `json:"created_at"`
 }
 
+//#region GetCitizenByPeselHash
 func (q *Queries) GetCitizenByPeselHash(ctx context.Context, peselHash string) (GetCitizenByPeselHashRow, error) {
 	row := q.db.QueryRow(ctx, getCitizenByPeselHash, peselHash)
 	var i GetCitizenByPeselHashRow
 	err := row.Scan(
 		&i.UserID,
 		&i.PeselHash,
+		&i.EmailHash,
+		&i.PhoneHash,
 		&i.EncryptedData,
 		&i.EncryptedDek,
-		&i.KeyVersion,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getCitizenByPhoneHash = `-- name: GetCitizenByPhoneHash :one
+SELECT user_id, pesel_hash, email_hash, phone_hash, encrypted_data, encrypted_dek, created_at
+FROM citizens WHERE phone_hash = $1 LIMIT 1
+`
+
+type GetCitizenByPhoneHashRow struct {
+	UserID        uuid.UUID `json:"user_id"`
+	PeselHash     string    `json:"pesel_hash"`
+	EmailHash     string    `json:"email_hash"`
+	PhoneHash     string    `json:"phone_hash"`
+	EncryptedData []byte    `json:"encrypted_data"`
+	EncryptedDek  []byte    `json:"encrypted_dek"`
+	CreatedAt     time.Time `json:"created_at"`
+}
+
+//#region GetCitizenByPhoneHash
+func (q *Queries) GetCitizenByPhoneHash(ctx context.Context, phoneHash string) (GetCitizenByPhoneHashRow, error) {
+	row := q.db.QueryRow(ctx, getCitizenByPhoneHash, phoneHash)
+	var i GetCitizenByPhoneHashRow
+	err := row.Scan(
+		&i.UserID,
+		&i.PeselHash,
+		&i.EmailHash,
+		&i.PhoneHash,
+		&i.EncryptedData,
+		&i.EncryptedDek,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const getCitizenByUserID = `-- name: GetCitizenByUserID :one
-SELECT user_id, pesel_hash, encrypted_data, encrypted_dek, key_version, created_at
+SELECT user_id, pesel_hash, email_hash, phone_hash, encrypted_data, encrypted_dek, created_at
 FROM citizens WHERE user_id = $1 LIMIT 1
 `
 
 type GetCitizenByUserIDRow struct {
 	UserID        uuid.UUID `json:"user_id"`
 	PeselHash     string    `json:"pesel_hash"`
+	EmailHash     string    `json:"email_hash"`
+	PhoneHash     string    `json:"phone_hash"`
 	EncryptedData []byte    `json:"encrypted_data"`
 	EncryptedDek  []byte    `json:"encrypted_dek"`
-	KeyVersion    int32     `json:"key_version"`
 	CreatedAt     time.Time `json:"created_at"`
 }
 
+//#region GetCitizenByUserID
 func (q *Queries) GetCitizenByUserID(ctx context.Context, userID uuid.UUID) (GetCitizenByUserIDRow, error) {
 	row := q.db.QueryRow(ctx, getCitizenByUserID, userID)
 	var i GetCitizenByUserIDRow
 	err := row.Scan(
 		&i.UserID,
 		&i.PeselHash,
+		&i.EmailHash,
+		&i.PhoneHash,
 		&i.EncryptedData,
 		&i.EncryptedDek,
-		&i.KeyVersion,
 		&i.CreatedAt,
 	)
 	return i, err

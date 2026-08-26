@@ -14,6 +14,7 @@ import (
 
 var validate = validator.New()
 
+//#region InitConfig
 func InitConfig(cfg any, serviceName string) error {
 	SetBaseDefaults(serviceName)
 
@@ -53,6 +54,7 @@ func InitConfig(cfg any, serviceName string) error {
 	return nil
 }
 
+//#region bindEnvs
 func bindEnvs(cfg any) error {
 	v := reflect.ValueOf(cfg)
 

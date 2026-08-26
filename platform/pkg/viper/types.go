@@ -93,6 +93,7 @@ type KMSConfig struct {
 }
 
 // #region ToKMSServiceConfig
+//#region ToKMSServiceConfig
 func (k KMSConfig) ToKMSServiceConfig() kms.Config {
 	return kms.Config{
 		Endpoint:      k.Endpoint,
@@ -121,6 +122,7 @@ type ServicesConfig struct {
 // #endregion
 
 // #region GetURL
+//#region GetURL
 func (r RabbitMQConfig) GetURL() string {
 	vhost := r.VHost
 	if vhost == "" {
@@ -133,6 +135,7 @@ func (r RabbitMQConfig) GetURL() string {
 }
 
 // #region GetDSN
+//#region GetDSN
 func (cfg DBConfig) GetDSN() string {
 	return fmt.Sprintf(
 		"host=%s user=%s password=%s dbname=%s port=%d sslmode=%s",

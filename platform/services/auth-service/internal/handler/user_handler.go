@@ -17,11 +17,13 @@ type UserHandler struct {
 	userService service.UserService
 }
 
+//#region NewUserHandler
 func NewUserHandler(userService service.UserService) *UserHandler {
 	return &UserHandler{userService: userService}
 }
 
 // region GetSessions
+//#region GetSessions
 func (h *UserHandler) GetSessions(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(c.UserContext(), 3*time.Second)
 	defer cancel()
@@ -45,6 +47,7 @@ func (h *UserHandler) GetSessions(c *fiber.Ctx) error {
 
 // region TerminateSession
 // POST /user/sessions/terminate
+//#region TerminateSession
 func (h *UserHandler) TerminateSession(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(c.UserContext(), 3*time.Second)
 	defer cancel()

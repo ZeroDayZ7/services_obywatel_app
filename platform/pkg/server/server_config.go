@@ -6,6 +6,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
+//#region NewFiberApp
 func NewFiberApp(cfg FiberConfig) *fiber.App {
 	return fiber.New(fiber.Config{
 		AppName:       cfg.AppName,

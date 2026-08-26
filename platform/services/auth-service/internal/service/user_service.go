@@ -10,7 +10,7 @@ import (
 
 type UserService interface {
 	GetSessions(ctx context.Context, userID uuid.UUID, fingerprint string) ([]model.UserSessionDTO, error)
-	RevokeSession(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID) error // <-- zmiana z uint na uuid.UUID
+	RevokeSession(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID) error
 }
 
 type userService struct {
@@ -18,6 +18,7 @@ type userService struct {
 	refreshRepo repository.RefreshTokenRepository
 }
 
+//#region NewUserService
 func NewUserService(uRepo repository.UserRepository, rRepo repository.RefreshTokenRepository) UserService {
 	return &userService{
 		userRepo:    uRepo,
@@ -25,6 +26,7 @@ func NewUserService(uRepo repository.UserRepository, rRepo repository.RefreshTok
 	}
 }
 
+//#region GetSessions
 func (s *userService) GetSessions(ctx context.Context, userID uuid.UUID, fingerprint string) ([]model.UserSessionDTO, error) {
 	sessions, err := s.refreshRepo.GetSessions(ctx, userID)
 	if err != nil {
@@ -39,6 +41,7 @@ func (s *userService) GetSessions(ctx context.Context, userID uuid.UUID, fingerp
 	return sessions, nil
 }
 
+//#region RevokeSession
 func (s *userService) RevokeSession(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID) error { // <-- zmiana z uint na uuid.UUID
 	return s.refreshRepo.RevokeSession(ctx, userID, sessionID)
 }

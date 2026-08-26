@@ -6,6 +6,7 @@ import (
 	"github.com/zerodayz7/services/officer-bff/internal/di"
 )
 
+//#region registerOfficialRoutes
 func registerOfficialRoutes(mux *http.ServeMux, c *di.Container) {
 	registerProxy, err := NewSingleHostProxy(
 		c.Config.IdentityServiceURL,

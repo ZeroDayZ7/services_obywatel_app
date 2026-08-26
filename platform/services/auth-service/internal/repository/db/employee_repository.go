@@ -14,10 +14,12 @@ type employeeRepository struct {
 	db *gorm.DB
 }
 
+//#region NewEmployeeRepository
 func NewEmployeeRepository(db *gorm.DB) repository.EmployeeRepository {
 	return &employeeRepository{db: db}
 }
 
+//#region GetProfileByUserID
 func (r *employeeRepository) GetProfileByUserID(ctx context.Context, userID uuid.UUID) (*model.EmployeeProfile, error) {
 	var profile model.EmployeeProfile
 	if err := r.db.WithContext(ctx).Where("user_id = ?", userID).First(&profile).Error; err != nil {
@@ -29,6 +31,7 @@ func (r *employeeRepository) GetProfileByUserID(ctx context.Context, userID uuid
 	return &profile, nil
 }
 
+//#region GetActiveCredentialByUserID
 func (r *employeeRepository) GetActiveCredentialByUserID(ctx context.Context, userID uuid.UUID) (*model.EmployeeCredential, error) {
 	var credential model.EmployeeCredential
 	err := r.db.WithContext(ctx).

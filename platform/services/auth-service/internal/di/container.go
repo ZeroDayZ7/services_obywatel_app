@@ -20,6 +20,7 @@ type Container struct {
 	Config         *config.Config
 }
 
+//#region NewContainer
 func NewContainer(
 	db *gorm.DB,
 	redisClient *redis.Client,
@@ -33,7 +34,7 @@ func NewContainer(
 	)
 
 	repos := NewRepositories(db)
-	services := NewServices(repos, cache, eventPublisher, cfg)
+	services := NewServices(repos, cache, cfg)
 	handlers := NewHandlers(services, cache, cfg)
 	consumers := NewConsumers(services)
 

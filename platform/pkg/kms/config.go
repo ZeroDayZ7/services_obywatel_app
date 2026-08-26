@@ -8,10 +8,11 @@ import (
 const (
 	DefaultTimeout = 5 * time.Second
 
-	EndpointHealth    = "/health"
-	EndpointGenerate  = "/api/v1/keys/generate"
-	EndpointPublic    = "/api/v1/keys/public/%s/%s"
-	EndpointSymmetric = "/api/v1/keys/symmetric"
+	EndpointHealth          = "/health"
+	EndpointGenerate        = "/api/v1/keys/generate"
+	EndpointGenerateDataKey = "/api/v1/keys/generate-data-key"
+	EndpointPublic          = "/api/v1/keys/public/%s/%s"
+	EndpointSymmetric       = "/api/v1/keys/symmetric"
 
 	HeaderServiceName   = "X-Service-Name"
 	HeaderTimestamp     = "X-Timestamp"
@@ -23,6 +24,7 @@ const (
 
 	MIMEApplicationJSON = "application/json"
 	DefaultAlgorithm    = "Ed25519"
+	AlgorithmAES256GCM  = "AES256GCM"
 )
 
 type Config struct {

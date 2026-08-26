@@ -12,6 +12,10 @@ import (
 	"github.com/zerodayz7/platform/pkg/viper"
 )
 
+type AuthConfig struct {
+	Domain string `mapstructure:"AUTH_DOMAIN" validate:"required"`
+}
+
 type KeyTarget struct {
 	TargetKey string `mapstructure:"target_key"`
 	Algorithm string `mapstructure:"algorithm"`
@@ -39,6 +43,7 @@ type Config struct {
 	Database        viper.DBConfig          `mapstructure:",squash"`
 	Redis           viper.RedisConfig       `mapstructure:",squash"`
 	Session         viper.SessionConfig     `mapstructure:",squash"`
+	Auth            AuthConfig              `mapstructure:",squash"`
 	HMAC            AuthHMACConfig          `mapstructure:",squash"`
 	OTEL            viper.OTELConfig        `mapstructure:",squash"`
 	RabbitMQ        viper.RabbitMQConfig    `mapstructure:",squash"`
@@ -48,6 +53,7 @@ type Config struct {
 	Shutdown        time.Duration           `mapstructure:"SHUTDOWN_TIMEOUT" validate:"required"`
 }
 
+//#region ToKMSServiceConfig
 func (c *Config) ToKMSServiceConfig() kms.Config {
 	return c.KMS.ToKMSServiceConfig()
 }
@@ -57,6 +63,7 @@ var (
 	Store     *session.Store
 )
 
+//#region LoadConfigGlobal
 func LoadConfigGlobal() error {
 	log := shared.GetLogger()
 
@@ -86,6 +93,8 @@ func LoadConfigGlobal() error {
 		TargetKey: "hmac-auth-rabbitmq",
 		Algorithm: "HmacSha256",
 	})
+
+	spfViper.SetDefault("AUTH_DOMAIN", "obywatel.gov.pl")
 
 	if err := viper.InitConfig(&AppConfig, "auth-service"); err != nil {
 		return fmt.Errorf("failed to initialize auth-service config: %w", err)

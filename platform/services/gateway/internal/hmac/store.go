@@ -12,18 +12,21 @@ type GatewayKeyStore struct {
 	keys map[string]HMACKey
 }
 
+//#region NewGatewayKeyStore
 func NewGatewayKeyStore() *GatewayKeyStore {
 	return &GatewayKeyStore{
 		keys: make(map[string]HMACKey),
 	}
 }
 
+//#region SetKey
 func (s *GatewayKeyStore) SetKey(serviceID string, secret []byte, version uint32) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.keys[serviceID] = HMACKey{Secret: secret, Version: version}
 }
 
+//#region GetKey
 func (s *GatewayKeyStore) GetKey(serviceID string) ([]byte, uint32, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

@@ -8,6 +8,7 @@ import (
 	"go.uber.org/zap"
 )
 
+//#region RequestLoggerMiddleware
 func RequestLoggerMiddleware() fiber.Handler {
 	allowedHeaders := []string{
 		// "Content-Type",

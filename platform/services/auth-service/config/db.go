@@ -6,6 +6,7 @@ import (
 	"gorm.io/gorm"
 )
 
+//#region MustInitDB
 func MustInitDB(cfg viper.DBConfig) (*gorm.DB, func()) {
 	// 1. Inicjalizacja połączenia
 	db, closeDB, err := database.NewPostgres(cfg)

@@ -17,6 +17,7 @@ import (
 	"github.com/zerodayz7/platform/services/auth-service/internal/router"
 )
 
+//#region main
 func main() {
 	// 0. Bootstrap Logger
 	bootLog := shared.InitBootstrapLogger(os.Getenv("ENV"), false)
@@ -107,17 +108,25 @@ func main() {
 	defer cancelConsumers()
 
 	if config.AppConfig.RabbitMQ.Enabled {
+		log.Info("🐰 Uruchamianie konsumera RabbitMQ dla rejestracji obywateli...",
+			"queue", rabbitmq.QueueAuthCitizen,
+			"topic", rabbitmq.TopicCitizenCreated,
+		)
+
 		go func() {
-			err := eventPublisher.Subscribe(
+			err := eventPublisher.SubscribeWithAuth(
 				consumerCtx,
 				rabbitmq.QueueAuthCitizen,
 				rabbitmq.TopicCitizenCreated,
+				container.KeyStore,
 				container.Consumers.CitizenConsumer.HandleCitizenCreated,
 			)
 			if err != nil && consumerCtx.Err() == nil {
 				log.Error("❌ Error in citizen created consumer", "error", err)
 			}
 		}()
+	} else {
+		log.Warn("⚠️ RabbitMQ jest wyłączony - konsumery w tle nie zostały uruchomione.")
 	}
 
 	router.SetupRoutes(authApp, container)

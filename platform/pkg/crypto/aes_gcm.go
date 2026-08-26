@@ -16,6 +16,7 @@ var (
 
 // #region GenerateDEK
 // GenerateDEK generuje losowy klucz symetryczny o zadanej długości w bajtach (standardowo 32 bajty dla AES-256).
+//#region GenerateDEK
 func GenerateDEK(size int) ([]byte, error) {
 	if size != 16 && size != 24 && size != 32 {
 		return nil, ErrInvalidKeySize
@@ -30,6 +31,7 @@ func GenerateDEK(size int) ([]byte, error) {
 
 // #region EncryptAESGCM
 // EncryptAESGCM szyfruje tekst jawny przy użyciu AES-GCM i pakuje nonce na początek szyfrogramu.
+//#region EncryptAESGCM
 func EncryptAESGCM(plaintext []byte, key []byte) ([]byte, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
@@ -52,6 +54,7 @@ func EncryptAESGCM(plaintext []byte, key []byte) ([]byte, error) {
 
 // #region DecryptAESGCM
 // DecryptAESGCM odszyfrowuje dane AES-GCM, wyciągając nonce z pierwszych bajtów szyfrogramu.
+//#region DecryptAESGCM
 func DecryptAESGCM(ciphertext []byte, key []byte) ([]byte, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {

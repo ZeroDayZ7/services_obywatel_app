@@ -48,6 +48,7 @@ type pdfGenerator struct {
 	tmpl *template.Template
 }
 
+//#region NewPDFGenerator
 func NewPDFGenerator() (PDFGenerator, error) {
 	tmpl, err := template.ParseFS(templateFS, "templates/agreement.html")
 	if err != nil {
@@ -57,6 +58,7 @@ func NewPDFGenerator() (PDFGenerator, error) {
 	return &pdfGenerator{tmpl: tmpl}, nil
 }
 
+//#region GenerateAgreementPDF
 func (g *pdfGenerator) GenerateAgreementPDF(ctx context.Context, data AgreementTemplateData) ([]byte, error) {
 	var htmlBuf bytes.Buffer
 	if err := g.tmpl.Execute(&htmlBuf, data); err != nil {

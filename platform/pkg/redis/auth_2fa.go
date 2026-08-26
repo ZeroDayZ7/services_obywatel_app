@@ -20,18 +20,22 @@ type TwoFASession struct {
 	Attempts    int    `json:"attempts"`
 }
 
+//#region Set2FASession
 func (c *Cache) Set2FASession(ctx context.Context, token string, sess TwoFASession, ttl time.Duration) error {
 	return SetJSON(c, ctx, constants.Login2FAPrefix+token, sess, ttl)
 }
 
+//#region Get2FASession
 func (c *Cache) Get2FASession(ctx context.Context, token string) (*TwoFASession, error) {
 	return GetJSON[TwoFASession](c, ctx, constants.Login2FAPrefix+token)
 }
 
+//#region Delete2FASession
 func (c *Cache) Delete2FASession(ctx context.Context, token string) error {
 	return c.Del(ctx, constants.Login2FAPrefix+token)
 }
 
+//#region Verify2FAAttempt
 func (c *Cache) Verify2FAAttempt(
 	ctx context.Context,
 	token string,

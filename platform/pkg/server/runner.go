@@ -21,6 +21,7 @@ type Config struct {
 	Shutdown   time.Duration
 }
 
+//#region Run
 func Run(app *fiber.App, cfg Config, log shared.Logger, cleanup func()) {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

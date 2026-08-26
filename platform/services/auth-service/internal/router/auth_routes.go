@@ -10,33 +10,30 @@ import (
 	"github.com/zerodayz7/platform/services/auth-service/internal/middleware"
 )
 
+//#region SetupAuthRoutes
 func SetupAuthRoutes(
 	app *fiber.App,
 	h *handler.AuthHandler,
 	resetHandler *handler.ResetHandler,
 ) {
-	// #region Group("/auth")
 	auth := app.Group("/auth")
 	auth.Use(shared.GetLimiter(shared.LimitAuth, nil))
 
 	// ==========================
 	// LOGIN / REGISTER / JWT
 	// ==========================
-	// #region Krok 1: Weryfikacja loginu/hasła -> zwraca challenge
 	auth.Post("/login",
 		middleware.ValidateBody[schemas.LoginRequest](),
 		h.Login,
 	)
 	// #endregion
 
-	// #region Krok 2: Weryfikacja podpisu kryptograficznego -> zwraca JWT
 	auth.Post("/login/step2",
 		middleware.ValidateBody[schemas.LoginStep2Request](),
 		h.LoginStep2,
 	)
 	// #endregion
 
-	// #region 2FA
 	auth.Post("/2fa-verify",
 		middleware.ValidateBody[schemas.TwoFARequest](),
 		h.Verify2FA,
@@ -48,7 +45,6 @@ func SetupAuthRoutes(
 	)
 	// #endregion
 
-	// #region Register & Refresh & Logout
 	auth.Post("/register",
 		middleware.ValidateBody[schemas.RegisterRequest](),
 		h.Register,
@@ -82,7 +78,6 @@ func SetupAuthRoutes(
 	// ==========================
 	// RESET PASSWORD
 	// ==========================
-	// #region Group("/reset")
 	reset := auth.Group("/reset")
 	reset.Use(shared.GetLimiter(shared.LimitReset, nil))
 

@@ -10,6 +10,7 @@ import (
 
 var SkipJWT = false
 
+//#region JWTMiddlewareWithExclusions
 func JWTMiddlewareWithExclusions() fiber.Handler {
 	if SkipJWT {
 		return func(c *fiber.Ctx) error {

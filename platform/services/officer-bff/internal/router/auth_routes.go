@@ -6,6 +6,7 @@ import (
 	"github.com/zerodayz7/services/officer-bff/internal/di"
 )
 
+//#region registerAuthRoutes
 func registerAuthRoutes(mux *http.ServeMux, c *di.Container) {
 	loginStep1Proxy, err := NewReverseProxy(c.Config.AuthServiceURL, "/auth/login", c.KeyStore)
 	if err != nil {

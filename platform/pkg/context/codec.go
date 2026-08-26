@@ -7,10 +7,12 @@ import (
 	"errors"
 )
 
+//#region Encode
 func Encode(ctx RequestContext) ([]byte, error) {
 	return json.Marshal(ctx)
 }
 
+//#region Decode
 func Decode(data []byte) (*RequestContext, error) {
 	var ctx RequestContext
 	if err := json.Unmarshal(data, &ctx); err != nil {

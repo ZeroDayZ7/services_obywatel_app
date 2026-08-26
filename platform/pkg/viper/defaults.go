@@ -4,6 +4,7 @@ package viper
 
 import "github.com/spf13/viper"
 
+//#region SetBaseDefaults
 func SetBaseDefaults(serviceName string) {
 	viper.SetDefault("APP_NAME", serviceName)
 	viper.SetDefault("PORT", "8081")
@@ -19,6 +20,7 @@ func SetBaseDefaults(serviceName string) {
 	viper.SetDefault("OTEL_SERVICE_NAME", serviceName)
 }
 
+//#region SetDBDefaults
 func SetDBDefaults() {
 	viper.SetDefault("DB_HOST", "127.0.0.1")
 	viper.SetDefault("DB_PORT", 5432)
@@ -31,6 +33,7 @@ func SetDBDefaults() {
 	viper.SetDefault("DB_CONN_MAX_LIFETIME", "1h")
 }
 
+//#region SetRedisDefaults
 func SetRedisDefaults() {
 	viper.SetDefault("REDIS_HOST", "127.0.0.1")
 	viper.SetDefault("REDIS_PORT", "6379")
@@ -42,24 +45,29 @@ func SetRedisDefaults() {
 	viper.SetDefault("REDIS_TIMEOUT", "5s")
 }
 
+//#region SetSessionDefaults
 func SetSessionDefaults() {
 	viper.SetDefault("SESSION_TTL", "24h")
 }
 
+//#region SetKMSDefaults
 func SetKMSDefaults() {
 	viper.SetDefault("KMS_ENDPOINT", "http://127.0.0.1:8080")
 	viper.SetDefault("KMS_TIMEOUT", "2s")
 }
 
+//#region SetHMACDefaults
 func SetHMACDefaults() {
 	viper.SetDefault("HMAC_HEADER_NAME", "X-HMAC-Signature")
 }
 
+//#region SetGatewayHMACDefaults
 func SetGatewayHMACDefaults() {
 	SetHMACDefaults()
 	viper.SetDefault("HMAC_TARGET_KEYS", map[string]string{})
 }
 
+//#region SetS3Defaults
 func SetS3Defaults() {
 	viper.SetDefault("S3_ENABLED", false)
 	viper.SetDefault("S3_ENDPOINT", "localhost:9000")

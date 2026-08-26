@@ -48,6 +48,7 @@ type passwordResetService struct {
 	cache            *redis.Cache
 }
 
+//#region NewPasswordResetService
 func NewPasswordResetService(
 	userRepo repository.UserRepository,
 	refreshTokenRepo repository.RefreshTokenRepository,
@@ -61,6 +62,7 @@ func NewPasswordResetService(
 }
 
 // region StartResetProcess
+//#region StartResetProcess
 func (s *passwordResetService) StartResetProcess(ctx context.Context, agreementNumber string, value string, method string) (string, error) {
 	user, err := s.userRepo.GetUserByEmail(ctx, value)
 	if err != nil {
@@ -100,6 +102,7 @@ func (s *passwordResetService) StartResetProcess(ctx context.Context, agreementN
 	return token, nil
 }
 
+//#region VerifyCode
 func (s *passwordResetService) VerifyCode(ctx context.Context, token, code string) (*ResetSession, error) {
 	session, err := s.getSession(ctx, token)
 	if err != nil {
@@ -132,6 +135,7 @@ func (s *passwordResetService) VerifyCode(ctx context.Context, token, code strin
 }
 
 // region FinalizeReset
+//#region FinalizeReset
 func (s *passwordResetService) FinalizeReset(ctx context.Context, token, newPassword string) error {
 	session, err := s.getSession(ctx, token)
 	if err != nil {
@@ -182,6 +186,7 @@ func (s *passwordResetService) FinalizeReset(ctx context.Context, token, newPass
 }
 
 // region getSession
+//#region getSession
 func (s *passwordResetService) getSession(ctx context.Context, token string) (*ResetSession, error) {
 	key := fmt.Sprintf("reset:password:%s", token)
 	data, err := s.cache.Get(ctx, key)
@@ -195,6 +200,7 @@ func (s *passwordResetService) getSession(ctx context.Context, token string) (*R
 	return &session, nil
 }
 
+//#region saveSession
 func (s *passwordResetService) saveSession(ctx context.Context, token string, session *ResetSession) error {
 	key := fmt.Sprintf("reset:password:%s", token)
 	data, _ := json.Marshal(session)

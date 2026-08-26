@@ -9,6 +9,7 @@ import (
 	"github.com/zerodayz7/platform/pkg/shared"
 )
 
+//#region RunMigrationsGoose
 func RunMigrationsGoose(dsn string, migrationsDir string) error {
 	log := shared.GetLogger()
 

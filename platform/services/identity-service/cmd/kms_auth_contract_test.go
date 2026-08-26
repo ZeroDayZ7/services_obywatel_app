@@ -16,6 +16,7 @@ import (
 	"github.com/zerodayz7/platform/pkg/kms"
 )
 
+//#region TestIdentityKMSRequestContractMatchesRustBackend
 func TestIdentityKMSRequestContractMatchesRustBackend(t *testing.T) {
 	ctx := context.Background()
 	cfg := kms.Config{

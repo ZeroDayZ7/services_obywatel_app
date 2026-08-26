@@ -1,12 +1,24 @@
 {
   "version": "0.2.0",
+  "compounds": [
+    {
+      "name": "Wybrane 4 Serwisy",
+      "configurations": [
+        "Gateway Service",
+        "Auth Service",
+        "Officer BFF Service",
+        // "Citizen Docs Service",
+        "Identity Service"
+      ]
+    }
+  ],
   "configurations": [
     {
       "name": "Gateway Service",
       "type": "go",
       "request": "launch",
       "mode": "debug",
-      "program": "${workspaceFolder}/platform/services/gateway/cmd/main.go",
+      "program": "${workspaceFolder}/platform/services/gateway/cmd",
       "args": [],
       "env": {
         "ENV": "development",
@@ -38,7 +50,7 @@
       "type": "go",
       "request": "launch",
       "mode": "debug",
-      "program": "${workspaceFolder}/platform/services/citizen-docs/cmd/main.go",
+      "program": "${workspaceFolder}/platform/services/citizen-docs/cmd",
       "args": [],
       "env": {
         "ENV": "development",
@@ -54,7 +66,7 @@
       "type": "go",
       "request": "launch",
       "mode": "debug",
-      "program": "${workspaceFolder}/platform/services/version-service/cmd/main.go",
+      "program": "${workspaceFolder}/platform/services/version-service/cmd",
       "args": [],
       "env": {
         "ENV": "development",
@@ -70,7 +82,7 @@
       "type": "go",
       "request": "launch",
       "mode": "debug",
-      "program": "${workspaceFolder}/platform/services/notification-service/cmd/main.go",
+      "program": "${workspaceFolder}/platform/services/notification-service/cmd",
       "args": [],
       "env": {
         "ENV": "development",
@@ -86,7 +98,7 @@
       "type": "go",
       "request": "launch",
       "mode": "debug",
-      "program": "${workspaceFolder}/platform/services/audit-service/cmd/main.go",
+      "program": "${workspaceFolder}/platform/services/audit-service/cmd",
       "args": [],
       "env": {
         "ENV": "development",
@@ -102,7 +114,7 @@
       "type": "go",
       "request": "launch",
       "mode": "debug",
-      "program": "${workspaceFolder}/platform/services/messaging-service/cmd/main.go",
+      "program": "${workspaceFolder}/platform/services/messaging-service/cmd",
       "args": [],
       "env": {
         "ENV": "development",
@@ -118,7 +130,7 @@
       "type": "go",
       "request": "launch",
       "mode": "debug",
-      "program": "${workspaceFolder}/platform/services/identity-service/cmd/main.go",
+      "program": "${workspaceFolder}/platform/services/identity-service/cmd",
       "args": [],
       "env": {
         "ENV": "development",
@@ -134,7 +146,7 @@
       "type": "go",
       "request": "launch",
       "mode": "debug",
-      "program": "${workspaceFolder}/platform/services/officer-bff/cmd/main.go",
+      "program": "${workspaceFolder}/platform/services/officer-bff/cmd",
       "args": [],
       "env": {
         "ENV": "development",

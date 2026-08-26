@@ -6,6 +6,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
+//#region AttachRequestMeta
 func AttachRequestMeta(c *fiber.Ctx, err *AppError, keysToInclude ...string) {
 	// KLUCZOWE: Tworzymy kopię mapy, aby nie modyfikować globalnego błędu
 	newMeta := maps.Clone(err.Meta)

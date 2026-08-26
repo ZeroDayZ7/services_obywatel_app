@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
-	"github.com/zerodayz7/platform/pkg/kms"
+	"github.com/zerodayz7/platform/pkg/httpserver"
 	"github.com/zerodayz7/platform/pkg/server"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/messaging-service/app"
@@ -20,41 +22,24 @@ func main() {
 	bootLog := shared.InitBootstrapLogger(os.Getenv("ENV"), false)
 	defer func() { _ = bootLog.Sync() }()
 
-	// 1. Config
+	// 1. Load Config
 	if err := config.LoadConfigGlobal(); err != nil {
 		bootLog.Fatal("Config load failed", "error", err)
 	}
 
-	// =========================================================================
-	// 2. KMS SETUP & FETCH INTERNAL HMAC KEY
-	// =========================================================================
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	log := shared.GetLogger()
+
+	// 2. Init KeyStore & Signal Context
+	keyStore := httpserver.NewKeyStore()
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	securityCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	kmsCfg := kms.Config{
-		Endpoint:      config.AppConfig.KMS.Endpoint,
-		ServiceName:   config.AppConfig.Server.AppName, // "messaging-service"
-		ServiceSecret: config.AppConfig.KMS.ServiceSecret,
-	}
-
-	bootLog.Info("🔍 Sprawdzanie stanu serwisu KMS...")
-	if err := kms.HealthCheck(ctx, kmsCfg); err != nil {
-		bootLog.Error("❌ KMS Health Check nie powiódł się", "error", err)
-		os.Exit(1)
-	}
-
-	bootLog.Info("🔑 Pobieranie klucza 'hmac-gateway-messaging' z KMS...")
-	internalHMACKey, err := kms.FetchSymmetricKey(ctx, kmsCfg, "hmac-gateway-messaging")
-	if err != nil {
-		bootLog.Error("❌ Nie udało się pobrać klucza HMAC z KMS", "error", err)
-		os.Exit(1)
-	}
-
-	config.AppConfig.Internal.HMACSecret = string(internalHMACKey)
-	bootLog.Info("✅ Klucz HMAC komunikacji wewnętrznej pobrany pomyślnie")
-
-	// 3. Logger
-	log := shared.InitLogger(config.AppConfig.Server.Env, false)
+	// 3. Ładowanie Kluczy z KMS do KeyStore
+	LoadSecurityKeys(securityCtx, &config.AppConfig, keyStore)
 
 	// 4. Database
 	db, closeDB := config.MustInitDB(config.AppConfig.Database)
@@ -63,13 +48,13 @@ func main() {
 	wsHub := websocket.NewHub()
 	go wsHub.Run()
 
-	// 6. DI Container & App Setup
+	// 6. DI Container & App Setup (zgodnie z obecną sygnaturą NewContainer - 4 argumenty)
 	container := di.NewContainer(db, log, &config.AppConfig, wsHub)
 	messagingApp := app.NewApp(container)
 
 	router.SetupMessagingRoutes(messagingApp, container)
 
-	// 7. Run server
+	// 7. Run Server
 	server.Run(
 		messagingApp,
 		server.Config{
