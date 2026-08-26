@@ -9,6 +9,7 @@ type Actor struct {
 	Role          string
 	DepartmentID  *uuid.UUID
 	InstitutionID *uuid.UUID
+	ClientIP      string
 }
 
 // Helpery (opcjonalnie) dla czytelności w serwisie:

@@ -41,9 +41,10 @@ func (h *CitizenHandler) Register(w http.ResponseWriter, r *http.Request) {
 
 	// 2. Budowanie struktury Actor z kontekstu żądania
 	actor := model.Actor{
-		ID:   actorID,
-		Name: "System Automatyczny",
-		Role: "SYSTEM",
+		ID:       actorID,
+		Name:     "System Automatyczny",
+		Role:     "SYSTEM",
+		ClientIP: reqctx.GetIP(r.Context()),
 	}
 
 	if reqCtx, ok := reqctx.FromContext(ctx); ok && reqCtx != nil {

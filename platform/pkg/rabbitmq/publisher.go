@@ -2,11 +2,9 @@ package rabbitmq
 
 import (
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
 
 	amqp "github.com/rabbitmq/amqp091-go"
+	"github.com/zerodayz7/platform/pkg/crypto"
 	"github.com/zerodayz7/platform/pkg/shared"
 )
 
@@ -17,7 +15,7 @@ type RabbitMQPublisher struct {
 	hmacKey  []byte
 }
 
-//#region NewLivePublisher
+// #region NewLivePublisher
 func NewLivePublisher(url string, senderID string, hmacKey []byte) (*RabbitMQPublisher, error) {
 	conn, err := amqp.Dial(url)
 	if err != nil {
@@ -36,21 +34,14 @@ func NewLivePublisher(url string, senderID string, hmacKey []byte) (*RabbitMQPub
 	}, nil
 }
 
-//#region ComputeHMAC
-func ComputeHMAC(payload []byte, key []byte) string {
-	h := hmac.New(sha256.New, key)
-	h.Write(payload)
-	return hex.EncodeToString(h.Sum(nil))
-}
-
-//#region Publish
+// #region Publish
 func (p *RabbitMQPublisher) Publish(ctx context.Context, routingKey string, payload []byte) error {
 	headers := amqp.Table{
 		"X-Sender-ID": p.senderID,
 	}
 
 	if len(p.hmacKey) > 0 {
-		headers["X-Signature"] = ComputeHMAC(payload, p.hmacKey)
+		headers["X-Signature"] = crypto.ComputeHMAC256Hex(payload, p.hmacKey)
 	}
 
 	return p.ch.PublishWithContext(ctx,
@@ -66,7 +57,7 @@ func (p *RabbitMQPublisher) Publish(ctx context.Context, routingKey string, payl
 	)
 }
 
-//#region Consume
+// #region Consume
 func (p *RabbitMQPublisher) Consume(queueName string, routingKey string) (<-chan amqp.Delivery, error) {
 	q, err := p.ch.QueueDeclare(
 		queueName,
@@ -107,7 +98,7 @@ func (p *RabbitMQPublisher) Consume(queueName string, routingKey string) (<-chan
 	)
 }
 
-//#region Subscribe
+// #region Subscribe
 func (p *RabbitMQPublisher) Subscribe(ctx context.Context, queueName string, routingKey string, handler HandlerFunc) error {
 	log := shared.GetLogger()
 
@@ -136,7 +127,7 @@ func (p *RabbitMQPublisher) Subscribe(ctx context.Context, queueName string, rou
 	}
 }
 
-//#region Close
+// #region Close
 func (p *RabbitMQPublisher) Close() error {
 	if p.ch != nil {
 		_ = p.ch.Close()

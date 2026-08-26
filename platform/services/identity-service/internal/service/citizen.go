@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	reqctx "github.com/zerodayz7/platform/pkg/context"
+	"github.com/zerodayz7/platform/pkg/crypto"
 	"github.com/zerodayz7/platform/pkg/envelope"
 	apperr "github.com/zerodayz7/platform/pkg/errors"
 	"github.com/zerodayz7/platform/pkg/rabbitmq"
@@ -92,9 +92,9 @@ func (s *citizenService) RegisterCitizen(
 	// 	"phone_raw_len", len(payload.PhoneNumber),
 	// )
 
-	peselHash := hex.EncodeToString(reqctx.ComputeMAC([]byte(payload.PESEL), s.hmacPeselSecret))
-	emailHash := hex.EncodeToString(reqctx.ComputeMAC([]byte(payload.Email), s.hmacEmailSecret))
-	phoneHash := hex.EncodeToString(reqctx.ComputeMAC([]byte(payload.PhoneNumber), s.hmacPhoneSecret))
+	peselHash := crypto.ComputeHMAC256Hex([]byte(payload.PESEL), s.hmacPeselSecret)
+	emailHash := crypto.ComputeHMAC256Hex([]byte(payload.Email), s.hmacEmailSecret)
+	phoneHash := crypto.ComputeHMAC256Hex([]byte(payload.PhoneNumber), s.hmacPhoneSecret)
 
 	// log.Debug("✅ Po obliczeniu haszy",
 	// 	"pesel_hash", peselHash,
@@ -291,7 +291,7 @@ func (s *citizenService) RegisterCitizen(
 		}
 	}
 
-	pukHash := hex.EncodeToString(reqctx.ComputeMAC([]byte(rawPUK), s.hmacPukSecret))
+	pukHash := crypto.ComputeHMAC256Hex([]byte(rawPUK), s.hmacPukSecret)
 
 	puk := &model.UserPukCode{
 		ID:              shared.NewUUIDv7(),
@@ -305,14 +305,13 @@ func (s *citizenService) RegisterCitizen(
 
 	payloadSum := sha256.Sum256(plaintextBytes)
 	payloadHash := hex.EncodeToString(payloadSum[:])
-	clientIP := reqctx.GetIP(ctx)
 
 	auditLog := &model.CitizenAuditLog{
 		ID:          shared.NewUUIDv7(),
 		UserID:      userID,
 		Action:      model.ActionCitizenRegistered,
 		ActorID:     actor.ID,
-		IPAddress:   clientIP,
+		IPAddress:   actor.ClientIP,
 		PayloadHash: payloadHash,
 	}
 
