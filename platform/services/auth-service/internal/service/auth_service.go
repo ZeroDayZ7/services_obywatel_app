@@ -63,6 +63,58 @@ func NewAuthService(
 	}
 }
 
+// region AttemptLogin
+func (s *authService) AttemptLogin(ctx context.Context, email string, password []byte, fingerprint string) (*http.LoginResponse, error) {
+	defer func() {
+		if len(password) > 0 {
+			for i := range password {
+				password[i] = 0
+			}
+		}
+	}()
+
+	log := shared.GetLogger()
+
+	user, err := s.userRepo.GetUserByEmail(ctx, email)
+	if err != nil {
+		return nil, errors.ErrInvalidCredentials
+	}
+
+	if err = s.CanUserLogin(user); err != nil {
+		return nil, err
+	}
+
+	valid, err := security.VerifyPassword(password, user.Password, nil)
+	if err != nil || !valid {
+		return nil, s.handleFailedLogin(ctx, user.ID)
+	}
+
+	if user.FailedLoginAttempts > 0 {
+		_ = s.userRepo.ResetFailedLoginAttempts(user.ID)
+	}
+
+	// 1. Odgałęzienie dla Urzędnika
+	if user.Role != model.RoleCitizen && user.Role != model.RoleUser {
+		log.Info("Procesowanie logowania urzędnika", map[string]any{"uid": user.ID, "role": user.Role})
+		return s.prepareEmployeeLogin(ctx, user, fingerprint)
+	}
+
+	// 2. Odgałęzienie dla Zaufanego Urządzenia (Obywatel)
+	device, err := s.userRepo.GetDeviceByFingerprint(ctx, user.ID, fingerprint)
+	log.DebugDB("SCENARIUSZ A", device)
+
+	if err == nil && device != nil && device.IsVerified && device.IsActive {
+		return s.preparePreTrustSession(ctx, user, device.PublicKey, fingerprint)
+	}
+
+	// 3. Pozostałe scenariusze
+	if user.TwoFactorEnabled {
+		return s.prepare2FASession(ctx, user, fingerprint)
+	}
+
+	return s.finalizeLogin(ctx, user, fingerprint)
+}
+
 // #region AttemptLoginStep2
 func (s *authService) AttemptLoginStep2(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID, signature string, fingerprint string, clientIP string) (*http.LoginResponse, error) {
 	log := shared.GetLogger()
@@ -452,61 +504,8 @@ func (s *authService) Resend2FACode(ctx context.Context, email string, token str
 	return nil
 }
 
-// region AttemptLogin
-// #region AttemptLogin
-func (s *authService) AttemptLogin(ctx context.Context, email string, password []byte, fingerprint string) (*http.LoginResponse, error) {
-	defer func() {
-		if len(password) > 0 {
-			for i := range password {
-				password[i] = 0
-			}
-		}
-	}()
-
-	log := shared.GetLogger()
-
-	user, err := s.userRepo.GetUserByEmail(ctx, email)
-	if err != nil {
-		return nil, errors.ErrInvalidCredentials
-	}
-
-	if err = s.CanUserLogin(user); err != nil {
-		return nil, err
-	}
-
-	valid, err := security.VerifyPassword(password, user.Password, nil)
-	if err != nil || !valid {
-		return nil, s.handleFailedLogin(ctx, user.ID)
-	}
-
-	if user.FailedLoginAttempts > 0 {
-		_ = s.userRepo.ResetFailedLoginAttempts(user.ID)
-	}
-
-	// 1. Odgałęzienie dla Urzędnika
-	if user.Role != model.RoleCitizen && user.Role != model.RoleUser {
-		log.Info("Procesowanie logowania urzędnika", map[string]any{"uid": user.ID, "role": user.Role})
-		return s.prepareEmployeeLogin(ctx, user, fingerprint)
-	}
-
-	// 2. Odgałęzienie dla Zaufanego Urządzenia (Obywatel)
-	device, err := s.userRepo.GetDeviceByFingerprint(ctx, user.ID, fingerprint)
-	log.DebugDB("SCENARIUSZ A", device)
-
-	if err == nil && device != nil && device.IsVerified && device.IsActive {
-		return s.preparePreTrustSession(ctx, user, device.PublicKey, fingerprint)
-	}
-
-	// 3. Pozostałe scenariusze
-	if user.TwoFactorEnabled {
-		return s.prepare2FASession(ctx, user, fingerprint)
-	}
-
-	return s.finalizeLogin(ctx, user, fingerprint)
-}
-
 // region prepareEmployeeLogin
-// #region prepareEmployeeLogin
+
 func (s *authService) prepareEmployeeLogin(ctx context.Context, user *model.User, fingerprint string) (*http.LoginResponse, error) {
 	log := shared.GetLogger()
 
