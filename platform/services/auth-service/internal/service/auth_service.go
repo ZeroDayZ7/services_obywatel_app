@@ -386,7 +386,7 @@ func (s *authService) Verify2FA(ctx context.Context, token string, code []byte, 
 		return nil, errors.ErrInternal
 	}
 
-	err = s.cache.SetSetupSession(ctx, sessionID, &redis.UserSession{
+	err = s.cache.SetSetupSession(ctx, sessionID, &redis.SetupSession{
 		UserID:      session.UserID,
 		Fingerprint: crypto.HashSHA256(fingerprint),
 	}, s.cfg.Session.TTL)
@@ -555,7 +555,7 @@ func (s *authService) prepareEmployeeLogin(ctx context.Context, user *model.User
 	}
 
 	// 4. Konstruujemy dane sesji z kontekstem urzędnika i kluczem z KARTY
-	sessionData := redis.UserSession{
+	sessionData := redis.SetupSession{
 		UserID:      user.ID.String(),
 		Fingerprint: crypto.HashSHA256(fingerprint),
 		PublicKey:   credential.PublicKey,
@@ -729,7 +729,7 @@ func (s *authService) preparePreTrustSession(ctx context.Context, user *model.Us
 	}
 
 	// 2. Dane sesji dla zwykłego urządzenia
-	sessionData := redis.UserSession{
+	sessionData := redis.SetupSession{
 		UserID:      user.ID.String(),
 		Fingerprint: crypto.HashSHA256(fingerprint),
 		PublicKey:   publicKey,

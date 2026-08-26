@@ -4,7 +4,6 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 
-	"github.com/zerodayz7/platform/pkg/constants"
 	appcontext "github.com/zerodayz7/platform/pkg/context"
 	apperr "github.com/zerodayz7/platform/pkg/errors"
 	rdy "github.com/zerodayz7/platform/pkg/redis"
@@ -17,66 +16,80 @@ func ContextBuilder(container *di.Container) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		log := shared.GetLogger()
 
-		fingerprint := c.Get(constants.HeaderDeviceFingerprint)
 		requestID, _ := c.Locals("requestid").(string)
 
 		reqCtx := &appcontext.RequestContext{
-			DeviceID:  fingerprint,
 			IP:        c.IP(),
 			RequestID: requestID,
 		}
 
-		// Ścieżki publiczne (brak użyszkodnika / sesji w c.Locals)
+		// Odczytujemy sesje ustawione wcześniej w AuthRedisMiddleware
 		userLocal := c.Locals("userSession")
-		if userLocal == nil {
+		setupLocal := c.Locals("setupSession")
+
+		// 1. ŚCIEŻKI PUBLICZNE (Brak jakiejkolwiek sesji w c.Locals)
+		if userLocal == nil && setupLocal == nil {
+			// Na ścieżkach publicznych zapisujemy surowy/hashowany fingerprint z nagłówka
+			reqCtx.DeviceID = c.Get("X-Device-Fingerprint")
 			c.Locals("requestContext", reqCtx)
 			return c.Next()
 		}
 
-		log.DebugJSON("[Context Builder]", map[string]any{
-			"userSession": userLocal,
-		})
-
-		sessionData, ok := userLocal.(*rdy.UserSession)
-		if !ok || sessionData == nil {
-			log.ErrorObj("[ContextBuilder] Failed to cast 'userSession' from locals", map[string]any{"local": userLocal})
-			return apperr.SendAppError(c, apperr.ErrInternal)
-		}
-
-		sessionID, ok := c.Locals("sessionID").(uuid.UUID)
-		if !ok || sessionID == uuid.Nil {
+		// 2. ŚCIEŻKI CHRONIONE (Mamy sessionID z JWT)
+		if sessionID, ok := c.Locals("sessionID").(uuid.UUID); ok && sessionID != uuid.Nil {
+			reqCtx.SessionID = &sessionID
+		} else {
 			log.ErrorObj("[ContextBuilder] Missing or invalid sessionID in context", map[string]any{
 				"sid": c.Locals("sessionID"),
 			})
 			return apperr.SendAppError(c, apperr.ErrUnauthorized)
 		}
 
-		parsedUserID, err := uuid.Parse(sessionData.UserID)
-		if err != nil {
-			log.ErrorObj("[ContextBuilder] Failed to parse UserID string to UUID", map[string]any{
-				"rawUserID": sessionData.UserID,
-				"err":       err.Error(),
-			})
-			return apperr.SendAppError(c, apperr.ErrUnauthorized)
-		}
+		// A. Obsługa UserSession (pełna sesja po zalogowaniu)
+		if sessionData, ok := userLocal.(*rdy.UserSession); ok && sessionData != nil {
+			reqCtx.DeviceID = sessionData.Fingerprint
 
-		reqCtx.UserID = &parsedUserID
-		reqCtx.SessionID = &sessionID
-		reqCtx.Role = sessionData.Role
-		reqCtx.Permissions = sessionData.Permissions
-		reqCtx.Username = sessionData.Username
+			if parsedUserID, err := uuid.Parse(sessionData.UserID); err == nil {
+				reqCtx.UserID = &parsedUserID
+			} else {
+				log.ErrorObj("[ContextBuilder] Invalid UserID string in UserSession", map[string]any{"rawUserID": sessionData.UserID})
+				return apperr.SendAppError(c, apperr.ErrUnauthorized)
+			}
 
-		if sessionData.InstitutionID != "" {
-			if parsedInst, err := uuid.Parse(sessionData.InstitutionID); err == nil {
-				reqCtx.InstitutionID = &parsedInst
+			reqCtx.Role = sessionData.Role
+			reqCtx.Permissions = sessionData.Permissions
+			reqCtx.Username = sessionData.Username
+
+			if sessionData.InstitutionID != "" {
+				if parsedInst, err := uuid.Parse(sessionData.InstitutionID); err == nil {
+					reqCtx.InstitutionID = &parsedInst
+				}
+			}
+
+			if sessionData.DepartmentID != "" {
+				if parsedDept, err := uuid.Parse(sessionData.DepartmentID); err == nil {
+					reqCtx.DepartmentID = &parsedDept
+				}
 			}
 		}
 
-		if sessionData.DepartmentID != "" {
-			if parsedDept, err := uuid.Parse(sessionData.DepartmentID); err == nil {
-				reqCtx.DepartmentID = &parsedDept
+		// B. Obsługa SetupSession (sesja wstępna, np. /login/step2)
+		if setupData, ok := setupLocal.(*rdy.SetupSession); ok && setupData != nil {
+			reqCtx.DeviceID = setupData.Fingerprint
+
+			if parsedUserID, err := uuid.Parse(setupData.UserID); err == nil {
+				reqCtx.UserID = &parsedUserID
+			} else {
+				log.ErrorObj("[ContextBuilder] Invalid UserID string in SetupSession", map[string]any{"rawUserID": setupData.UserID})
+				return apperr.SendAppError(c, apperr.ErrUnauthorized)
 			}
+
+			reqCtx.Role = setupData.Role
 		}
+
+		log.DebugJSON("[ContextBuilder] Successfully built RequestContext", map[string]any{
+			"reqCtx": reqCtx,
+		})
 
 		c.Locals("requestContext", reqCtx)
 		return c.Next()
