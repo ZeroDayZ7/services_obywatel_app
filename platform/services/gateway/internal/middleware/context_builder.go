@@ -12,7 +12,7 @@ import (
 	"github.com/zerodayz7/platform/services/gateway/internal/di"
 )
 
-//#region ContextBuilder
+// #region ContextBuilder
 func ContextBuilder(container *di.Container) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		log := shared.GetLogger()
@@ -39,21 +39,25 @@ func ContextBuilder(container *di.Container) fiber.Handler {
 			return apperr.SendAppError(c, apperr.ErrInternal)
 		}
 
-		sidStr, _ := c.Locals("sessionID").(string)
-		parsedSessionID, err := uuid.Parse(sidStr)
-		if err != nil {
-			log.ErrorObj("[ContextBuilder] Invalid UUID format in sessionID", map[string]any{"sid": sidStr, "err": err.Error()})
+		sessionID, ok := c.Locals("sessionID").(uuid.UUID)
+		if !ok || sessionID == uuid.Nil {
+			log.ErrorObj("[ContextBuilder] Missing or invalid sessionID in context", map[string]any{
+				"sid": c.Locals("sessionID"),
+			})
 			return apperr.SendAppError(c, apperr.ErrUnauthorized)
 		}
 
 		parsedUserID, err := uuid.Parse(sessionData.UserID)
 		if err != nil {
-			log.ErrorObj("[ContextBuilder] Failed to parse UserID string to UUID", map[string]any{"rawUserID": sessionData.UserID, "err": err.Error()})
+			log.ErrorObj("[ContextBuilder] Failed to parse UserID string to UUID", map[string]any{
+				"rawUserID": sessionData.UserID,
+				"err":       err.Error(),
+			})
 			return apperr.SendAppError(c, apperr.ErrUnauthorized)
 		}
 
 		reqCtx.UserID = &parsedUserID
-		reqCtx.SessionID = &parsedSessionID
+		reqCtx.SessionID = &sessionID
 		reqCtx.Role = sessionData.Role
 		reqCtx.Permissions = sessionData.Permissions
 		reqCtx.Username = sessionData.Username

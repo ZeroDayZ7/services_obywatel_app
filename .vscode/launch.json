@@ -1,5 +1,17 @@
 {
   "version": "0.2.0",
+  "compounds": [
+    {
+      "name": "Wybrane 4 Serwisy",
+      "configurations": [
+        "Gateway Service",
+        "Auth Service",
+        "Officer BFF Service",
+        // "Citizen Docs Service",
+        "Identity Service"
+      ]
+    }
+  ],
   "configurations": [
     {
       "name": "Gateway Service",
