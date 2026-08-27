@@ -1,1 +1,0 @@
-go run platform/services/gateway/cmd/test/main.go

@@ -41,9 +41,6 @@ func (c *Config) ToKMSServiceConfig() kms.Config {
 	return c.KMS.ToKMSServiceConfig()
 }
 
-var AppConfig Config
-
-//#region SetBFFDefaults
 func SetBFFDefaults() {
 	viper.SetBaseDefaults("officer_bff")
 	viper.SetRedisDefaults()
@@ -78,15 +75,16 @@ func SetBFFDefaults() {
 }
 
 //#region LoadConfigGlobal
-func LoadConfigGlobal() error {
+func Load() (*Config, error) {
 	log := shared.GetLogger()
 
 	SetBFFDefaults()
 
-	if err := viper.InitConfig(&AppConfig, "officer_bff"); err != nil {
-		return fmt.Errorf("failed to initialize officer_bff config: %w", err)
+	var cfg Config
+	if err := viper.InitConfig(&cfg, "officer_bff"); err != nil {
+		return nil, fmt.Errorf("failed to initialize officer_bff config: %w", err)
 	}
 
 	log.Info("Officer_bff configuration loaded successfully")
-	return nil
+	return &cfg, nil
 }
