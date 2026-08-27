@@ -27,9 +27,8 @@ type LoginPreTrustData struct {
 }
 
 type LoginEmployeeTrustData struct {
-	Challenge     string `json:"challenge"`
-	SetupToken    string `json:"setup_token"`
-	InstitutionID string `json:"institution_id,omitempty"`
+	Challenge  string `json:"challenge"`
+	SetupToken string `json:"setup_token"`
 }
 
 type LoginResponse struct {

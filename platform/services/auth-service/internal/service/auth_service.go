@@ -350,7 +350,6 @@ func (s *authService) Resend2FACode(ctx context.Context, email string, token uui
 }
 
 // region prepareEmployeeLogin
-
 func (s *authService) prepareEmployeeLogin(ctx context.Context, user *model.User, fingerprint string) (*http.LoginResponse, error) {
 	log := shared.GetLogger()
 
@@ -392,9 +391,8 @@ func (s *authService) prepareEmployeeLogin(ctx context.Context, user *model.User
 	return &http.LoginResponse{
 		Type: http.LoginResultEmployeeTrust,
 		EmployeeTrust: &http.LoginEmployeeTrustData{
-			Challenge:     challenge,
-			SetupToken:    setupToken,
-			InstitutionID: empProfile.InstitutionID.String(),
+			Challenge:  challenge,
+			SetupToken: setupToken,
 		},
 	}, nil
 }
