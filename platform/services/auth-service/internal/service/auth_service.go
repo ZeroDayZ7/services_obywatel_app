@@ -541,11 +541,6 @@ func (s *authService) CreateTemporarySession(ctx context.Context, userID uuid.UU
 		return nil, errors.ErrInternal
 	}
 
-	refreshToken, err := s.CreateRefreshToken(user.ID, setupSession.Fingerprint, nil)
-	if err != nil {
-		return nil, errors.ErrInternal
-	}
-
 	// 5. Budujemy pełną sesję użytkownika (z flaga readOnly = false, aby umożliwić standardowe działanie)
 	sessionData := s.buildUserSession(user, setupSession.Fingerprint, "", false)
 
@@ -562,12 +557,10 @@ func (s *authService) CreateTemporarySession(ctx context.Context, userID uuid.UU
 	expiresAt := time.Now().Add(s.cfg.JWT.AccessTTL).Unix()
 
 	return &http.LoginResponse{
-		Type: http.LoginResultSuccess,
+		Type: http.LoginResultTemporarySuccess,
 		Success: &http.LoginSuccessData{
-			AccessToken:  accessToken,
-			RefreshToken: refreshToken.Token,
-			UserID:       user.ID.String(),
-			ExpiresAt:    expiresAt,
+			AccessToken: accessToken,
+			ExpiresAt:   expiresAt,
 		},
 	}, nil
 }

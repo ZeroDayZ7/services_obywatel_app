@@ -16,5 +16,6 @@ var PublicPaths = []string{
 var DeviceVerifyPaths = []string{
 	"/auth/register-device",
 	"/auth/verify-device",
+	"/auth/temporary-session",
 	"/api/v1/official/auth/login/step2",
 }

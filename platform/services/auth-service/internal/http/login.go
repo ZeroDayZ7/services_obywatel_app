@@ -3,10 +3,11 @@ package http
 type LoginResultType string
 
 const (
-	LoginResult2FARequired   LoginResultType = "2FA_REQUIRED"
-	LoginResultSuccess       LoginResultType = "SUCCESS"
-	LoginResultPreTrust      LoginResultType = "PRE_TRUST"
-	LoginResultEmployeeTrust LoginResultType = "EMPLOYEE_TRUST"
+	LoginResult2FARequired      LoginResultType = "2FA_REQUIRED"
+	LoginResultSuccess          LoginResultType = "SUCCESS"
+	LoginResultTemporarySuccess LoginResultType = "TEMPORARY_SUCCESS"
+	LoginResultPreTrust         LoginResultType = "PRE_TRUST"
+	LoginResultEmployeeTrust    LoginResultType = "EMPLOYEE_TRUST"
 )
 
 type Login2FAData struct {
@@ -16,8 +17,8 @@ type Login2FAData struct {
 
 type LoginSuccessData struct {
 	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
-	UserID       string `json:"user_id"`
+	RefreshToken string `json:"refresh_token,omitempty"`
+	UserID       string `json:"user_id,omitempty"`
 	ExpiresAt    int64  `json:"expires_at"`
 }
 
