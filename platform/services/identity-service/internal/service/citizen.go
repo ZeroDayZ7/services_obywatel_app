@@ -283,7 +283,7 @@ func (s *citizenService) RegisterCitizen(
 		VerifiedVia:     "SYSTEM",
 	}
 
-	rawPUK, err := security.GenerateOTP(8)
+	rawPUK, err := security.GenerateOTPString(8)
 	if err != nil {
 		return nil, &apperr.AppError{
 			Code:    "PUK_GENERATION_FAILED",

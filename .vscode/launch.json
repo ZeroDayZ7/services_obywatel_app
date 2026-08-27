@@ -7,7 +7,6 @@
         "Gateway Service",
         "Auth Service",
         "Officer BFF Service",
-        // "Citizen Docs Service",
         "Identity Service"
       ]
     }
@@ -41,7 +40,7 @@
         "ENV": "development",
         "APP_ENV": "dev"
       },
-      "envFile": "${workspaceFolder}/platform/services/auth-service/.env",
+      // "envFile": "${workspaceFolder}/platform/services/auth-service/.env",
       "buildFlags": "-tags=dev",
       "cwd": "${workspaceFolder}/platform/services/auth-service",
       "showLog": false,
@@ -58,7 +57,7 @@
         "ENV": "development",
         "APP_ENV": "dev"
       },
-      "envFile": "${workspaceFolder}/platform/services/identity-service/.env",
+      // "envFile": "${workspaceFolder}/platform/services/identity-service/.env",
       "buildFlags": "-tags=dev",
       "cwd": "${workspaceFolder}/platform/services/identity-service",
       "showLog": false,
@@ -75,7 +74,7 @@
         "ENV": "development",
         "APP_ENV": "dev"
       },
-      "envFile": "${workspaceFolder}/platform/services/officer-bff/.env",
+      // "envFile": "${workspaceFolder}/platform/services/officer-bff/.env",
       "buildFlags": "-tags=dev",
       "cwd": "${workspaceFolder}/platform/services/officer-bff",
       "showLog": false,
@@ -92,7 +91,7 @@
         "ENV": "development",
         "APP_ENV": "dev"
       },
-      "envFile": "${workspaceFolder}/platform/services/citizen-docs/.env",
+      // "envFile": "${workspaceFolder}/platform/services/citizen-docs/.env",
       "buildFlags": "-tags=dev",
       "cwd": "${workspaceFolder}/platform/services/citizen-docs",
       "showLog": false,
@@ -109,7 +108,7 @@
         "ENV": "development",
         "APP_ENV": "dev"
       },
-      "envFile": "${workspaceFolder}/platform/services/auth-service/.env",
+      // "envFile": "${workspaceFolder}/platform/services/auth-service/.env",
       "buildFlags": "-tags=dev",
       "cwd": "${workspaceFolder}/platform/services/version-service",
       "showLog": false,
@@ -126,7 +125,7 @@
         "ENV": "development",
         "APP_ENV": "dev"
       },
-      "envFile": "${workspaceFolder}/platform/services/notification-service/.env",
+      // "envFile": "${workspaceFolder}/platform/services/notification-service/.env",
       "buildFlags": "-tags=dev",
       "cwd": "${workspaceFolder}/platform/services/notification-service",
       "showLog": false,
@@ -143,7 +142,7 @@
         "ENV": "development",
         "APP_ENV": "dev"
       },
-      "envFile": "${workspaceFolder}/platform/services/audit-service/.env",
+      // "envFile": "${workspaceFolder}/platform/services/audit-service/.env",
       "buildFlags": "-tags=dev",
       "cwd": "${workspaceFolder}/platform/services/audit-service",
       "showLog": false,
@@ -160,7 +159,7 @@
         "ENV": "development",
         "APP_ENV": "dev"
       },
-      "envFile": "${workspaceFolder}/platform/services/messaging-service/.env",
+      // "envFile": "${workspaceFolder}/platform/services/messaging-service/.env",
       "buildFlags": "-tags=dev",
       "cwd": "${workspaceFolder}/platform/services/messaging-service",
       "showLog": false,

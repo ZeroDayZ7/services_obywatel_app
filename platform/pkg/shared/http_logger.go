@@ -1,6 +1,7 @@
 package shared
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -8,17 +9,14 @@ import (
 	"go.uber.org/zap"
 )
 
-//#region RequestLoggerMiddleware
+// #region RequestLoggerMiddleware
 func RequestLoggerMiddleware() fiber.Handler {
 	allowedHeaders := []string{
-		// "Content-Type",
 		"User-Agent",
 		"X-Device-Fingerprint",
 		"Authorization",
 		"X-Request-Id",
 		"Accept-Language",
-		// "Host",
-		// "Content-Length",
 		"X-Forwarded-For",
 		"X-Real-Ip",
 	}
@@ -28,77 +26,61 @@ func RequestLoggerMiddleware() fiber.Handler {
 		log := GetLogger()
 		isDev := log.Core().Enabled(zap.DebugLevel)
 
-		// 1. Wyciąganie Body
-		var body any
-		if c.Method() == fiber.MethodPost || c.Method() == fiber.MethodPut || c.Method() == fiber.MethodPatch {
-			_ = c.BodyParser(&body)
-		}
+		// 1. Wykonanie żądania w handlerach
+		err := c.Next()
 
+		latency := time.Since(start)
+		status := c.Response().StatusCode()
+		requestID := c.Locals("requestid")
+
+		// 2. Podsumowanie DEV (Wejście + Wyjście w jednym bloku)
 		if isDev {
-			fmt.Printf("\n--- [DEBUG] Incoming Request ---\n")
-			fmt.Printf("Method: %s\nPath:   %s\n", c.Method(), c.Path())
+			fmt.Printf("\n=== [DEBUG HTTP TRANSACTION] ===\n")
+			fmt.Printf("Method: %s | Path: %s | Status: %d | Latency: %s\n", c.Method(), c.Path(), status, latency)
 
-			if body != nil {
-				fmt.Printf("Body:\n")
-				if bodyMap, ok := body.(map[string]any); ok {
-					for k, v := range bodyMap {
-						// MASKOWANIE SEKRETÓW W KONSOLI
-						displayValue := v
-						if isSensitive(k) {
-							displayValue = "********"
+			// Body wejściowe z bezpiecznym unmarshalem i maskowaniem
+			if c.Method() == fiber.MethodPost || c.Method() == fiber.MethodPut || c.Method() == fiber.MethodPatch {
+				rawBody := c.Body()
+				if len(rawBody) > 0 {
+					var bodyMap map[string]any
+					if err := json.Unmarshal(rawBody, &bodyMap); err == nil {
+						fmt.Printf("Incoming Body:\n")
+						for k, v := range bodyMap {
+							displayValue := v
+							if isSensitive(k) {
+								displayValue = "********"
+							}
+							fmt.Printf("  %s: %v\n", k, displayValue)
 						}
-						fmt.Printf("  %s: %v\n", k, displayValue)
+					} else {
+						fmt.Printf("Incoming Body (raw): %s\n", string(rawBody))
 					}
-				} else {
-					fmt.Printf("  %+v\n", body)
 				}
 			}
 
+			// Nagłówki wejściowe
 			fmt.Printf("Headers:\n")
 			for _, h := range allowedHeaders {
 				val := c.Get(h)
-
-				if h == "X-Request-Id" && val == "" {
-					if rid := c.Locals("requestid"); rid != nil {
-						val = fmt.Sprintf("%v", rid)
-					}
+				if h == "X-Request-Id" && val == "" && requestID != nil {
+					val = fmt.Sprintf("%v", requestID)
 				}
-
 				if val != "" {
 					fmt.Printf("  %s: %s\n", h, val)
 				}
 			}
-			fmt.Printf("-------------------------------\n\n")
+			fmt.Printf("================================\n\n")
 		}
 
-		// Kontynuacja zapytania
-		err := c.Next()
-
-		// Obliczenie czasu trwania zapytania
-		latency := time.Since(start)
-		requestID := c.Locals("requestid")
-		// log (Strukturalny)
-		// 1. ZAWSZE logujemy strukturalnie do Zap (pójdzie do konsoli i do pliku JSON)
+		// 3. Log strukturalny (Zap)
 		log.Info("Request completed",
 			zap.String("method", c.Method()),
 			zap.String("path", c.Path()),
-			zap.Int("status", c.Response().StatusCode()),
+			zap.Int("status", status),
 			zap.String("latency", latency.String()),
 			zap.Any("request_id", requestID),
 			zap.String("ip", c.IP()),
 		)
-
-		// 2. TYLKO W DEV wypisujemy dodatkowo "ładny" blok do konsoli
-		// if isDev {
-		// 	log.DebugRequest(
-		// 		"Request Detail",
-		// 		c.Method(),
-		// 		c.Path(),
-		// 		c.Response().StatusCode(),
-		// 		latency.String(),
-		// 		body,
-		// 	)
-		// }
 
 		return err
 	}

@@ -200,17 +200,9 @@ func (h *AuthHandler) RegisterDevice(c *fiber.Ctx) error {
 func (h *AuthHandler) Verify2FA(c *fiber.Ctx) error {
 	log := shared.GetLogger()
 	body := c.Locals("validatedBody").(schemas.TwoFARequest)
-	fingerprint := c.Get(constants.HeaderDeviceFingerprint)
 
-	// Zerowanie kodu z pamięci (Security)
-	defer func() {
-		if len(body.Code) > 0 {
-			for i := range body.Code {
-				body.Code[i] = 0
-			}
-			log.Debug("Sensitive 2FA code bytes cleared from RAM")
-		}
-	}()
+	rc := reqctx.MustFromFiber(c)
+	fingerprint := rc.DeviceID
 
 	// Wywołanie logiki biznesowej
 	response, err := h.authService.Verify2FA(

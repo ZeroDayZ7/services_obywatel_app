@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/pkg/constants"
 )
 
@@ -21,28 +22,23 @@ type TwoFASession struct {
 }
 
 //#region Set2FASession
-func (c *Cache) Set2FASession(ctx context.Context, token string, sess TwoFASession, ttl time.Duration) error {
-	return SetJSON(c, ctx, constants.Login2FAPrefix+token, sess, ttl)
+func (c *Cache) Set2FASession(ctx context.Context, token uuid.UUID, sess TwoFASession, ttl time.Duration) error {
+	return SetJSON(c, ctx, constants.Login2FAPrefix+token.String(), sess, ttl)
 }
 
 //#region Get2FASession
-func (c *Cache) Get2FASession(ctx context.Context, token string) (*TwoFASession, error) {
-	return GetJSON[TwoFASession](c, ctx, constants.Login2FAPrefix+token)
+func (c *Cache) Get2FASession(ctx context.Context, token uuid.UUID) (*TwoFASession, error) {
+	return GetJSON[TwoFASession](c, ctx, constants.Login2FAPrefix+token.String())
 }
 
 //#region Delete2FASession
-func (c *Cache) Delete2FASession(ctx context.Context, token string) error {
-	return c.Del(ctx, constants.Login2FAPrefix+token)
+func (c *Cache) Delete2FASession(ctx context.Context, token uuid.UUID) error {
+	return c.Del(ctx, constants.Login2FAPrefix+token.String())
 }
 
-//#region Verify2FAAttempt
-func (c *Cache) Verify2FAAttempt(
-	ctx context.Context,
-	token string,
-	maxAttempts int,
-	ttl time.Duration,
-) (string, error) {
-	fullKey := constants.Login2FAPrefix + token
+// #region Verify2FAAttempt
+func (c *Cache) Verify2FAAttempt(ctx context.Context, token uuid.UUID, maxAttempts int, ttl time.Duration) (string, error) {
+	fullKey := constants.Login2FAPrefix + token.String()
 
 	res, err := c.client.Eval(
 		ctx,
@@ -55,7 +51,7 @@ func (c *Cache) Verify2FAAttempt(
 		return "", fmt.Errorf("lua execution failed: %w", err)
 	}
 
-	arr, ok := res.([]interface{})
+	arr, ok := res.([]any)
 	if !ok || len(arr) == 0 {
 		return "", errors.New("invalid lua response format from verify2fa script")
 	}

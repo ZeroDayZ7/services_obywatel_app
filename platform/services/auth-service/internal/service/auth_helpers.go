@@ -119,18 +119,35 @@ func (s *authService) CreateRefreshToken(userID uuid.UUID, fingerprint string, d
 func (s *authService) handleFailedLogin(ctx context.Context, userID uuid.UUID) error {
 	log := shared.GetLogger()
 
-	attempts, incErr := s.userRepo.IncrementUserFailedLogin(ctx, userID)
-	if incErr != nil {
-		log.Error("Failed to increment failed attempts", incErr)
+	// Atomowa inkrementacja w DB zwracająca aktualny stan prób
+	attempts, err := s.userRepo.IncrementUserFailedLogin(ctx, userID)
+	if err != nil {
+		log.Error("Nie udało się zaktualizować licznika nieudanych prób logowania", map[string]any{
+			"uid": userID,
+			"err": err,
+		})
+		// Zwracamy ogólny błąd creds, ale logujemy problem infrastrukturalny
+		return errors.ErrInvalidCredentials
 	}
 
 	if attempts >= 5 {
-		_ = s.userRepo.PermanentLock(ctx, userID)
+		if lockErr := s.userRepo.PermanentLock(ctx, userID); lockErr != nil {
+			log.Error("Błąd podczas nakładania blokady na konto", map[string]any{
+				"uid": userID,
+				"err": lockErr,
+			})
+		}
+		log.Warn("Konto zostało zablokowane z powodu zbyt wielu nieudanych prób", map[string]any{
+			"uid":      userID,
+			"attempts": attempts,
+		})
 		return errors.ErrAccountLocked
 	}
 
 	return errors.ErrInvalidCredentials
 }
+
+// #endregion
 
 // #region createChallengeSession
 func (s *authService) createChallengeSession(ctx context.Context, userID uuid.UUID, fingerprint string) (setupToken string, sessionID uuid.UUID, challenge string, err error) {
