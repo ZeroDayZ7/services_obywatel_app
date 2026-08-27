@@ -25,10 +25,11 @@ type AuthService interface {
 	AttemptLogin(ctx context.Context, email string, password []byte, fingerprint string) (*http.LoginResponse, error)
 	Register(username, email, rawPassword string) (*model.User, error)
 	UpdatePassword(ctx context.Context, userID uuid.UUID, newPassword string) error
-	Verify2FA(ctx context.Context, token uuid.UUID, code []byte, fingerprint string, ip string) (*http.Verify2FAResponse, error)
+	Verify2FA(ctx context.Context, token uuid.UUID, code []byte, fingerprint string, ip string) (*http.LoginResponse, error)
 	Resend2FACode(ctx context.Context, email string, token uuid.UUID) error
 	Logout(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID, fingerprint string) error
 	RegisterDevice(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID, clientIP string, req schemas.RegisterDeviceRequest) (*http.RegisterDeviceResponse, error)
+	CreateTemporarySession(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID, clientIP string) (*http.LoginResponse, error)
 	RefreshToken(ctx context.Context, tokenStr string, fingerprint string) (*http.RefreshResponse, error)
 
 	VerifyDeviceSignature(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID, signature, fingerprint string) (*http.LoginResponse, error)
@@ -211,7 +212,7 @@ func (s *authService) AttemptLoginStep2(ctx context.Context, userID uuid.UUID, s
 }
 
 // #region Verify2FA
-func (s *authService) Verify2FA(ctx context.Context, token uuid.UUID, code []byte, fingerprint string, ip string) (*http.Verify2FAResponse, error) {
+func (s *authService) Verify2FA(ctx context.Context, token uuid.UUID, code []byte, fingerprint string, ip string) (*http.LoginResponse, error) {
 	log := shared.GetLogger()
 
 	// 1. Czyszczenie wrażliwego bufora z kodem OTP w pamięci RAM
@@ -278,9 +279,12 @@ func (s *authService) Verify2FA(ctx context.Context, token uuid.UUID, code []byt
 		return nil, errors.ErrInternal
 	}
 
-	return &http.Verify2FAResponse{
-		SetupToken: setupToken,
-		Challenge:  challenge,
+	return &http.LoginResponse{
+		Type: http.LoginResultPreTrust,
+		PreTrust: &http.LoginPreTrustData{
+			SetupToken: setupToken,
+			Challenge:  challenge,
+		},
 	}, nil
 }
 
@@ -466,8 +470,6 @@ func (s *authService) finalizeLogin(ctx context.Context, user *model.User, finge
 	}, nil
 }
 
-// #endregion
-
 // region preparePreTrustSession
 // #region preparePreTrustSession
 // #region preparePreTrustSession
@@ -499,6 +501,73 @@ func (s *authService) preparePreTrustSession(ctx context.Context, user *model.Us
 		PreTrust: &http.LoginPreTrustData{
 			SetupToken: setupToken,
 			Challenge:  challenge,
+		},
+	}, nil
+}
+
+// #region CreateTemporarySession
+func (s *authService) CreateTemporarySession(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID, clientIP string) (*http.LoginResponse, error) {
+	log := shared.GetLogger()
+
+	// 1. Pobieramy sesję setup/challenge z Redisa
+	setupSession, err := s.cache.GetSetupSession(ctx, sessionID)
+	if err != nil || setupSession == nil {
+		log.WarnMap("[CreateTemporarySession] Brak lub wygasła sesja setupToken", map[string]any{
+			"user_id":    userID,
+			"session_id": sessionID,
+		})
+		return nil, errors.ErrUnauthorized
+	}
+
+	// 2. Pobieramy użytkownika z bazy danych
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil || user == nil {
+		log.WarnMap("[CreateTemporarySession] Użytkownik nie istnieje", map[string]any{
+			"user_id": userID,
+		})
+		return nil, errors.ErrUserNotFound
+	}
+
+	if err := s.CanUserLogin(user); err != nil {
+		return nil, err
+	}
+
+	// 3. Usuwamy zużytą sesję setupToken z Redisa
+	_ = s.cache.DeleteSetupSession(ctx, sessionID)
+
+	// 4. Generujemy nowy Access Token oraz Refresh Token dla sesji tymczasowej
+	accessToken, newSessionID, err := s.CreateAccessToken(ctx, user.ID, setupSession.Fingerprint)
+	if err != nil {
+		return nil, errors.ErrInternal
+	}
+
+	refreshToken, err := s.CreateRefreshToken(user.ID, setupSession.Fingerprint, nil)
+	if err != nil {
+		return nil, errors.ErrInternal
+	}
+
+	// 5. Budujemy pełną sesję użytkownika (z flaga readOnly = false, aby umożliwić standardowe działanie)
+	sessionData := s.buildUserSession(user, setupSession.Fingerprint, "", false)
+
+	if err := s.cache.SetSession(ctx, newSessionID, &sessionData, s.cfg.Session.TTL); err != nil {
+		log.ErrorObj("[CreateTemporarySession] Błąd zapisu sesji w Redis", err)
+		return nil, errors.ErrInternal
+	}
+
+	// 6. Aktualizacja metadanych logowania
+	user.LastLogin = time.Now()
+	user.LastIP = clientIP
+	_ = s.userRepo.Update(ctx, user)
+
+	expiresAt := time.Now().Add(s.cfg.JWT.AccessTTL).Unix()
+
+	return &http.LoginResponse{
+		Type: http.LoginResultSuccess,
+		Success: &http.LoginSuccessData{
+			AccessToken:  accessToken,
+			RefreshToken: refreshToken.Token,
+			UserID:       user.ID.String(),
+			ExpiresAt:    expiresAt,
 		},
 	}, nil
 }

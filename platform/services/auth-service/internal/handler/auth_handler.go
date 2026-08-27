@@ -375,3 +375,42 @@ func (h *AuthHandler) Resend2FA(c *fiber.Ctx) error {
 		"message": "2FA code sent successfully",
 	})
 }
+
+// #region CreateTemporarySession
+func (h *AuthHandler) CreateTemporarySession(c *fiber.Ctx) error {
+	ctx, cancel := context.WithTimeout(c.UserContext(), 3*time.Second)
+	defer cancel()
+	log := shared.GetLogger()
+
+	rc := reqctx.MustFromFiber(c)
+
+	if rc.UserID == nil || *rc.UserID == uuid.Nil || rc.SessionID == nil {
+		log.ErrorObj("CreateTemporarySession: Brak wymaganych danych w RequestContext", map[string]any{
+			"user_id":    rc.UserID,
+			"session_id": rc.SessionID,
+		})
+		return apperr.SendAppError(c, apperr.ErrUnauthorized)
+	}
+
+	response, err := h.authService.CreateTemporarySession(
+		ctx,
+		*rc.UserID,
+		*rc.SessionID,
+		rc.IP,
+	)
+	if err != nil {
+		log.WarnObj("CreateTemporarySession failed", map[string]any{
+			"user_id":    rc.UserID.String(),
+			"session_id": rc.SessionID,
+			"err":        err.Error(),
+		})
+		return apperr.SendAppError(c, err)
+	}
+
+	log.InfoMap("CreateTemporarySession successful", map[string]any{
+		"user_id":    rc.UserID.String(),
+		"session_id": rc.SessionID,
+	})
+
+	return c.Status(fiber.StatusOK).JSON(response)
+}
