@@ -8,7 +8,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/pkg/errors"
-	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/schemas"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/auth-service/internal/http"
@@ -16,7 +15,6 @@ import (
 )
 
 // #region VerifyDeviceSignature
-//
 func (s *authService) VerifyDeviceSignature(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID, signature, fingerprint string) (*http.LoginResponse, error) {
 	log := shared.GetLogger()
 
@@ -60,37 +58,7 @@ func (s *authService) VerifyDeviceSignature(ctx context.Context, userID uuid.UUI
 		return nil, errors.ErrInternal
 	}
 
-	// Wyciąganie szczegółów profilu pracownika/instytucji
-	var empNumber, instID, deptID string
-	permissions := []string{}
-
-	if user.EmployeeProfile != nil {
-		empNumber = user.EmployeeProfile.EmployeeNumber
-
-		if user.EmployeeProfile.InstitutionID != uuid.Nil {
-			instID = user.EmployeeProfile.InstitutionID.String()
-		}
-		if user.EmployeeProfile.DepartmentID != uuid.Nil {
-			deptID = user.EmployeeProfile.DepartmentID.String()
-		}
-		if user.EmployeeProfile.Permissions != nil {
-			permissions = user.EmployeeProfile.Permissions
-		}
-	}
-
-	// Pełne zestawienie danych sesyjnych zapisywanych w Redis dla Gatewaya
-	sessionData := redis.UserSession{
-		UserID:         user.ID.String(),
-		Username:       user.Username,
-		Email:          user.Email,
-		Role:           string(user.Role),
-		EmployeeNumber: empNumber,
-		InstitutionID:  instID,
-		DepartmentID:   deptID,
-		Permissions:    permissions,
-		Fingerprint:    fingerprint,
-		PublicKey:      device.PublicKey,
-	}
+	sessionData := s.buildUserSession(user, fingerprint, device.PublicKey, false)
 
 	if err := s.cache.SetSession(ctx, newSessionID, &sessionData, s.cfg.Session.TTL); err != nil {
 		log.ErrorObj("Failed to save session in Redis", err)
@@ -229,7 +197,7 @@ func (s *authService) RegisterDevice(ctx context.Context, userID uuid.UUID, sess
 	}
 
 	// 6. Zapis pełnej sesji użytkownika w Redis (dla API Gateway)
-	sessionData := s.buildUserSession(user, req.DeviceFingerprint, req.PublicKey)
+	sessionData := s.buildUserSession(user, req.DeviceFingerprint, req.PublicKey, false)
 	if err := s.cache.SetSession(ctx, newSID, &sessionData, s.cfg.Session.TTL); err != nil {
 		log.ErrorObj("[RegisterDevice] Failed to persist session in Redis", err)
 		return nil, errors.ErrInternal

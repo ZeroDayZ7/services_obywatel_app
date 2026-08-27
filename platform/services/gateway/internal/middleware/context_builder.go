@@ -25,11 +25,9 @@ func ContextBuilder(container *di.Container) fiber.Handler {
 			RequestID: requestID,
 		}
 
-		// Odczytujemy sesje ustawione wcześniej w AuthRedisMiddleware
 		userLocal := c.Locals("userSession")
 		setupLocal := c.Locals("setupSession")
 
-		// 1. ŚCIEŻKI PUBLICZNE (Brak jakiejkolwiek sesji w c.Locals)
 		if userLocal == nil && setupLocal == nil {
 			rawFP := c.Get(constants.HeaderDeviceFingerprint)
 			if rawFP != "" {
@@ -39,7 +37,6 @@ func ContextBuilder(container *di.Container) fiber.Handler {
 			return c.Next()
 		}
 
-		// 2. ŚCIEŻKI CHRONIONE (Mamy sessionID z JWT)
 		if sessionID, ok := c.Locals("sessionID").(uuid.UUID); ok && sessionID != uuid.Nil {
 			reqCtx.SessionID = &sessionID
 		} else {
@@ -49,7 +46,6 @@ func ContextBuilder(container *di.Container) fiber.Handler {
 			return apperr.SendAppError(c, apperr.ErrUnauthorized)
 		}
 
-		// A. Obsługa UserSession (pełna sesja po zalogowaniu)
 		if sessionData, ok := userLocal.(*rdy.UserSession); ok && sessionData != nil {
 			reqCtx.DeviceID = sessionData.Fingerprint
 
@@ -64,20 +60,21 @@ func ContextBuilder(container *di.Container) fiber.Handler {
 			reqCtx.Permissions = sessionData.Permissions
 			reqCtx.Username = sessionData.Username
 
-			if sessionData.InstitutionID != "" {
-				if parsedInst, err := uuid.Parse(sessionData.InstitutionID); err == nil {
-					reqCtx.InstitutionID = &parsedInst
+			if sessionData.Employee != nil {
+				if sessionData.Employee.InstitutionID != "" {
+					if parsedInst, err := uuid.Parse(sessionData.Employee.InstitutionID); err == nil {
+						reqCtx.InstitutionID = &parsedInst
+					}
 				}
-			}
 
-			if sessionData.DepartmentID != "" {
-				if parsedDept, err := uuid.Parse(sessionData.DepartmentID); err == nil {
-					reqCtx.DepartmentID = &parsedDept
+				if sessionData.Employee.DepartmentID != "" {
+					if parsedDept, err := uuid.Parse(sessionData.Employee.DepartmentID); err == nil {
+						reqCtx.DepartmentID = &parsedDept
+					}
 				}
 			}
 		}
 
-		// B. Obsługa SetupSession (sesja wstępna, np. /login/step2)
 		if setupData, ok := setupLocal.(*rdy.SetupSession); ok && setupData != nil {
 			reqCtx.DeviceID = setupData.Fingerprint
 

@@ -28,10 +28,7 @@
     "**/notification-service": true,
     "**/tally-service": true,
     "**/version-service": true,
-    "**/voting-service": true
-    // "**/": true,
-    // "**/": true,
-    // "**/": true,
+    "**/voting-service": true,
   },
 
   // (Search)

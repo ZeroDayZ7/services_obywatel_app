@@ -171,17 +171,11 @@ func (s *authService) AttemptLoginStep2(ctx context.Context, userID uuid.UUID, s
 		return nil, err
 	}
 
-	// 4. Metadane profilu pracownika
-	var permissions []string
-	var instID, deptID, empNumber string
-
+	// 4. Metadane profilu pracownika - przypisujemy pobrany profil do struktury usera
 	if user.Role != model.RoleCitizen && user.Role != model.RoleUser {
 		empProfile, err := s.employeeRepo.GetProfileByUserID(ctx, user.ID)
 		if err == nil && empProfile != nil {
-			permissions = empProfile.Permissions
-			instID = empProfile.InstitutionID.String()
-			deptID = empProfile.DepartmentID.String()
-			empNumber = empProfile.EmployeeNumber
+			user.EmployeeProfile = empProfile
 		}
 	}
 
@@ -196,18 +190,8 @@ func (s *authService) AttemptLoginStep2(ctx context.Context, userID uuid.UUID, s
 		return nil, errors.ErrInternal
 	}
 
-	sessionData := redis.UserSession{
-		UserID:         user.ID.String(),
-		Username:       user.Username,
-		Email:          user.Email,
-		Role:           string(user.Role),
-		EmployeeNumber: empNumber,
-		InstitutionID:  instID,
-		DepartmentID:   deptID,
-		Permissions:    permissions,
-		Fingerprint:    fingerprint,
-		PublicKey:      cred.PublicKey,
-	}
+	// Korzystamy z ujednoliconej budowy sesji
+	sessionData := s.buildUserSession(user, fingerprint, cred.PublicKey, false)
 
 	if err := s.cache.SetSession(ctx, newSessionID, &sessionData, s.cfg.Session.TTL); err != nil {
 		return nil, errors.ErrInternal
@@ -458,11 +442,10 @@ func (s *authService) finalizeLogin(ctx context.Context, user *model.User, finge
 	}
 
 	// 2. Budujemy dane sesji z flagą ReadOnly/Krótkim czasem życia
-	sessionData := s.buildUserSession(user, fingerprint, "")
+	sessionData := s.buildUserSession(user, fingerprint, "", true)
+	ttl := s.cfg.Session.TTL
 
-	// Niezaufane urządzenie dostaje ograniczony czas sesji (np. 15 minut zamiast pełnego s.cfg.Session.TTL)
-	sessionTTL := 15 * time.Minute
-	if err := s.cache.SetSession(ctx, sessionID, &sessionData, sessionTTL); err != nil {
+	if err := s.cache.SetSession(ctx, sessionID, &sessionData, ttl); err != nil {
 		log.ErrorObj("Failed to save session in Redis during login finalization", err)
 		return nil, errors.ErrInternal
 	}
@@ -470,7 +453,7 @@ func (s *authService) finalizeLogin(ctx context.Context, user *model.User, finge
 	// 3. Dla niezaufanego urządzenia celowo NIE generujemy Refresh Tokena.
 	// Wymusza to ponowną autoryzację po upływie 15 minut lub parowanie urządzenia.
 
-	expiresAt := time.Now().Add(sessionTTL).Unix()
+	expiresAt := time.Now().Add(ttl).Unix()
 
 	return &http.LoginResponse{
 		Type: http.LoginResultSuccess,

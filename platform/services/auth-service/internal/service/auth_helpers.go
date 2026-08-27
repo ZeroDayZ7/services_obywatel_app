@@ -8,7 +8,6 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/pkg/constants"
-	"github.com/zerodayz7/platform/pkg/crypto"
 	"github.com/zerodayz7/platform/pkg/errors"
 	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/security"
@@ -102,7 +101,7 @@ func (s *authService) CreateRefreshToken(userID uuid.UUID, fingerprint string, d
 		UserID:            userID,
 		DeviceID:          deviceID,
 		DeviceFingerprint: fingerprint,
-		Token:             crypto.HashSHA256(rawToken),
+		Token:             rawToken,
 		ExpiresAt:         time.Now().Add(s.cfg.JWT.RefreshTTL),
 		Revoked:           false,
 	}
@@ -204,33 +203,40 @@ func (s *authService) verifyChallengeSession(ctx context.Context, sessionID uuid
 }
 
 // #region buildUserSession
-func (s *authService) buildUserSession(user *model.User, fingerprint, pubKey string) redis.UserSession {
-	var empNumber, instID, deptID string
+func (s *authService) buildUserSession(user *model.User, fingerprint, pubKey string, isReadOnly bool) redis.UserSession {
 	var permissions []string
 
-	if user.EmployeeProfile != nil {
-		empNumber = user.EmployeeProfile.EmployeeNumber
-		if user.EmployeeProfile.InstitutionID != uuid.Nil {
-			instID = user.EmployeeProfile.InstitutionID.String()
-		}
-		if user.EmployeeProfile.DepartmentID != uuid.Nil {
-			deptID = user.EmployeeProfile.DepartmentID.String()
-		}
-		if user.EmployeeProfile.Permissions != nil {
-			permissions = user.EmployeeProfile.Permissions
-		}
+	if user.EmployeeProfile != nil && user.EmployeeProfile.Permissions != nil {
+		permissions = user.EmployeeProfile.Permissions
 	}
 
-	return redis.UserSession{
-		UserID:         user.ID.String(),
-		Username:       user.Username,
-		Email:          user.Email,
-		Role:           string(user.Role),
-		EmployeeNumber: empNumber,
-		InstitutionID:  instID,
-		DepartmentID:   deptID,
-		Permissions:    permissions,
-		Fingerprint:    fingerprint,
-		PublicKey:      pubKey,
+	sess := redis.UserSession{
+		UserID:      user.ID.String(),
+		Role:        string(user.Role),
+		Fingerprint: fingerprint,
+		Permissions: permissions,
+		CreatedAt:   time.Now(),
+
+		Username:   user.Username,
+		Email:      user.Email,
+		PublicKey:  pubKey,
+		IsReadOnly: isReadOnly,
 	}
+
+	if user.EmployeeProfile != nil {
+		empCtx := &redis.EmployeeContext{
+			EmployeeNumber: user.EmployeeProfile.EmployeeNumber,
+		}
+
+		if user.EmployeeProfile.InstitutionID != uuid.Nil {
+			empCtx.InstitutionID = user.EmployeeProfile.InstitutionID.String()
+		}
+		if user.EmployeeProfile.DepartmentID != uuid.Nil {
+			empCtx.DepartmentID = user.EmployeeProfile.DepartmentID.String()
+		}
+
+		sess.Employee = empCtx
+	}
+
+	return sess
 }
