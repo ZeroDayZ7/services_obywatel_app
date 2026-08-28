@@ -213,3 +213,18 @@ func pepperPassword(password []byte, pepper []byte) []byte {
 	mac.Write(password)
 	return mac.Sum(nil)
 }
+
+var dummyPasswordHash string
+
+func init() {
+	var err error
+	dummyPasswordHash, err = HashPassword([]byte("dummy-password-for-timing-attack-prevention"), nil)
+	if err != nil {
+		panic("failed to initialize dummy password hash: " + err.Error())
+	}
+}
+
+// VerifyPasswordDummy wykonuje obliczenie Argon2id dla celów ochrony przed Timing Attack.
+func VerifyPasswordDummy(password []byte, pepper []byte) {
+	_, _ = VerifyPassword(password, dummyPasswordHash, pepper)
+}

@@ -8,7 +8,6 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/pkg/constants"
-	"github.com/zerodayz7/platform/pkg/crypto"
 	"github.com/zerodayz7/platform/pkg/errors"
 	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/security"
@@ -102,7 +101,7 @@ func (s *authService) CreateRefreshToken(userID uuid.UUID, fingerprint string, d
 		UserID:            userID,
 		DeviceID:          deviceID,
 		DeviceFingerprint: fingerprint,
-		Token:             crypto.HashSHA256(rawToken),
+		Token:             rawToken,
 		ExpiresAt:         time.Now().Add(s.cfg.JWT.RefreshTTL),
 		Revoked:           false,
 	}
@@ -119,18 +118,35 @@ func (s *authService) CreateRefreshToken(userID uuid.UUID, fingerprint string, d
 func (s *authService) handleFailedLogin(ctx context.Context, userID uuid.UUID) error {
 	log := shared.GetLogger()
 
-	attempts, incErr := s.userRepo.IncrementUserFailedLogin(ctx, userID)
-	if incErr != nil {
-		log.Error("Failed to increment failed attempts", incErr)
+	// Atomowa inkrementacja w DB zwracająca aktualny stan prób
+	attempts, err := s.userRepo.IncrementUserFailedLogin(ctx, userID)
+	if err != nil {
+		log.Error("Nie udało się zaktualizować licznika nieudanych prób logowania", map[string]any{
+			"uid": userID,
+			"err": err,
+		})
+		// Zwracamy ogólny błąd creds, ale logujemy problem infrastrukturalny
+		return errors.ErrInvalidCredentials
 	}
 
 	if attempts >= 5 {
-		_ = s.userRepo.PermanentLock(ctx, userID)
+		if lockErr := s.userRepo.PermanentLock(ctx, userID); lockErr != nil {
+			log.Error("Błąd podczas nakładania blokady na konto", map[string]any{
+				"uid": userID,
+				"err": lockErr,
+			})
+		}
+		log.Warn("Konto zostało zablokowane z powodu zbyt wielu nieudanych prób", map[string]any{
+			"uid":      userID,
+			"attempts": attempts,
+		})
 		return errors.ErrAccountLocked
 	}
 
 	return errors.ErrInvalidCredentials
 }
+
+// #endregion
 
 // #region createChallengeSession
 func (s *authService) createChallengeSession(ctx context.Context, userID uuid.UUID, fingerprint string) (setupToken string, sessionID uuid.UUID, challenge string, err error) {
@@ -187,33 +203,40 @@ func (s *authService) verifyChallengeSession(ctx context.Context, sessionID uuid
 }
 
 // #region buildUserSession
-func (s *authService) buildUserSession(user *model.User, fingerprint, pubKey string) redis.UserSession {
-	var empNumber, instID, deptID string
+func (s *authService) buildUserSession(user *model.User, fingerprint, pubKey string, isReadOnly bool) redis.UserSession {
 	var permissions []string
 
-	if user.EmployeeProfile != nil {
-		empNumber = user.EmployeeProfile.EmployeeNumber
-		if user.EmployeeProfile.InstitutionID != uuid.Nil {
-			instID = user.EmployeeProfile.InstitutionID.String()
-		}
-		if user.EmployeeProfile.DepartmentID != uuid.Nil {
-			deptID = user.EmployeeProfile.DepartmentID.String()
-		}
-		if user.EmployeeProfile.Permissions != nil {
-			permissions = user.EmployeeProfile.Permissions
-		}
+	if user.EmployeeProfile != nil && user.EmployeeProfile.Permissions != nil {
+		permissions = user.EmployeeProfile.Permissions
 	}
 
-	return redis.UserSession{
-		UserID:         user.ID.String(),
-		Username:       user.Username,
-		Email:          user.Email,
-		Role:           string(user.Role),
-		EmployeeNumber: empNumber,
-		InstitutionID:  instID,
-		DepartmentID:   deptID,
-		Permissions:    permissions,
-		Fingerprint:    fingerprint,
-		PublicKey:      pubKey,
+	sess := redis.UserSession{
+		UserID:      user.ID.String(),
+		Role:        string(user.Role),
+		Fingerprint: fingerprint,
+		Permissions: permissions,
+		CreatedAt:   time.Now(),
+
+		Username:   user.Username,
+		Email:      user.Email,
+		PublicKey:  pubKey,
+		IsReadOnly: isReadOnly,
 	}
+
+	if user.EmployeeProfile != nil {
+		empCtx := &redis.EmployeeContext{
+			EmployeeNumber: user.EmployeeProfile.EmployeeNumber,
+		}
+
+		if user.EmployeeProfile.InstitutionID != uuid.Nil {
+			empCtx.InstitutionID = user.EmployeeProfile.InstitutionID.String()
+		}
+		if user.EmployeeProfile.DepartmentID != uuid.Nil {
+			empCtx.DepartmentID = user.EmployeeProfile.DepartmentID.String()
+		}
+
+		sess.Employee = empCtx
+	}
+
+	return sess
 }

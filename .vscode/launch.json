@@ -2,12 +2,11 @@
   "version": "0.2.0",
   "compounds": [
     {
-      "name": "Wybrane 4 Serwisy",
+      "name": "RUN Serwis",
       "configurations": [
         "Gateway Service",
         "Auth Service",
         "Officer BFF Service",
-        // "Citizen Docs Service",
         "Identity Service"
       ]
     }
@@ -24,6 +23,7 @@
         "ENV": "development",
         "APP_ENV": "dev"
       },
+      // "envFile": "${workspaceFolder}/platform/services/gateway/.env",
       "buildFlags": "-tags=dev",
       "cwd": "${workspaceFolder}/platform/services/gateway",
       "showLog": false,
@@ -40,90 +40,11 @@
         "ENV": "development",
         "APP_ENV": "dev"
       },
+      // "envFile": "${workspaceFolder}/platform/services/auth-service/.env",
       "buildFlags": "-tags=dev",
       "cwd": "${workspaceFolder}/platform/services/auth-service",
       "showLog": false,
       "output": "${workspaceFolder}/platform/services/auth-service/bin/auth_debug.exe"
-    },
-    {
-      "name": "Citizen Docs Service",
-      "type": "go",
-      "request": "launch",
-      "mode": "debug",
-      "program": "${workspaceFolder}/platform/services/citizen-docs/cmd",
-      "args": [],
-      "env": {
-        "ENV": "development",
-        "APP_ENV": "dev"
-      },
-      "buildFlags": "-tags=dev",
-      "cwd": "${workspaceFolder}/platform/services/citizen-docs",
-      "showLog": false,
-      "output": "${workspaceFolder}/platform/services/citizen-docs/bin/citizen-docs_debug.exe"
-    },
-    {
-      "name": "Version Service",
-      "type": "go",
-      "request": "launch",
-      "mode": "debug",
-      "program": "${workspaceFolder}/platform/services/version-service/cmd",
-      "args": [],
-      "env": {
-        "ENV": "development",
-        "APP_ENV": "dev"
-      },
-      "buildFlags": "-tags=dev",
-      "cwd": "${workspaceFolder}/platform/services/version-service",
-      "showLog": false,
-      "output": "${workspaceFolder}/platform/services/version-service/bin/version_service_debug.exe"
-    },
-    {
-      "name": "Notification Service",
-      "type": "go",
-      "request": "launch",
-      "mode": "debug",
-      "program": "${workspaceFolder}/platform/services/notification-service/cmd",
-      "args": [],
-      "env": {
-        "ENV": "development",
-        "APP_ENV": "dev"
-      },
-      "buildFlags": "-tags=dev",
-      "cwd": "${workspaceFolder}/platform/services/notification-service",
-      "showLog": false,
-      "output": "${workspaceFolder}/platform/services/notification-service/bin/notification_debug.exe"
-    },
-    {
-      "name": "Audit Service",
-      "type": "go",
-      "request": "launch",
-      "mode": "debug",
-      "program": "${workspaceFolder}/platform/services/audit-service/cmd",
-      "args": [],
-      "env": {
-        "ENV": "development",
-        "APP_ENV": "dev"
-      },
-      "buildFlags": "-tags=dev",
-      "cwd": "${workspaceFolder}/platform/services/audit-service",
-      "showLog": false,
-      "output": "${workspaceFolder}/platform/services/audit-service/bin/audit_debug.exe"
-    },
-    {
-      "name": "Messaging Service",
-      "type": "go",
-      "request": "launch",
-      "mode": "debug",
-      "program": "${workspaceFolder}/platform/services/messaging-service/cmd",
-      "args": [],
-      "env": {
-        "ENV": "development",
-        "APP_ENV": "dev"
-      },
-      "buildFlags": "-tags=dev",
-      "cwd": "${workspaceFolder}/platform/services/messaging-service",
-      "showLog": false,
-      "output": "${workspaceFolder}/platform/services/messaging-service/bin/messaging_debug.exe"
     },
     {
       "name": "Identity Service",
@@ -136,6 +57,7 @@
         "ENV": "development",
         "APP_ENV": "dev"
       },
+      // "envFile": "${workspaceFolder}/platform/services/identity-service/.env",
       "buildFlags": "-tags=dev",
       "cwd": "${workspaceFolder}/platform/services/identity-service",
       "showLog": false,
@@ -152,10 +74,96 @@
         "ENV": "development",
         "APP_ENV": "dev"
       },
+      // "envFile": "${workspaceFolder}/platform/services/officer-bff/.env",
       "buildFlags": "-tags=dev",
       "cwd": "${workspaceFolder}/platform/services/officer-bff",
       "showLog": false,
       "output": "${workspaceFolder}/platform/services/officer-bff/bin/officer-bff_debug.exe"
+    },
+    {
+      "name": "Citizen Docs Service",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/platform/services/citizen-docs/cmd",
+      "args": [],
+      "env": {
+        "ENV": "development",
+        "APP_ENV": "dev"
+      },
+      // "envFile": "${workspaceFolder}/platform/services/citizen-docs/.env",
+      "buildFlags": "-tags=dev",
+      "cwd": "${workspaceFolder}/platform/services/citizen-docs",
+      "showLog": false,
+      "output": "${workspaceFolder}/platform/services/citizen-docs/bin/citizen-docs_debug.exe"
+    },
+    {
+      "name": "Version Service",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/platform/services/version-service/cmd",
+      "args": [],
+      "env": {
+        "ENV": "development",
+        "APP_ENV": "dev"
+      },
+      // "envFile": "${workspaceFolder}/platform/services/auth-service/.env",
+      "buildFlags": "-tags=dev",
+      "cwd": "${workspaceFolder}/platform/services/version-service",
+      "showLog": false,
+      "output": "${workspaceFolder}/platform/services/version-service/bin/version_service_debug.exe"
+    },
+    {
+      "name": "Notification Service",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/platform/services/notification-service/cmd",
+      "args": [],
+      "env": {
+        "ENV": "development",
+        "APP_ENV": "dev"
+      },
+      // "envFile": "${workspaceFolder}/platform/services/notification-service/.env",
+      "buildFlags": "-tags=dev",
+      "cwd": "${workspaceFolder}/platform/services/notification-service",
+      "showLog": false,
+      "output": "${workspaceFolder}/platform/services/notification-service/bin/notification_debug.exe"
+    },
+    {
+      "name": "Audit Service",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/platform/services/audit-service/cmd",
+      "args": [],
+      "env": {
+        "ENV": "development",
+        "APP_ENV": "dev"
+      },
+      // "envFile": "${workspaceFolder}/platform/services/audit-service/.env",
+      "buildFlags": "-tags=dev",
+      "cwd": "${workspaceFolder}/platform/services/audit-service",
+      "showLog": false,
+      "output": "${workspaceFolder}/platform/services/audit-service/bin/audit_debug.exe"
+    },
+    {
+      "name": "Messaging Service",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/platform/services/messaging-service/cmd",
+      "args": [],
+      "env": {
+        "ENV": "development",
+        "APP_ENV": "dev"
+      },
+      // "envFile": "${workspaceFolder}/platform/services/messaging-service/.env",
+      "buildFlags": "-tags=dev",
+      "cwd": "${workspaceFolder}/platform/services/messaging-service",
+      "showLog": false,
+      "output": "${workspaceFolder}/platform/services/messaging-service/bin/messaging_debug.exe"
     }
   ]
 }

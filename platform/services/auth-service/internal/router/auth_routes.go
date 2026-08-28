@@ -68,6 +68,8 @@ func SetupAuthRoutes(
 		h.RegisterDevice,
 	)
 
+	auth.Post("/temporary-session", h.CreateTemporarySession)
+
 	auth.Post("/verify-device",
 		middleware.ValidateBody[schemas.VerifyDeviceRequest](),
 		h.VerifyDevice,

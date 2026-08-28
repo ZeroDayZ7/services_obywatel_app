@@ -17,6 +17,7 @@ type BaseSession struct {
 	Role        string    `json:"role"`
 	Fingerprint string    `json:"fingerprint"`
 	IP          string    `json:"ip,omitempty"`
+	Permissions []string  `json:"permissions,omitempty"`
 	CreatedAt   time.Time `json:"created_at"`
 }
 
@@ -28,18 +29,21 @@ type SetupSession struct {
 	Step      string `json:"step,omitempty"`       // Etap procesu (np. "WAITING_FOR_DEVICE_VERIFY")
 }
 
+type EmployeeContext struct {
+	EmployeeNumber string `json:"employee_number,omitempty"`
+	InstitutionID  string `json:"institution_id,omitempty"`
+	DepartmentID   string `json:"department_id,omitempty"`
+}
+
 // UserSession to pełna sesja uwierzytelnionego użytkownika (standardowy TTL)
 type UserSession struct {
 	BaseSession
-	Username  string `json:"username,omitempty"`
-	Email     string `json:"email,omitempty"`
-	PublicKey string `json:"public_key,omitempty"`
+	Username   string `json:"username,omitempty"`
+	Email      string `json:"email,omitempty"`
+	PublicKey  string `json:"public_key,omitempty"`
+	IsReadOnly bool   `json:"is_read_only,omitempty"`
 
-	// Context pracownika / urzędnika (obecne tylko jeśli dotyczy danego konta)
-	EmployeeNumber string   `json:"employee_number,omitempty"`
-	InstitutionID  string   `json:"institution_id,omitempty"`
-	DepartmentID   string   `json:"department_id,omitempty"`
-	Permissions    []string `json:"permissions,omitempty"`
+	Employee *EmployeeContext `json:"employee,omitempty"`
 }
 
 // --- Metody dla Sesji Głównej ---

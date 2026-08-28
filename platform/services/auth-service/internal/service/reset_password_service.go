@@ -75,7 +75,7 @@ func (s *passwordResetService) StartResetProcess(ctx context.Context, agreementN
 		return "", errors.ErrInternal
 	}
 
-	code, err := security.GenerateOTP(6)
+	code, err := security.GenerateOTPString(6)
 	if err != nil {
 		return "", errors.ErrInternal
 	}

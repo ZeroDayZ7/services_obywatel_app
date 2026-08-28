@@ -22,16 +22,13 @@
 
     "**/admin-bff": true,
     "**/audit-service": true,
-    "**/citizen-docs": true,
+    // "**/citizen-docs": true,
     "**/delegation-service": true,
-    "**/messaging-service": true,
+    // "**/messaging-service": true,
     "**/notification-service": true,
     "**/tally-service": true,
     "**/version-service": true,
-    "**/voting-service": true
-    // "**/": true,
-    // "**/": true,
-    // "**/": true,
+    "**/voting-service": true,
   },
 
   // (Search)

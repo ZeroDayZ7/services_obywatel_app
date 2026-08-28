@@ -13,13 +13,18 @@ func GetMeHandler(c *fiber.Ctx) error {
 		return apperr.SendAppError(c, apperr.ErrUnauthorized)
 	}
 
-	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-		"user_id":        sess.UserID,
-		"username":       sess.Username,
-		"email":          sess.Email,
-		"role":           sess.Role,
-		"institution_id": sess.InstitutionID,
-		"department_id":  sess.DepartmentID,
-		"permissions":    sess.Permissions,
-	})
+	response := fiber.Map{
+		"user_id":      sess.UserID,
+		"username":     sess.Username,
+		"email":        sess.Email,
+		"role":         sess.Role,
+		"permissions":  sess.Permissions,
+		"is_read_only": sess.IsReadOnly,
+	}
+
+	if sess.Employee != nil {
+		response["employee"] = sess.Employee
+	}
+
+	return c.Status(fiber.StatusOK).JSON(response)
 }

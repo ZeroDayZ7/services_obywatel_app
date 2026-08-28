@@ -1,5 +1,7 @@
 package schemas
 
+import "github.com/google/uuid"
+
 type RegisterRequest struct {
 	Username string `json:"username" validate:"required,alphanum,min=3,max=30"`
 	Email    string `json:"email" validate:"required,email"`
@@ -28,13 +30,13 @@ type VerifyDeviceRequest struct {
 }
 
 type TwoFARequest struct {
-	Code  []byte `json:"code" validate:"required,numeric_byte,len=6"`
-	Token string `json:"token" validate:"required"`
+	Code  []byte    `json:"code" validate:"required,numeric_byte,len=6"`
+	Token uuid.UUID `json:"token" validate:"required"`
 }
 
 type ResendTwoFARequest struct {
-	Email string `json:"email" validate:"required,email"`
-	Token string `json:"token" validate:"required"`
+	Email string    `json:"email" validate:"required,email"`
+	Token uuid.UUID `json:"token" validate:"required"`
 }
 
 type RefreshTokenRequest struct {

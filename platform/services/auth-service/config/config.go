@@ -58,6 +58,10 @@ func (c *Config) ToKMSServiceConfig() kms.Config {
 	return c.KMS.ToKMSServiceConfig()
 }
 
+func (c *Config) IsLocalDev() bool {
+	return c.Server.Env == "local" || c.Server.Env == "development" || c.Server.Env == "dev"
+}
+
 var (
 	AppConfig Config
 	Store     *session.Store

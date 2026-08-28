@@ -1,18 +1,18 @@
 package http
 
 // LoginResponse defines the data returned after a successful or partial login attempt.
-type LoginResponse struct {
-	Type          string `json:"type,omitempty"`
-	TwoFARequired bool   `json:"2fa_required"`
-	TwoFAToken    string `json:"two_fa_token,omitempty"`
-	AccessToken   string `json:"access_token,omitempty"`
-	RefreshToken  string `json:"refresh_token,omitempty"`
-	UserID        string `json:"user_id,omitempty"`
-	SetupToken    string `json:"setup_token,omitempty"`
-	Challenge     string `json:"challenge,omitempty"`
-	IsTrusted     bool   `json:"is_trusted,omitempty"`
-	ExpiresAt     int64  `json:"expires_at,omitempty"`
-}
+// type LoginResponse struct {
+// 	Type          string `json:"type,omitempty"`
+// 	TwoFARequired bool   `json:"2fa_required"`
+// 	TwoFAToken    string `json:"two_fa_token,omitempty"`
+// 	AccessToken   string `json:"access_token,omitempty"`
+// 	RefreshToken  string `json:"refresh_token,omitempty"`
+// 	UserID        string `json:"user_id,omitempty"`
+// 	SetupToken    string `json:"setup_token,omitempty"`
+// 	Challenge     string `json:"challenge,omitempty"`
+// 	IsTrusted     bool   `json:"is_trusted,omitempty"`
+// 	ExpiresAt     int64  `json:"expires_at,omitempty"`
+// }
 
 // UserProfileResponse defines the current authenticated user session data returned by /auth/me.
 type UserProfileResponse struct {

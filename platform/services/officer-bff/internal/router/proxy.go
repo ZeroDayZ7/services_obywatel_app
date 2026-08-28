@@ -118,10 +118,6 @@ func NewReverseProxy(authServiceURL, targetPath string, keyStore *httpserver.Key
 	return proxy.ServeHTTP, nil
 }
 
-// #endregion
-
-// NewAuthTokenProxy przechwytuje odpowiedź z auth-service, wyciąga access_token/refresh_token,
-// zapisuje je w bezpiecznych ciasteczkach HttpOnly oraz wycina je z odpowiedzi JSON dla Angulara.
 //#region NewAuthTokenProxy
 func NewAuthTokenProxy(authServiceURL, targetPath string, keyStore *httpserver.KeyStore, accessTokenTTL, refreshTokenTTL time.Duration) (http.HandlerFunc, error) {
 	log := shared.GetLogger()
@@ -162,16 +158,20 @@ func NewAuthTokenProxy(authServiceURL, targetPath string, keyStore *httpserver.K
 				return nil
 			}
 
-			if accessToken, ok := responseData["access_token"].(string); ok && accessToken != "" {
-				setAuthCookie(resp, "access_token", accessToken, accessTokenTTL, "/")
-			}
+			// Szukamy zagnieżdżonego obiektu "success" w odpowiedzi JSON
+			if successMap, ok := responseData["success"].(map[string]any); ok {
+				if accessToken, ok := successMap["access_token"].(string); ok && accessToken != "" {
+					setAuthCookie(resp, "access_token", accessToken, accessTokenTTL, "/")
+				}
 
-			if refreshToken, ok := responseData["refresh_token"].(string); ok && refreshToken != "" {
-				setAuthCookie(resp, "refresh_token", refreshToken, refreshTokenTTL, "/api/v1/official/auth/refresh")
-			}
+				if refreshToken, ok := successMap["refresh_token"].(string); ok && refreshToken != "" {
+					setAuthCookie(resp, "refresh_token", refreshToken, refreshTokenTTL, "/api/v1/official/auth/refresh")
+				}
 
-			delete(responseData, "access_token")
-			delete(responseData, "refresh_token")
+				// Usuwamy sekrety z obiektu przed wysłaniem do przeglądarki
+				delete(successMap, "access_token")
+				delete(successMap, "refresh_token")
+			}
 
 			cleanedBody, err := json.Marshal(responseData)
 			if err != nil {
@@ -191,9 +191,6 @@ func NewAuthTokenProxy(authServiceURL, targetPath string, keyStore *httpserver.K
 	return proxy.ServeHTTP, nil
 }
 
-// #endregion
-
-// NewAuthLogoutProxy przekazuje żądanie wylogowania i czyści ciasteczka w przeglądarce
 //#region NewAuthLogoutProxy
 func NewAuthLogoutProxy(authServiceURL, targetPath string, keyStore *httpserver.KeyStore) (http.HandlerFunc, error) {
 	log := shared.GetLogger()
@@ -236,7 +233,8 @@ func setAuthCookie(resp *http.Response, name, value string, duration time.Durati
 		Name:     name,
 		Value:    value,
 		Path:     path,
-		Expires:  time.Now().Add(duration),
+		Expires:  time.Now().UTC().Add(duration),
+		MaxAge:   int(duration.Seconds()),
 		HttpOnly: true,
 		Secure:   true,
 		SameSite: http.SameSiteStrictMode,

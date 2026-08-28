@@ -31,6 +31,7 @@ func RegisterAuthRoutes(app *fiber.App, container *di.Container) {
 
 	authSecure.Post("/unpair-device", ReverseProxySecure(container, ServiceAuth, target))
 	authSecure.Post("/register-device", pkgMiddleware.ValidateBody[schemas.RegisterDeviceRequest](), ReverseProxySecure(container, ServiceAuth, target))
+	authSecure.Post("/temporary-session", ReverseProxySecure(container, ServiceAuth, target))
 	authSecure.Post("/logout", pkgMiddleware.ValidateBody[schemas.RefreshTokenRequest](), ReverseProxySecure(container, ServiceAuth, target))
 
 	// Kontekst użytkownika (przekierowany do Auth)
