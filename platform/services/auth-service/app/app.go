@@ -42,7 +42,7 @@ func NewAuthApp(container *di.Container) *fiber.App {
 	app.Use(requestid.New())
 	app.Use(recover.New())
 	app.Use(shared.GetLimiter(shared.LimitGlobal, nil))
-	app.Use(shared.RequestLoggerMiddleware())
+	// app.Use(shared.RequestLoggerMiddleware())
 	app.Use(middleware.InternalAuthMiddleware(container.KeyStore))
 
 	return app

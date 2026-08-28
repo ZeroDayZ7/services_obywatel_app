@@ -59,7 +59,7 @@ func NewGatewayApp(container *di.Container) (*fiber.App, error) {
 
 	app.Use(shared.GetLimiter(shared.LimitGlobal, storage))
 	app.Use(compress.New(config.CompressConfig()))
-	app.Use(shared.RequestLoggerMiddleware())
+	// app.Use(shared.RequestLoggerMiddleware())
 
 	app.Use(config.JWTMiddlewareWithExclusions())
 	app.Use(middleware.AuthRedisMiddleware(container.Cache))
