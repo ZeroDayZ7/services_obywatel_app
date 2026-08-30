@@ -393,12 +393,13 @@ networks:
   auth-db-net:
     name: app_auth_db_net
     driver: bridge
-  citizen-app-net:
-    name: obywatel_app__network
-    driver: bridge
   target-admin-net:
     name: kms_target-admin-net
     external: true
   sec-net:
     name: kms_sec-net
     external: true
+
+  citizen-app-net:
+    name: obywatel_app__network
+    driver: bridge
