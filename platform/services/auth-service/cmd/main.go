@@ -74,9 +74,11 @@ func main() {
 	socketPath := config.AppConfig.Agent.SocketPath
 
 	log.Info("🔌 Łączenie z secret-agent przez UDS...", "path", socketPath)
-	secretClient := shared.NewClient(socketPath)
 
-	// Pobieramy dane (z timeoutem np. 5 sekund, bo sidecar może jeszcze wstawać)
+	// Podajemy ścieżkę do socketu oraz prefiks klucza ("postgres_auth")
+	secretClient := shared.NewClient(socketPath, "postgres_auth")
+
+	// Pobieramy dane (z timeoutem 5s)
 	ctxCreds, cancelCreds := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancelCreds()
 
@@ -88,8 +90,7 @@ func main() {
 
 	log.Info("✅ Pomyślnie pobrano poświadczenia DB z sidecara", "username", creds.Username)
 
-	// Teraz wstrzykujesz pobrane credentials do konfiguracji bazy danych
-	// np. modyfikując strukturę config.AppConfig.Database przed wywołaniem MustInitDB:
+	// Nadpisujemy konfigurację pobranymi danymi z pamięci sidecara
 	config.AppConfig.Database.User = creds.Username
 	config.AppConfig.Database.Password = creds.Password
 

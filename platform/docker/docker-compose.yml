@@ -105,33 +105,6 @@ services:
       timeout: 5s
       retries: 5
       
-# region TEST
-  # db-test:
-  #     image: postgres:18.3-alpine
-  #     container_name: db-test
-  #     environment:
-  #       POSTGRES_USER: ${AUTH_DB_ROOT_USER:-auth_db_root}
-  #       POSTGRES_DB: ${AUTH_DB_NAME:-auth_database}
-  #       POSTGRES_PASSWORD_FILE: /run/secrets/auth_db_root_pass
-  #       KMS_ADMIN_USER: ${KMS_ADMIN_USER:-kms_admin}
-  #     secrets:
-  #       - auth_db_root_pass
-  #       - kms_admin_pass
-  #     ports: 
-  #       - "5450:5432"
-  #     volumes:
-  #       - pg_test_data:/var/lib/postgresql
-  #       - ./scripts/init-kms-admin.sh:/docker-entrypoint-initdb.d/01-init-kms-admin.sh:ro
-  #     restart: ${DOCKER_RESTART_POLICY:-no}
-  #     networks:
-  #       - target-admin-net
-  #       - auth-db-net
-  #     healthcheck:
-  #       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
-  #       interval: 10s
-  #       timeout: 5s
-  #       retries: 5
-
   # region db-notification
   # --- NOTIFICATION DATABASE ---
   db-notification:

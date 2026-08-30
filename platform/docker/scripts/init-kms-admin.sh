@@ -31,17 +31,17 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$TARGET_DB" <<-EOS
     GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO "$KMS_USER";
     GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO "$KMS_USER";
 
-    -- 4. Nadanie domyślnych praw na przyszłe tabele i sekwencje dla KMS
+    -- 4. Nadanie domyślnych praw na przyszłe tabele i sekwencje dla KMS oraz TARGET_ROLE
     ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO "$KMS_USER";
     ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO "$KMS_USER";
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO "$TARGET_ROLE";
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO "$TARGET_ROLE";
 
-    -- 5. KONFIGURACJA ROLI DLA AGENTÓW:
-    -- Nadanie uprawnień tabelarycznych dla samej roli grupowej
-    GRANT USAGE ON SCHEMA public TO "$TARGET_ROLE";
-    GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO "$TARGET_ROLE";
-    
-    -- Automatyczne uprawnienia dla nowych tabel tworzonych w przyszłości
-    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "$TARGET_ROLE";
+    -- 5. KONFIGURACJA ROLI DLA AGENTÓW (ZMIANA: dodano CREATE oraz ALL PRIVILEGES):
+    -- Nadanie uprawnień do tworzenia i używania obiektów w schemacie public
+    GRANT USAGE, CREATE ON SCHEMA public TO "$TARGET_ROLE";
+    GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO "$TARGET_ROLE";
+    GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO "$TARGET_ROLE";
 
     -- 6. KLUCZOWE: Pozwól użytkownikowi KMS nadawać tę rolę innym użytkownikom (ADMIN OPTION)
     GRANT "$TARGET_ROLE" TO "$KMS_USER" WITH ADMIN OPTION;
