@@ -6,46 +6,130 @@ x-common-settings: &common-settings
     - citizen-app-net
 
 services:
+  # region  Agent GATEWAY
+  # agent-gateway:
+  #   image: secret-agent:latest
+  #   environment:
+  #     - SECRET_AGENT_CLIENT_ID=gateway-service
+  #     - SECRET_AGENT_SOCKET_PATH=/var/run/agent-sockets/agent.sock
+  #   volumes:
+  #     - socket-gateway:/var/run/agent-sockets
+
+  # # region  Agent IDENTITY
+  # agent-identity:
+  #   image: secret-agent:latest
+  #   environment:
+  #     - SECRET_AGENT_CLIENT_ID=identity-service
+  #     - SECRET_AGENT_SOCKET_PATH=/var/run/agent-sockets/agent.sock
+  #   volumes:
+  #     - socket-identity:/var/run/agent-sockets
   # region GATEWAY
   # --- GATEWAY ---
-  # gateway:
-  #   <<: *common-settings
-  #   image: golang:1.26.2-alpine3.23
-  #   container_name: app-gateway
-  #   working_dir: /app
-  #   volumes:
-  #     - ../services/gateway:/app
-  #     - ../platform:/platform
-  #     - go-modules:/go/pkg
-  #   ports:
-  #     - "8080:8080"
-  #   depends_on:
-  #     db-auth:
-  #       condition: service_healthy
-  #     cache-redis:
-  #       condition: service_started
+  gateway:
+    image: golang:1.27-alpine3.23
+    container_name: app-gateway
+    restart: ${DOCKER_RESTART_POLICY:-no}
+    working_dir: /app
+    environment:
+    - ENV=${APP_ENV:-development}
+    volumes:
+      - ../services/gateway:/app
+      - ../platform:/platform
+      - go-modules:/go/pkg
+    ports:
+      - "8080:8080"
+    networks:
+      - gateway-net
+    depends_on:
+      db-auth:
+        condition: service_healthy
+      cache-redis:
+        condition: service_started
+
+  # region AUTH SERVICE
+  # --- AUTHENTICATION SERVICE ---
+  auth-service:
+    # Build lokalny z kodu źródłowego:
+    # build:
+    #   context: ../services/auth
+    #   dockerfile: Dockerfile
+    image: golang:1.27-alpine3.23
+    container_name: app-auth-service
+    restart: ${DOCKER_RESTART_POLICY:-no}
+    working_dir: /app
+    environment:
+      - SECRET_AGENT_SOCKET_PATH=/var/run/agent-sockets/agent.sock
+      - AUTH_SERVICE_CLIENT_ID=auth-service
+      - ENV=${APP_ENV:-development}
+    volumes:
+      - ../services/auth:/app
+      - ../platform:/platform
+      - go-modules:/go/pkg
+      - secret_agent_sockets:/var/run/agent-sockets:ro
+    ports:
+      - "8081:8081"
+    networks:
+      - gateway-net
+      - auth-db-net
+    depends_on:
+      db-auth:
+        condition: service_healthy
 
   # region db-auth
   # --- AUTHENTICATION DATABASE ---
   db-auth:
-    <<: *common-settings
     image: postgres:18.3-alpine
-    container_name: db-auth
+    container_name: db-test
+    restart: ${DOCKER_RESTART_POLICY:-no}
     environment:
-      POSTGRES_USER: ${AUTH_DB_USER:-auth_user}
+      POSTGRES_USER: ${AUTH_DB_ROOT_USER:-auth_db_root}
       POSTGRES_DB: ${AUTH_DB_NAME:-auth_database}
-      POSTGRES_PASSWORD_FILE: /run/secrets/auth_db_pass
+      POSTGRES_PASSWORD_FILE: /run/secrets/auth_db_root_pass
+      KMS_ADMIN_USER: ${KMS_ADMIN_USER:-kms_admin}
     secrets:
-      - auth_db_pass
-    ports:
-      - "5432:5432"
+      - auth_db_root_pass
+      - kms_admin_pass
+    ports: 
+      - "5450:5432"
+    networks:
+        - gateway-net
+        - target-admin-net
+        - auth-db-net
     volumes:
-      - pg_auth_data:/var/lib/postgresql
+      - pg_test_data:/var/lib/postgresql
+      - ./scripts/init-kms-admin.sh:/docker-entrypoint-initdb.d/01-init-kms-admin.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 10s
       timeout: 5s
       retries: 5
+      
+# region TEST
+  db-test:
+      image: postgres:18.3-alpine
+      container_name: db-test
+      environment:
+        POSTGRES_USER: ${AUTH_DB_ROOT_USER:-auth_db_root}
+        POSTGRES_DB: ${AUTH_DB_NAME:-auth_database}
+        POSTGRES_PASSWORD_FILE: /run/secrets/auth_db_root_pass
+        KMS_ADMIN_USER: ${KMS_ADMIN_USER:-kms_admin}
+      secrets:
+        - auth_db_root_pass
+        - kms_admin_pass
+      ports: 
+        - "5450:5432"
+      volumes:
+        - pg_test_data:/var/lib/postgresql
+        - ./scripts/init-kms-admin.sh:/docker-entrypoint-initdb.d/01-init-kms-admin.sh:ro
+      restart: ${DOCKER_RESTART_POLICY:-no}
+      networks:
+        - target-admin-net
+        - auth-db-net
+      healthcheck:
+        test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+        interval: 10s
+        timeout: 5s
+        retries: 5
 
   # region db-notification
   # --- NOTIFICATION DATABASE ---
@@ -181,8 +265,11 @@ services:
       - "5672:5672"
       - "15672:15672"
     environment:
-      RABBITMQ_DEFAULT_USER: "admin"
-      RABBITMQ_DEFAULT_PASS: "password"
+      RABBITMQ_DEFAULT_USER_FILE: /run/secrets/rabbitmq_root_user
+      RABBITMQ_DEFAULT_PASS_FILE: /run/secrets/rabbitmq_root_pass
+    secrets:
+      - rabbitmq_root_user
+      - rabbitmq_root_pass
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
   
@@ -195,8 +282,11 @@ services:
       - "9000:9000"
       - "9001:9001"
     environment:
-      MINIO_ROOT_USER: "minioadmin"
-      MINIO_ROOT_PASSWORD: "minioadminpassword"
+      MINIO_ROOT_USER_FILE: /run/secrets/minio_root_user
+      MINIO_ROOT_PASSWORD_FILE: /run/secrets/minio_root_pass
+    secrets:
+      - minio_root_user
+      - minio_root_pass
     command: server /data --console-address ":9001"
     volumes:
       - minio_data:/data
@@ -250,8 +340,10 @@ services:
 
   # region secrets
 secrets:
-  auth_db_pass:
-    file: ./secrets/.auth_db_password
+  auth_db_root_pass:
+    file: ./secrets/.auth_db_password     # HeadAdmin
+  kms_admin_pass:
+    file: ./secrets/.kms_admin_auth_pass  # Admin for KMS
   citizen_db_pass:
     file: ./secrets/.citizen_db_password
   notify_db_pass:
@@ -267,8 +359,18 @@ secrets:
   identity_db_pass:
     file: ./secrets/.identity_db_password
 
+  minio_root_user:
+    file: ./secrets/.minio_user
+  minio_root_pass:
+    file: ./secrets/.minio_password
+  rabbitmq_root_user:
+    file: ./secrets/.rabbitmq_user
+  rabbitmq_root_pass:
+    file: ./secrets/.rabbitmq_password
+
   # region volumes
 volumes:
+  pg_test_data:
   pg_auth_data:
   pg_citizen_docs_data:
   pg_notification_data:
@@ -279,9 +381,25 @@ volumes:
   go-modules:
   rabbitmq_data:
   minio_data:
+  secret_agent_sockets:
+    external: true
+    name: secret_agent_sockets
 
   # region networks
 networks:
+  gateway-net:
+    name: app_gateway_net
+    driver: bridge
+  auth-db-net:
+    name: app_auth_db_net
+    driver: bridge
+  target-admin-net:
+    name: kms_target-admin-net
+    external: true
+  sec-net:
+    name: kms_sec-net
+    external: true
+
   citizen-app-net:
     name: obywatel_app__network
     driver: bridge
