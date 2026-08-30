@@ -26,16 +26,20 @@ services:
   # region GATEWAY
   # --- GATEWAY ---
   gateway:
-    <<: *common-settings
     image: golang:1.27-alpine3.23
     container_name: app-gateway
+    restart: ${DOCKER_RESTART_POLICY:-no}
     working_dir: /app
+    environment:
+    - ENV=${APP_ENV:-development}
     volumes:
       - ../services/gateway:/app
       - ../platform:/platform
       - go-modules:/go/pkg
     ports:
       - "8080:8080"
+    networks:
+      - gateway-net
     depends_on:
       db-auth:
         condition: service_healthy
@@ -45,17 +49,18 @@ services:
   # region AUTH SERVICE
   # --- AUTHENTICATION SERVICE ---
   auth-service:
-    <<: *common-settings
     # Build lokalny z kodu źródłowego:
     # build:
     #   context: ../services/auth
     #   dockerfile: Dockerfile
     image: golang:1.27-alpine3.23
     container_name: app-auth-service
+    restart: ${DOCKER_RESTART_POLICY:-no}
     working_dir: /app
     environment:
       - SECRET_AGENT_SOCKET_PATH=/var/run/agent-sockets/agent.sock
       - AUTH_SERVICE_CLIENT_ID=auth-service
+      - ENV=${APP_ENV:-development}
     volumes:
       - ../services/auth:/app
       - ../platform:/platform
@@ -63,6 +68,9 @@ services:
       - secret_agent_sockets:/var/run/agent-sockets:ro
     ports:
       - "8081:8081"
+    networks:
+      - gateway-net
+      - auth-db-net
     depends_on:
       db-auth:
         condition: service_healthy
@@ -70,9 +78,9 @@ services:
   # region db-auth
   # --- AUTHENTICATION DATABASE ---
   db-auth:
-    <<: *common-settings
     image: postgres:18.3-alpine
     container_name: db-test
+    restart: ${DOCKER_RESTART_POLICY:-no}
     environment:
       POSTGRES_USER: ${AUTH_DB_ROOT_USER:-auth_db_root}
       POSTGRES_DB: ${AUTH_DB_NAME:-auth_database}
@@ -83,6 +91,10 @@ services:
       - kms_admin_pass
     ports: 
       - "5450:5432"
+    networks:
+        - gateway-net
+        - target-admin-net
+        - auth-db-net
     volumes:
       - pg_test_data:/var/lib/postgresql
       - ./scripts/init-kms-admin.sh:/docker-entrypoint-initdb.d/01-init-kms-admin.sh:ro
@@ -94,7 +106,6 @@ services:
       
 # region TEST
   db-test:
-      <<: *common-settings
       image: postgres:18.3-alpine
       container_name: db-test
       environment:
@@ -110,6 +121,10 @@ services:
       volumes:
         - pg_test_data:/var/lib/postgresql
         - ./scripts/init-kms-admin.sh:/docker-entrypoint-initdb.d/01-init-kms-admin.sh:ro
+      restart: ${DOCKER_RESTART_POLICY:-no}
+      networks:
+        - target-admin-net
+        - auth-db-net
       healthcheck:
         test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
         interval: 10s
@@ -372,6 +387,18 @@ volumes:
 
   # region networks
 networks:
+  gateway-net:
+    name: app_gateway_net
+    driver: bridge
+  auth-db-net:
+    name: app_auth_db_net
+    driver: bridge
   citizen-app-net:
     name: obywatel_app__network
     driver: bridge
+  target-admin-net:
+    name: kms_target-admin-net
+    external: true
+  sec-net:
+    name: kms_sec-net
+    external: true
