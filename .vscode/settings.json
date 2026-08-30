@@ -13,7 +13,7 @@
     "**/LICENSE": true,
     "**/SECURITY.md": true,
     "**/.gitattributes": true,
-    "**/.gitignore": true,
+    // "**/.gitignore": true,
     "**/.github": true,
     // "**/.dockerignore": true,
     // "**/Dockerfile": true,

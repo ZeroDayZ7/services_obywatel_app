@@ -9,6 +9,7 @@
 **/bin/*
 
 # Ignore logs
+**/dev-card.json
 **/logs/
 **/combined.txt
 **/temp.md

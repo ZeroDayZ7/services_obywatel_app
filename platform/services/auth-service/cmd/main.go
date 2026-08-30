@@ -5,6 +5,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/zerodayz7/platform/pkg/database"
 	"github.com/zerodayz7/platform/pkg/httpserver"
 	"github.com/zerodayz7/platform/pkg/rabbitmq"
 	"github.com/zerodayz7/platform/pkg/redis"
@@ -69,35 +70,59 @@ func main() {
 	}()
 
 	// =========================================================================
-	// 6a. POBIERANIE POŚWIADCZEŃ DO BAZY Z SIDECARA PRZEZ UDS
+	// 6a. POBIERANIE POŚWIADCZEŃ Z SIDECARA PRZEZ UDS (BOOTSTRAP + ROTACJA)
 	// =========================================================================
 	socketPath := config.AppConfig.Agent.SocketPath
 
 	log.Info("🔌 Łączenie z secret-agent przez UDS...", "path", socketPath)
 
-	// Podajemy ścieżkę do socketu oraz prefiks klucza ("postgres_auth")
-	secretClient := shared.NewClient(socketPath, "postgres_auth")
+	secretClient := shared.NewClient(socketPath, "auth_service")
 
-	// Pobieramy dane (z timeoutem 5s)
+	// Pobieramy komplet poświadczeń na start (timeout 5s)
 	ctxCreds, cancelCreds := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancelCreds()
-
-	creds, err := secretClient.GetCredentials(ctxCreds)
+	// bootCreds, err := secretClient.BootstrapApp(ctxCreds, []string{"postgres", "redis", "minio"})
+	bootCreds, err := secretClient.BootstrapApp(ctxCreds, []string{"postgres"})
+	cancelCreds()
 	if err != nil {
-		log.Error("❌ Nie udało się pobrać poświadczeń do bazy z sidecara", "error", err)
+		log.Error("❌ Nie udało się przeprowadzić bootstrapu poświadczeń z sidecara", "error", err)
 		os.Exit(1)
 	}
 
-	log.Info("✅ Pomyślnie pobrano poświadczenia DB z sidecara", "username", creds.Username)
+	// Weryfikacja i podpięcie poświadczeń DB
+	if bootCreds.Postgres == nil {
+		log.Error("❌ Sidecar nie zwrócił wymaganych poświadczeń do Postgresa")
+		os.Exit(1)
+	}
 
-	// Nadpisujemy konfigurację pobranymi danymi z pamięci sidecara
-	config.AppConfig.Database.User = creds.Username
-	config.AppConfig.Database.Password = creds.Password
+	log.Info("✅ Pomyślnie pobrano poświadczenia DB z sidecara", "username", bootCreds.Postgres.Username)
 
-	// 6. Database
+	// Nadpisujemy konfigurację pobranymi danymi
+	config.AppConfig.Database.User = bootCreds.Postgres.Username
+	config.AppConfig.Database.Password = bootCreds.Postgres.Password
+
+	// Opcjonalnie: obsługa Redisa / MinIO jeśli są zdefiniowane w bootstrapie
+	if bootCreds.Redis != nil {
+		config.AppConfig.Redis.Password = bootCreds.Redis.Password
+	}
+
+	// 6. Database Init
 	db, closeDB := config.MustInitDB(config.AppConfig.Database)
 	defer closeDB()
 
+	// Zerujemy wrażliwe dane z konfiguracji w pamięci podręcznej po ustanowieniu połączenia
+	config.AppConfig.Database.Password = ""
+	bootCreds.Postgres.Password = ""
+	if bootCreds.Redis != nil {
+		bootCreds.Redis.Password = ""
+	}
+
+	// =========================================================================
+	// 6b. GOROUTINE ODŚWIEŻAJĄCA POŚWIADCZENIA W TLE (ROTACJA)
+	// =========================================================================
+	ctxApp, cancelApp := context.WithCancel(context.Background())
+	defer cancelApp()
+
+	go secretClient.StartPostgresRotationLoop(ctxApp, 30*time.Minute, database.NewGormAdapter(db))
 	// =========================================================================
 	// 7. RabbitMQ Publisher Setup
 	// =========================================================================

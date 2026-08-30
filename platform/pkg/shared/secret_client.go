@@ -61,8 +61,8 @@ func (c *Client) getSecret(ctx context.Context, key string) (string, error) {
 
 	response = strings.TrimSpace(response)
 
-	if strings.HasPrefix(response, "OK ") {
-		return strings.TrimPrefix(response, "OK "), nil
+	if after, ok := strings.CutPrefix(response, "OK "); ok {
+		return after, nil
 	}
 
 	return "", fmt.Errorf("secret-agent zwrócił błąd dla [%s]: %s", key, response)
