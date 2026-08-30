@@ -15,6 +15,7 @@ import (
 	"github.com/zerodayz7/platform/services/auth-service/config"
 	"github.com/zerodayz7/platform/services/auth-service/internal/di"
 	"github.com/zerodayz7/platform/services/auth-service/internal/router"
+	"github.com/zerodayz7/platform/services/auth-service/internal/security"
 )
 
 //#region main
@@ -40,7 +41,7 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	rabbitHMACKey, err := LoadSecurityKeys(ctx, &config.AppConfig, keyStore)
+	rabbitHMACKey, err := security.LoadSecurityKeys(ctx, &config.AppConfig, keyStore)
 	if err != nil {
 		log.Error("❌ Nie udało się załadować kluczy bezpieczeństwa z KMS", "error", err)
 		os.Exit(1)
@@ -66,6 +67,31 @@ func main() {
 			log.Error("Failed to close Redis client", "error", err)
 		}
 	}()
+
+	// =========================================================================
+	// 6a. POBIERANIE POŚWIADCZEŃ DO BAZY Z SIDECARA PRZEZ UDS
+	// =========================================================================
+	socketPath := config.AppConfig.Agent.SocketPath
+
+	log.Info("🔌 Łączenie z secret-agent przez UDS...", "path", socketPath)
+	secretClient := shared.NewClient(socketPath)
+
+	// Pobieramy dane (z timeoutem np. 5 sekund, bo sidecar może jeszcze wstawać)
+	ctxCreds, cancelCreds := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelCreds()
+
+	creds, err := secretClient.GetCredentials(ctxCreds)
+	if err != nil {
+		log.Error("❌ Nie udało się pobrać poświadczeń do bazy z sidecara", "error", err)
+		os.Exit(1)
+	}
+
+	log.Info("✅ Pomyślnie pobrano poświadczenia DB z sidecara", "username", creds.Username)
+
+	// Teraz wstrzykujesz pobrane credentials do konfiguracji bazy danych
+	// np. modyfikując strukturę config.AppConfig.Database przed wywołaniem MustInitDB:
+	config.AppConfig.Database.User = creds.Username
+	config.AppConfig.Database.Password = creds.Password
 
 	// 6. Database
 	db, closeDB := config.MustInitDB(config.AppConfig.Database)
