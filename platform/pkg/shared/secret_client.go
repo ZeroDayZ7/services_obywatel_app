@@ -44,13 +44,6 @@ type FullBootstrapResponse struct {
 	Minio    *MinioCredentials    `msgpack:"minio,omitempty" json:"minio,omitempty"`
 }
 
-// Zeroize czyszczenie wrażliwych bajtów z pamięci RAM w miejscu
-func Zeroize(b []byte) {
-	for i := range b {
-		b[i] = 0
-	}
-}
-
 // BootstrapApp pobiera komplet sekretów za pomocą protokołu binarnego MessagePack przez UDS.
 // Zwraca wskaźnik na strukturę oraz funkcję cleanup(), którą wywołujesz w `defer`.
 func BootstrapApp(ctx context.Context, cfg Config, requiredServices []string) (*FullBootstrapResponse, func(), error) {
@@ -73,20 +66,20 @@ func BootstrapApp(ctx context.Context, cfg Config, requiredServices []string) (*
 
 	var response FullBootstrapResponse
 	if err := msgpack.Unmarshal(rawResp, &response); err != nil {
-		Zeroize(rawResp)
+		clear(rawResp)
 		return nil, func() {}, fmt.Errorf("błąd deserializacji binarnej response: %w", err)
 	}
 
 	cleanup := func() {
-		Zeroize(rawResp)
+		clear(rawResp)
 		if response.Postgres != nil {
-			Zeroize(response.Postgres.Password)
+			clear(response.Postgres.Password)
 		}
 		if response.Redis != nil {
-			Zeroize(response.Redis.Password)
+			clear(response.Redis.Password)
 		}
 		if response.Minio != nil {
-			Zeroize(response.Minio.SecretKey)
+			clear(response.Minio.SecretKey)
 		}
 	}
 
@@ -104,13 +97,13 @@ func RefreshPostgres(ctx context.Context, cfg Config) (*PostgresCredentials, fun
 
 	var creds PostgresCredentials
 	if err := msgpack.Unmarshal(rawResp, &creds); err != nil {
-		Zeroize(rawResp)
+		clear(rawResp)
 		return nil, func() {}, fmt.Errorf("błąd deserializacji postgres creds: %w", err)
 	}
 
 	cleanup := func() {
-		Zeroize(rawResp)
-		Zeroize(creds.Password)
+		clear(rawResp)
+		clear(creds.Password)
 	}
 
 	return &creds, cleanup, nil
@@ -151,7 +144,7 @@ func ExecCommand(ctx context.Context, socketPath string, timeout time.Duration, 
 
 	respBuf := make([]byte, respLen)
 	if _, err := io.ReadFull(conn, respBuf); err != nil {
-		Zeroize(respBuf)
+		clear(respBuf)
 		return nil, fmt.Errorf("błąd odczytu bajtów payloadu z UDS: %w", err)
 	}
 
