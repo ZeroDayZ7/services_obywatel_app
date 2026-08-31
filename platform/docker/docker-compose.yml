@@ -11,15 +11,21 @@ services:
   gateway:
     build:
       context: ../../
-      dockerfile: platform/services/gateway/Dockerfile
-    image: gateway:latest
+      dockerfile: platform/services/gateway/Dockerfile.dev
+    image: gateway:dev
     container_name: app-gateway
     restart: ${DOCKER_RESTART_POLICY:-no}
-    working_dir: /app
+    working_dir: /app/services/gateway
+    environment:
+      - GOCACHE=/root/.cache/go-build
+      - GOWORK=off
     volumes:
-      - ../services/gateway:/app
-      - ../platform:/platform
-      - go-modules:/go/pkg
+      - ../services/gateway:/app/services/gateway
+      - ../pkg:/app/pkg
+      - ../go.work:/app/go.work
+      - ../go.work.sum:/app/go.work.sum
+      - go-build-cache:/root/.cache/go-build
+      - go-mod-cache:/go/pkg/mod
     ports:
       - "8080:8090"
     env_file:
@@ -41,15 +47,17 @@ services:
     image: auth-service:dev
     container_name: app-auth-service
     restart: ${DOCKER_RESTART_POLICY:-no}
-    working_dir: /src/platform/services/auth-service
+    working_dir: /app/services/auth-service
     environment:
       - SECRET_AGENT_SOCKET_PATH=/var/run/agent-sockets/agent.sock
       - AUTH_SERVICE_CLIENT_ID=auth-service
       - GOCACHE=/root/.cache/go-build
+      - GOWORK=off
     volumes:
-      # Montowanie całego monorepo z Windowsa
-      - ../../:/src
-      # UDS Socket
+      - ../services/auth-service:/app/services/auth-service
+      - ../pkg:/app/pkg
+      - ../go.work:/app/go.work
+      - ../go.work.sum:/app/go.work.sum
       - socket-data:/var/run/agent-sockets:ro
       # Cache Go
       - go-build-cache:/root/.cache/go-build
