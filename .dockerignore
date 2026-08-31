@@ -6,7 +6,6 @@
 **/docs
 **/Makefile
 **/README.md
-**/README.md
 **/*.code-workspace
 
 
@@ -26,6 +25,12 @@
 # Documentation
 **/*.md
 **/docs/
+**/bin
+**/.env.example
+**/.gitattributes
+**/.gitignore
+**/.Dockerfile
+**/.Dockerfile.Dev
 
 # Local configurations and secrets
 **/.env
