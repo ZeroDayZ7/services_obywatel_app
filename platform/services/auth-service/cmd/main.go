@@ -69,42 +69,38 @@ func main() {
 		}
 	}()
 	// =========================================================================
-	// 6a. POBIERANIE POŚWIADCZEŃ Z SIDECARA PRZEZ UDS (BOOTSTRAP + ROTACJA)
+	// 6a. POBIERANIE POŚWIADCZEŃ Z SIDECARA PRZEZ UDS (BEZPOŚREDNIO)
 	// =========================================================================
 	kmsCfg := shared.Config{
-		SocketPath:    config.AppConfig.Agent.SocketPath,
-		TargetService: "auth_service",
-		Timeout:       5 * time.Second,
+		SocketPath: config.AppConfig.Agent.SocketPath,
+		Timeout:    5 * time.Second,
 	}
 
 	log.Info("🔌 Łączenie z secret-agent przez UDS...", "path", kmsCfg.SocketPath)
 
-	// Pobieramy komplet poświadczeń na start
+	cacheKey := "postgres_auth_auth_database"
+
 	ctxCreds, cancelCreds := context.WithTimeout(context.Background(), kmsCfg.Timeout)
-	bootCreds, cleanup, err := shared.BootstrapApp(ctxCreds, kmsCfg, []string{"postgres"})
+	dbCreds, cleanup, err := shared.FetchAgentSecret(ctxCreds, kmsCfg, cacheKey)
 	cancelCreds()
+
 	if err != nil {
-		log.Error("❌ Nie udało się przeprowadzić bootstrapu poświadczeń z sidecara", "error", err)
+		log.Error("❌ Nie udało się pobrać poświadczeń DB z sidecara", "error", err)
 		os.Exit(1)
 	}
 	defer cleanup()
 
-	// Weryfikacja i podpięcie poświadczeń DB
-	if bootCreds.Postgres == nil {
-		log.Error("❌ Sidecar nie zwrócił wymaganych poświadczeń do Postgresa")
+	// Weryfikacja poświadczeń DB
+	if dbCreds == nil {
+		log.Error("❌ Sidecar zwrócił pustą odpowiedź (brak poświadczeń do Postgresa)")
 		os.Exit(1)
 	}
 
-	log.Info("✅ Pomyślnie pobrano poświadczenia DB z sidecara", "username", bootCreds.Postgres.Username)
+	log.Info("✅ Pomyślnie pobrano poświadczenia DB z sidecara", "username", dbCreds.Username)
 
 	// Nadpisujemy konfigurację pobranymi danymi
-	config.AppConfig.Database.User = bootCreds.Postgres.Username
-	config.AppConfig.Database.Password = string(bootCreds.Postgres.Password)
-
-	// Opcjonalnie: obsługa Redisa / MinIO jeśli są zdefiniowane w bootstrapie
-	if bootCreds.Redis != nil {
-		config.AppConfig.Redis.Password = string(bootCreds.Redis.Password)
-	}
+	config.AppConfig.Database.User = dbCreds.Username
+	config.AppConfig.Database.Password = string(dbCreds.Password)
 
 	// 6. Database Init
 	db, closeDB := config.MustInitDB(config.AppConfig.Database)
@@ -112,9 +108,6 @@ func main() {
 
 	// Zerujemy wrażliwe dane z konfiguracji po ustanowieniu połączenia
 	config.AppConfig.Database.Password = ""
-	if bootCreds.Redis != nil {
-		config.AppConfig.Redis.Password = ""
-	}
 
 	// =========================================================================
 	// 6b. GOROUTINE ODŚWIEŻAJĄCA POŚWIADCZENIA W TLE (ROTACJA)

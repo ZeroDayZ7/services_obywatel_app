@@ -1,6 +1,14 @@
 # Git version control
 **/.git
+**/.github
 **/.gitignore
+**/templates
+**/docs
+**/Makefile
+**/README.md
+**/README.md
+**/*.code-workspace
+
 
 # Docker configuration files
 **/Dockerfile*
