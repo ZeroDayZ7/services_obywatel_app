@@ -58,5 +58,21 @@
   "go.formatTool": "gofumpt",
   "go.lintTool": "golangci-lint",
   "go.lintOnSave": "package",
-  "editor.rulers": [120, 150]
+  "editor.rulers": [120, 150],
+  "gopls": {
+    "ui.diagnostic.staticcheck": false,
+    "ui.navigation.importShortcut": "Definition",
+    "formatting.gofumpt": false, // Zwykłe gofmt jest znacznie szybsze niż gofumpt
+    // 3. Ignoruj katalogi buildów/tmp, żeby gopls ich nie indeksował!
+    "build.directoryFilters": [
+      "-**/node_modules",
+      "-**/.git",
+      "-**/dist",
+      "-**/bin",
+      "-**/tmp",
+      "-**/vendor"
+    ]
+  },
+  "go.vetOnSave": "off",      // Wyłącz go vet przy zapisie (niech robi to gopls w pamięci)
+  
 }

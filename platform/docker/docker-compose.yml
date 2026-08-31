@@ -37,19 +37,23 @@ services:
   auth-service:
     build:
       context: ../../
-      dockerfile: platform/services/auth-service/Dockerfile
-    image: auth-service:latest
+      dockerfile: platform/services/auth-service/Dockerfile.dev
+    image: auth-service:dev
     container_name: app-auth-service
     restart: ${DOCKER_RESTART_POLICY:-no}
-    working_dir: /app
+    working_dir: /src/platform/services/auth-service
     environment:
       - SECRET_AGENT_SOCKET_PATH=/var/run/agent-sockets/agent.sock
       - AUTH_SERVICE_CLIENT_ID=auth-service
+      - GOCACHE=/root/.cache/go-build
     volumes:
-      - ../services/auth:/app
-      - ../platform:/platform
-      - go-modules:/go/pkg
+      # Montowanie całego monorepo z Windowsa
+      - ../../:/src
+      # UDS Socket
       - socket-data:/var/run/agent-sockets:ro
+      # Cache Go
+      - go-build-cache:/root/.cache/go-build
+      - go-mod-cache:/go/pkg/mod
     ports:
       - "8082:8082"
     env_file:
@@ -346,6 +350,8 @@ volumes:
   socket-data:
     external: true
     name: secret_agent_sockets
+  go-build-cache:
+  go-mod-cache:
 
   # region networks
 networks:
