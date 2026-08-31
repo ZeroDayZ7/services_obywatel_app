@@ -68,25 +68,26 @@ func main() {
 			log.Error("Failed to close Redis client", "error", err)
 		}
 	}()
-
 	// =========================================================================
 	// 6a. POBIERANIE POŚWIADCZEŃ Z SIDECARA PRZEZ UDS (BOOTSTRAP + ROTACJA)
 	// =========================================================================
-	socketPath := config.AppConfig.Agent.SocketPath
+	kmsCfg := shared.Config{
+		SocketPath:    config.AppConfig.Agent.SocketPath,
+		TargetService: "auth_service",
+		Timeout:       5 * time.Second,
+	}
 
-	log.Info("🔌 Łączenie z secret-agent przez UDS...", "path", socketPath)
+	log.Info("🔌 Łączenie z secret-agent przez UDS...", "path", kmsCfg.SocketPath)
 
-	secretClient := shared.NewClient(socketPath, "auth_service")
-
-	// Pobieramy komplet poświadczeń na start (timeout 5s)
-	ctxCreds, cancelCreds := context.WithTimeout(context.Background(), 5*time.Second)
-	// bootCreds, err := secretClient.BootstrapApp(ctxCreds, []string{"postgres", "redis", "minio"})
-	bootCreds, err := secretClient.BootstrapApp(ctxCreds, []string{"postgres"})
+	// Pobieramy komplet poświadczeń na start
+	ctxCreds, cancelCreds := context.WithTimeout(context.Background(), kmsCfg.Timeout)
+	bootCreds, cleanup, err := shared.BootstrapApp(ctxCreds, kmsCfg, []string{"postgres"})
 	cancelCreds()
 	if err != nil {
 		log.Error("❌ Nie udało się przeprowadzić bootstrapu poświadczeń z sidecara", "error", err)
 		os.Exit(1)
 	}
+	defer cleanup()
 
 	// Weryfikacja i podpięcie poświadczeń DB
 	if bootCreds.Postgres == nil {
@@ -98,22 +99,21 @@ func main() {
 
 	// Nadpisujemy konfigurację pobranymi danymi
 	config.AppConfig.Database.User = bootCreds.Postgres.Username
-	config.AppConfig.Database.Password = bootCreds.Postgres.Password
+	config.AppConfig.Database.Password = string(bootCreds.Postgres.Password)
 
 	// Opcjonalnie: obsługa Redisa / MinIO jeśli są zdefiniowane w bootstrapie
 	if bootCreds.Redis != nil {
-		config.AppConfig.Redis.Password = bootCreds.Redis.Password
+		config.AppConfig.Redis.Password = string(bootCreds.Redis.Password)
 	}
 
 	// 6. Database Init
 	db, closeDB := config.MustInitDB(config.AppConfig.Database)
 	defer closeDB()
 
-	// Zerujemy wrażliwe dane z konfiguracji w pamięci podręcznej po ustanowieniu połączenia
+	// Zerujemy wrażliwe dane z konfiguracji po ustanowieniu połączenia
 	config.AppConfig.Database.Password = ""
-	bootCreds.Postgres.Password = ""
 	if bootCreds.Redis != nil {
-		bootCreds.Redis.Password = ""
+		config.AppConfig.Redis.Password = ""
 	}
 
 	// =========================================================================
@@ -122,7 +122,7 @@ func main() {
 	ctxApp, cancelApp := context.WithCancel(context.Background())
 	defer cancelApp()
 
-	go secretClient.StartPostgresRotationLoop(ctxApp, 30*time.Minute, database.NewGormAdapter(db))
+	go shared.StartPostgresRotationLoop(ctxApp, kmsCfg, 30*time.Minute, database.NewGormAdapter(db))
 	// =========================================================================
 	// 7. RabbitMQ Publisher Setup
 	// =========================================================================

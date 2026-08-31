@@ -17,7 +17,7 @@ func NewGormAdapter(db *gorm.DB) *GormAdapter {
 }
 
 // UpdateCredentials wykonuje zaktualizowanie DSN / połączenia w puli
-func (a *GormAdapter) UpdateCredentials(username, password string) error {
+func (a *GormAdapter) UpdateCredentials(username string, password []byte) error {
 	if a.db == nil {
 		return fmt.Errorf("instancja db jest nil")
 	}
@@ -27,8 +27,9 @@ func (a *GormAdapter) UpdateCredentials(username, password string) error {
 		return fmt.Errorf("błąd pobierania sql.DB z GORM: %w", err)
 	}
 
-	// Miejsce na ewentualną rejestrację nowych poświadczeń w sterowniku (np. pgxpool)
+	// TODO: Konfiguracja re-dialera / podmienienie poświadczeń w sterowniku (np. pgxpool.Config / Driver)
 	_ = sqlDB
-	// sqlDB.SetConnMaxLifetime(5 * time.Second)
+	_ = username
+
 	return nil
 }

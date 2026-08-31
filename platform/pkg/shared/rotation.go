@@ -6,13 +6,13 @@ import (
 	"time"
 )
 
-// PostgresRotatable definiuje interfejs dla puli DB, która potrafi przyjąć nowe hasło/DSN
+// PostgresRotatable definiuje interfejs dla puli DB, która potrafi przyjąć nowe poświadczenia
 type PostgresRotatable interface {
-	UpdateCredentials(username, password string) error
+	UpdateCredentials(username string, password []byte) error
 }
 
-// StartPostgresRotationLoop uruchamia powtarzalny proces w tle dla dowolnego serwisu
-func (c *Client) StartPostgresRotationLoop(ctx context.Context, interval time.Duration, db PostgresRotatable) {
+// StartPostgresRotationLoop uruchamia powtarzalny proces w tle dla rotacji poświadczeń DB
+func StartPostgresRotationLoop(ctx context.Context, cfg Config, interval time.Duration, db PostgresRotatable) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
@@ -25,7 +25,7 @@ func (c *Client) StartPostgresRotationLoop(ctx context.Context, interval time.Du
 			slog.Info("🔄 [SDK] Odświeżanie poświadczeń PostgreSQL z agenta...")
 
 			refreshCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-			newCreds, err := c.RefreshPostgres(refreshCtx)
+			newCreds, cleanup, err := RefreshPostgres(refreshCtx, cfg)
 			cancel()
 
 			if err != nil {
@@ -42,8 +42,8 @@ func (c *Client) StartPostgresRotationLoop(ctx context.Context, interval time.Du
 				}
 			}
 
-			// Natychmiast zerujemy nowe hasło ze zmiennej w pamięci RAM
-			newCreds.Password = ""
+			// Wyszyszczenie bajtów pamięci RAM po rotacji
+			cleanup()
 		}
 	}
 }

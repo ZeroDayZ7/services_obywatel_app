@@ -1,90 +1,159 @@
 package shared
 
 import (
-	"bufio"
 	"context"
+	"encoding/binary"
+	"errors"
 	"fmt"
+	"io"
 	"net"
-	"strings"
 	"time"
+
+	"github.com/vmihailenco/msgpack/v5"
 )
 
-// SecretResponse reprezentuje pobrane dane uwierzytelniające
-type SecretResponse struct {
-	Username string
-	Password string
+var (
+	ErrEmptyPayload   = errors.New("agent returned empty payload")
+	ErrCommandTooLong = errors.New("command payload exceeds maximum allowed size")
+)
+
+type Config struct {
+	SocketPath    string
+	TargetService string
+	Timeout       time.Duration
 }
 
-// Client obsługuje surową komunikację tekstową z secret-agent przez UDS
-type Client struct {
-	socketPath    string
-	targetService string // np. "postgres_auth"
+type PostgresCredentials struct {
+	Username string `msgpack:"username" json:"username"`
+	Password []byte `msgpack:"password" json:"password"`
 }
 
-// NewClient tworzy instancję klienta UDS
-func NewClient(socketPath string, targetService string) *Client {
-	if targetService == "" {
-		targetService = "postgres_auth" // Domyślny prefiks kluczy w cache
+type RedisCredentials struct {
+	Username string `msgpack:"username,omitempty" json:"username,omitempty"`
+	Password []byte `msgpack:"password" json:"password"`
+}
+
+type MinioCredentials struct {
+	AccessKey string `msgpack:"access_key" json:"access_key"`
+	SecretKey []byte `msgpack:"secret_key" json:"secret_key"`
+}
+
+type FullBootstrapResponse struct {
+	Postgres *PostgresCredentials `msgpack:"postgres,omitempty" json:"postgres,omitempty"`
+	Redis    *RedisCredentials    `msgpack:"redis,omitempty" json:"redis,omitempty"`
+	Minio    *MinioCredentials    `msgpack:"minio,omitempty" json:"minio,omitempty"`
+}
+
+// Zeroize czyszczenie wrażliwych bajtów z pamięci RAM w miejscu
+func Zeroize(b []byte) {
+	for i := range b {
+		b[i] = 0
 	}
-	return &Client{
-		socketPath:    socketPath,
-		targetService: targetService,
-	}
 }
 
-// getSecret wysyła zapytanie o pojedynczy klucz do agenta
-func (c *Client) getSecret(ctx context.Context, key string) (string, error) {
-	var d net.Dialer
-	conn, err := d.DialContext(ctx, "unix", c.socketPath)
+// BootstrapApp pobiera komplet sekretów za pomocą protokołu binarnego MessagePack przez UDS.
+// Zwraca wskaźnik na strukturę oraz funkcję cleanup(), którą wywołujesz w `defer`.
+func BootstrapApp(ctx context.Context, cfg Config, requiredServices []string) (*FullBootstrapResponse, func(), error) {
+	reqMap := map[string]any{
+		"target_service": cfg.TargetService,
+		"services":       requiredServices,
+	}
+
+	reqBytes, err := msgpack.Marshal(reqMap)
 	if err != nil {
-		return "", fmt.Errorf("błąd połączenia z gniazdem UDS (%s): %w", c.socketPath, err)
+		return nil, func() {}, fmt.Errorf("błąd binarnej serializacji żądania bootstrap: %w", err)
+	}
+
+	cmdPayload := append([]byte("BOOTSTRAP "), reqBytes...)
+
+	rawResp, err := ExecCommand(ctx, cfg.SocketPath, cfg.Timeout, cmdPayload)
+	if err != nil {
+		return nil, func() {}, fmt.Errorf("bootstrap nie powiódł się: %w", err)
+	}
+
+	var response FullBootstrapResponse
+	if err := msgpack.Unmarshal(rawResp, &response); err != nil {
+		Zeroize(rawResp)
+		return nil, func() {}, fmt.Errorf("błąd deserializacji binarnej response: %w", err)
+	}
+
+	cleanup := func() {
+		Zeroize(rawResp)
+		if response.Postgres != nil {
+			Zeroize(response.Postgres.Password)
+		}
+		if response.Redis != nil {
+			Zeroize(response.Redis.Password)
+		}
+		if response.Minio != nil {
+			Zeroize(response.Minio.SecretKey)
+		}
+	}
+
+	return &response, cleanup, nil
+}
+
+// RefreshPostgres pobiera odświeżone dane wyłącznie dla bazy danych Postgres.
+func RefreshPostgres(ctx context.Context, cfg Config) (*PostgresCredentials, func(), error) {
+	cmdPayload := fmt.Appendf(nil, "REFRESH %s postgres", cfg.TargetService)
+
+	rawResp, err := ExecCommand(ctx, cfg.SocketPath, cfg.Timeout, cmdPayload)
+	if err != nil {
+		return nil, func() {}, fmt.Errorf("rotacja poświadczeń DB nie powiodła się: %w", err)
+	}
+
+	var creds PostgresCredentials
+	if err := msgpack.Unmarshal(rawResp, &creds); err != nil {
+		Zeroize(rawResp)
+		return nil, func() {}, fmt.Errorf("błąd deserializacji postgres creds: %w", err)
+	}
+
+	cleanup := func() {
+		Zeroize(rawResp)
+		Zeroize(creds.Password)
+	}
+
+	return &creds, cleanup, nil
+}
+
+// ExecCommand realizuje binarny protokół UDS IPC w standardzie Length-Delimited:
+// Wysyłanie: [4 bajty BigEndian u32 długość][payload polecenia]
+// Odpowiedź:  [4 bajty BigEndian u32 długość][payload odpowiedzi]
+func ExecCommand(ctx context.Context, socketPath string, timeout time.Duration, commandPayload []byte) ([]byte, error) {
+	var d net.Dialer
+	conn, err := d.DialContext(ctx, "unix", socketPath)
+	if err != nil {
+		return nil, fmt.Errorf("błąd połączenia z UDS: %w", err)
 	}
 	defer conn.Close()
 
-	if deadline, ok := ctx.Deadline(); ok {
-		_ = conn.SetDeadline(deadline)
-	} else {
-		_ = conn.SetDeadline(time.Now().Add(3 * time.Second))
+	if timeout > 0 {
+		_ = conn.SetDeadline(time.Now().Add(timeout))
 	}
 
-	// 1. Wysyłamy klucz: <KEY>\n
-	if _, err := fmt.Fprintf(conn, "%s\n", key); err != nil {
-		return "", fmt.Errorf("błąd zapisu klucza [%s] do socketu: %w", key, err)
+	reqLen := uint32(len(commandPayload))
+	if err := binary.Write(conn, binary.BigEndian, reqLen); err != nil {
+		return nil, fmt.Errorf("błąd zapisu nagłówka długości: %w", err)
 	}
 
-	// 2. Odczytujemy odpowiedź: OK <VALUE>\n lub ERR <REASON>\n
-	reader := bufio.NewReader(conn)
-	response, err := reader.ReadString('\n')
-	if err != nil {
-		return "", fmt.Errorf("błąd odczytu odpowiedzi dla klucza [%s]: %w", key, err)
+	if _, err := conn.Write(commandPayload); err != nil {
+		return nil, fmt.Errorf("błąd zapisu payloadu polecenia: %w", err)
 	}
 
-	response = strings.TrimSpace(response)
-
-	if after, ok := strings.CutPrefix(response, "OK "); ok {
-		return after, nil
+	var respLen uint32
+	if err := binary.Read(conn, binary.BigEndian, &respLen); err != nil {
+		return nil, fmt.Errorf("błąd odczytu długości ramki odpowiedzi: %w", err)
 	}
 
-	return "", fmt.Errorf("secret-agent zwrócił błąd dla [%s]: %s", key, response)
-}
-
-// GetCredentials pobiera login i hasło dla skonfigurowanej usługi
-func (c *Client) GetCredentials(ctx context.Context) (*SecretResponse, error) {
-	userKey := fmt.Sprintf("%s_username", c.targetService)
-	passKey := fmt.Sprintf("%s_password", c.targetService)
-
-	username, err := c.getSecret(ctx, userKey)
-	if err != nil {
-		return nil, fmt.Errorf("pobieranie username nie powiodło się: %w", err)
+	if respLen == 0 {
+		return nil, ErrEmptyPayload
 	}
 
-	password, err := c.getSecret(ctx, passKey)
-	if err != nil {
-		return nil, fmt.Errorf("pobieranie password nie powiodło się: %w", err)
+	respBuf := make([]byte, respLen)
+	if _, err := io.ReadFull(conn, respBuf); err != nil {
+		Zeroize(respBuf)
+		return nil, fmt.Errorf("błąd odczytu bajtów payloadu z UDS: %w", err)
 	}
 
-	return &SecretResponse{
-		Username: username,
-		Password: password,
-	}, nil
+	return respBuf, nil
 }
