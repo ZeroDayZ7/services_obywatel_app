@@ -8,7 +8,7 @@ TARGET_ROLE="kms_auth-service_postgres_auth"
 MAIN_DB_USER="${POSTGRES_USER:-postgres}"
 
 psql -v ON_ERROR_STOP=1 --username "$MAIN_DB_USER" --dbname "$TARGET_DB" <<-EOSQL
-    -- 1. Tworzenie kms_admin oraz roli grupowej z flagą INHERIT
+    -- 1. Tworzenie użytkownika KMS (zarządcy ról) oraz roli aplikacyjnej (NOLOGIN)
     DO \$block\$
     BEGIN
         IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '$KMS_USER') THEN
@@ -23,49 +23,35 @@ psql -v ON_ERROR_STOP=1 --username "$MAIN_DB_USER" --dbname "$TARGET_DB" <<-EOSQ
     END
     \$block\$;
 
-    -- 2. Nadanie pełnych praw do bazy i schematu public
-    GRANT ALL PRIVILEGES ON DATABASE "$TARGET_DB" TO "$KMS_USER";
-    GRANT ALL PRIVILEGES ON DATABASE "$TARGET_DB" TO "$TARGET_ROLE";
+    -- 2. Dostęp do bazy i schematu public (tylko USAGE, bez prawa CREATE w schemacie)
+    GRANT CONNECT ON DATABASE "$TARGET_DB" TO "$TARGET_ROLE";
+    GRANT USAGE ON SCHEMA public TO "$TARGET_ROLE";
     
+    -- Dostęp administracyjny dla KMS_USER (potrzebny do zarzadzania obiektami/reassign)
+    GRANT ALL PRIVILEGES ON DATABASE "$TARGET_DB" TO "$KMS_USER";
     GRANT ALL ON SCHEMA public TO "$KMS_USER";
-    GRANT ALL ON SCHEMA public TO "$TARGET_ROLE";
 
-    -- 3. Przypisanie praw do ISTNIEJĄCYCH tabel i sekwencji dla TARGET_ROLE
-    GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO "$TARGET_ROLE";
-    GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO "$TARGET_ROLE";
+    -- 3. Nadanie stricte operacyjnych uprawnień DML do ISTNIEJĄCYCH tabel i sekwencji
+    GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO "$TARGET_ROLE";
+    GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO "$TARGET_ROLE";
 
-    -- Przypisanie praw również dla KMS_USER
+    -- KMS_USER otrzymuje pełne uprawnienia do tabel
     GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO "$KMS_USER";
     GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO "$KMS_USER";
 
-    -- Przekazanie własności istniejących tabel do TARGET_ROLE
-    DO \$block\$
-    DECLARE
-        r RECORD;
-    BEGIN
-        FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP
-            EXECUTE format('ALTER TABLE public.%I OWNER TO %I', r.tablename, '$TARGET_ROLE');
-        END LOOP;
-        
-        FOR r IN (SELECT sequence_name FROM information_schema.sequences WHERE sequence_schema = 'public') LOOP
-            EXECUTE format('ALTER SEQUENCE public.%I OWNER TO %I', r.sequence_name, '$TARGET_ROLE');
-        END LOOP;
-    END
-    \$block\$;
+    -- 4. Ustawienie domyślnych uprawnień dla NOWO TWORZONYCH tabel (np. przy migracjach)
+    -- Gdy tabele tworzy główny użytkownik bazy (MAIN_DB_USER / postgres):
+    ALTER DEFAULT PRIVILEGES FOR ROLE "$MAIN_DB_USER" IN SCHEMA public 
+        GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "$TARGET_ROLE";
+    ALTER DEFAULT PRIVILEGES FOR ROLE "$MAIN_DB_USER" IN SCHEMA public 
+        GRANT USAGE, SELECT ON SEQUENCES TO "$TARGET_ROLE";
 
-    -- 4. Domyślne uprawnienia dla NOWO TWORZONYCH tabel i sekwencji
-    -- Kiedy cokolwiek tworzy MAIN_DB_USER
-    ALTER DEFAULT PRIVILEGES FOR ROLE "$MAIN_DB_USER" IN SCHEMA public GRANT ALL ON TABLES TO "$TARGET_ROLE";
-    ALTER DEFAULT PRIVILEGES FOR ROLE "$MAIN_DB_USER" IN SCHEMA public GRANT ALL ON SEQUENCES TO "$TARGET_ROLE";
+    -- Gdy tabele tworzy KMS_USER:
+    ALTER DEFAULT PRIVILEGES FOR ROLE "$KMS_USER" IN SCHEMA public 
+        GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "$TARGET_ROLE";
+    ALTER DEFAULT PRIVILEGES FOR ROLE "$KMS_USER" IN SCHEMA public 
+        GRANT USAGE, SELECT ON SEQUENCES TO "$TARGET_ROLE";
 
-    -- Kiedy cokolwiek tworzy KMS_USER
-    ALTER DEFAULT PRIVILEGES FOR ROLE "$KMS_USER" IN SCHEMA public GRANT ALL ON TABLES TO "$TARGET_ROLE";
-    ALTER DEFAULT PRIVILEGES FOR ROLE "$KMS_USER" IN SCHEMA public GRANT ALL ON SEQUENCES TO "$TARGET_ROLE";
-
-    -- Kiedy cokolwiek jest tworzone przez TARGET_ROLE
-    ALTER DEFAULT PRIVILEGES FOR ROLE "$TARGET_ROLE" IN SCHEMA public GRANT ALL ON TABLES TO "$TARGET_ROLE";
-    ALTER DEFAULT PRIVILEGES FOR ROLE "$TARGET_ROLE" IN SCHEMA public GRANT ALL ON SEQUENCES TO "$TARGET_ROLE";
-
-    -- 5. Nadanie praw zarządzania rolą TARGET_ROLE dla KMS_USER
+    -- 5. Nadanie praw zarządzania rolą TARGET_ROLE dla KMS_USER (wymagane do GRANT/REVOKE w Rust)
     GRANT "$TARGET_ROLE" TO "$KMS_USER" WITH ADMIN OPTION;
 EOSQL
