@@ -29,7 +29,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	log.Info("CFG:", cfg)
+	// log.Info("CFG:", cfg)
 
 	dbPool, closeDB := config.MustInitDB(cfg.Database)
 	defer closeDB()

@@ -28,15 +28,15 @@ type Config struct {
 	KMS                   viper.KMSConfig      `mapstructure:",squash"`
 	OTEL                  viper.OTELConfig     `mapstructure:",squash"`
 	Shutdown              time.Duration        `mapstructure:"SHUTDOWN_TIMEOUT" validate:"required"`
-	AuthServiceURL        string               `mapstructure:"AUTH_SERVICE_URL" validate:"required"`
-	IdentityServiceURL    string               `mapstructure:"IDENTITY_SERVICE_URL" validate:"required"`
-	CitizenDocsServiceURL string               `mapstructure:"CITIZEN_DOCS_SERVICE_URL" validate:"required"`
+	AuthServiceURL        string               `mapstructure:"AUTH_SERVICE_URL"`
+	IdentityServiceURL    string               `mapstructure:"IDENTITY_SERVICE_URL"`
+	CitizenDocsServiceURL string               `mapstructure:"CITIZEN_DOCS_SERVICE_URL"`
 
 	AccessTokenTTL  time.Duration `mapstructure:"AUTH_ACCESS_TOKEN_TTL" validate:"required"`
 	RefreshTokenTTL time.Duration `mapstructure:"AUTH_REFRESH_TOKEN_TTL" validate:"required"`
 }
 
-//#region ToKMSServiceConfig
+// #region ToKMSServiceConfig
 func (c *Config) ToKMSServiceConfig() kms.Config {
 	return c.KMS.ToKMSServiceConfig()
 }
@@ -74,7 +74,7 @@ func SetBFFDefaults() {
 	})
 }
 
-//#region LoadConfigGlobal
+// #region LoadConfigGlobal
 func Load() (*Config, error) {
 	log := shared.GetLogger()
 
