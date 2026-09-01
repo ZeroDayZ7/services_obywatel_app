@@ -18,7 +18,6 @@ func SetupAuthRoutes(
 ) {
 	auth := app.Group("/auth")
 	auth.Use(shared.GetLimiter(shared.LimitAuth, nil))
-
 	// ==========================
 	// LOGIN / REGISTER / JWT
 	// ==========================

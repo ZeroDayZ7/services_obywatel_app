@@ -57,6 +57,7 @@
   },
   "go.formatTool": "gofumpt",
   "go.lintTool": "golangci-lint",
+  "evenBetterToml.schema.enabled": false,
   "go.lintOnSave": "package",
   "editor.rulers": [120, 150],
   "gopls": {

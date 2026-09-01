@@ -9,6 +9,10 @@ import (
 
 //#region AutoMigrate
 func AutoMigrate(db *gorm.DB) error {
+	if db.Migrator().HasTable(&model.User{}) {
+		return nil
+	}
+
 	if err := db.AutoMigrate(
 		&model.User{},
 		&model.RefreshToken{},
