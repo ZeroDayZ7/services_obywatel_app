@@ -37,6 +37,8 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(c.UserContext(), 2*time.Second)
 	defer cancel()
 	log := shared.GetLogger()
+	log.Error("DUPA", "DUPA")
+	// log.Info("DUPA", "DUPA")
 
 	body := c.Locals("validatedBody").(schemas.LoginRequest)
 	rc := reqctx.MustFromFiber(c)

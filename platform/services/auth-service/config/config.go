@@ -16,6 +16,10 @@ type AuthConfig struct {
 	Domain string `mapstructure:"AUTH_DOMAIN" validate:"required"`
 }
 
+type AgentConfig struct {
+	SocketPath string `mapstructure:"SECRET_AGENT_SOCKET_PATH"`
+}
+
 type KeyTarget struct {
 	TargetKey string `mapstructure:"target_key"`
 	Algorithm string `mapstructure:"algorithm"`
@@ -50,6 +54,7 @@ type Config struct {
 	RabbitConsumers RabbitMQConsumersConfig `mapstructure:",squash"`
 	KMS             viper.KMSConfig         `mapstructure:",squash"`
 	JWT             JWTConfig               `mapstructure:",squash"`
+	Agent           AgentConfig             `mapstructure:",squash"`
 	Shutdown        time.Duration           `mapstructure:"SHUTDOWN_TIMEOUT" validate:"required"`
 }
 
@@ -74,6 +79,9 @@ func LoadConfigGlobal() error {
 	viper.SetDBDefaults()
 	viper.SetRedisDefaults()
 	viper.SetKMSDefaults()
+
+	// W LoadConfigGlobal() dopisz na początku:
+	spfViper.SetDefault("SECRET_AGENT_SOCKET_PATH", "/var/run/agent-sockets/agent.sock")
 
 	spfViper.SetDefault("HMAC_TARGET_KEYS", map[string]KeyTarget{
 		"gateway": {

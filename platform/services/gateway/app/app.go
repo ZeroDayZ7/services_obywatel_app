@@ -7,6 +7,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/compress"
 	"github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/gofiber/fiber/v2/middleware/favicon"
 	"github.com/gofiber/fiber/v2/middleware/helmet"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/gofiber/fiber/v2/middleware/requestid"
@@ -60,8 +61,8 @@ func NewGatewayApp(container *di.Container) (*fiber.App, error) {
 	app.Use(shared.GetLimiter(shared.LimitGlobal, storage))
 	app.Use(compress.New(config.CompressConfig()))
 	// app.Use(shared.RequestLoggerMiddleware())
-
-	app.Use(config.JWTMiddlewareWithExclusions())
+	app.Use(favicon.New())
+	app.Use(config.JWTMiddleware())
 	app.Use(middleware.AuthRedisMiddleware(container.Cache))
 	app.Use(middleware.ContextBuilder(container))
 

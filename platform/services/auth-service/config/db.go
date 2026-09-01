@@ -19,12 +19,12 @@ func MustInitDB(cfg viper.DBConfig) (*gorm.DB, func()) {
 		panic(err)
 	}
 
-	// 3. Wykonanie AutoMigrate dla modeli
+	// // 3. Wykonanie AutoMigrate dla modeli
 	if err := AutoMigrate(db); err != nil {
 		panic(err)
 	}
 
-	// 4. Uruchomienie seedera
+	// // 4. Uruchomienie seedera
 	if err := SeedData(db); err != nil {
 		panic(err)
 	}

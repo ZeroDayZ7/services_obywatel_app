@@ -6,71 +6,71 @@ x-common-settings: &common-settings
     - citizen-app-net
 
 services:
-  # region  Agent GATEWAY
-  # agent-gateway:
-  #   image: secret-agent:latest
-  #   environment:
-  #     - SECRET_AGENT_CLIENT_ID=gateway-service
-  #     - SECRET_AGENT_SOCKET_PATH=/var/run/agent-sockets/agent.sock
-  #   volumes:
-  #     - socket-gateway:/var/run/agent-sockets
-
-  # # region  Agent IDENTITY
-  # agent-identity:
-  #   image: secret-agent:latest
-  #   environment:
-  #     - SECRET_AGENT_CLIENT_ID=identity-service
-  #     - SECRET_AGENT_SOCKET_PATH=/var/run/agent-sockets/agent.sock
-  #   volumes:
-  #     - socket-identity:/var/run/agent-sockets
-  # region GATEWAY
+  # region SVC GATEWAY
   # --- GATEWAY ---
   gateway:
-    image: golang:1.27-alpine3.23
+    build:
+      context: ../../
+      dockerfile: platform/services/gateway/Dockerfile.dev
+    image: gateway:dev
     container_name: app-gateway
     restart: ${DOCKER_RESTART_POLICY:-no}
-    working_dir: /app
+    working_dir: /app/services/gateway
     environment:
-    - ENV=${APP_ENV:-development}
+      - GOCACHE=/root/.cache/go-build
+      - GOWORK=off
     volumes:
-      - ../services/gateway:/app
-      - ../platform:/platform
-      - go-modules:/go/pkg
+      - ../services/gateway:/app/services/gateway
+      - ../pkg:/app/pkg
+      - ../go.work:/app/go.work
+      - ../go.work.sum:/app/go.work.sum
+      - go-build-cache:/root/.cache/go-build
+      - go-mod-cache:/go/pkg/mod
     ports:
-      - "8080:8080"
+      - "8080:8090"
+    env_file:
+      - ../services/gateway/.env.test
     networks:
       - gateway-net
+      - target-admin-net
+      - cache-net
     depends_on:
-      db-auth:
-        condition: service_healthy
       cache-redis:
         condition: service_started
 
-  # region AUTH SERVICE
+  # region SVC AUTH
   # --- AUTHENTICATION SERVICE ---
   auth-service:
-    # Build lokalny z kodu źródłowego:
-    # build:
-    #   context: ../services/auth
-    #   dockerfile: Dockerfile
-    image: golang:1.27-alpine3.23
+    build:
+      context: ../../
+      dockerfile: platform/services/auth-service/Dockerfile.dev
+    image: auth-service:dev
     container_name: app-auth-service
     restart: ${DOCKER_RESTART_POLICY:-no}
-    working_dir: /app
+    working_dir: /app/services/auth-service
     environment:
       - SECRET_AGENT_SOCKET_PATH=/var/run/agent-sockets/agent.sock
       - AUTH_SERVICE_CLIENT_ID=auth-service
-      - ENV=${APP_ENV:-development}
+      - GOCACHE=/root/.cache/go-build
+      - GOWORK=off
     volumes:
-      - ../services/auth:/app
-      - ../platform:/platform
-      - go-modules:/go/pkg
-      - secret_agent_sockets:/var/run/agent-sockets:ro
+      - ../services/auth-service:/app/services/auth-service
+      - ../pkg:/app/pkg
+      - ../go.work:/app/go.work
+      - ../go.work.sum:/app/go.work.sum
+      - socket-data:/var/run/agent-sockets:ro
+      # Cache Go
+      - go-build-cache:/root/.cache/go-build
+      - go-mod-cache:/go/pkg/mod
     ports:
-      - "8081:8081"
+      - "8082:8082"
+    env_file:
+      - ../services/auth-service/.env.test
     networks:
       - gateway-net
       - auth-db-net
+      - sec-net
+      - cache-net
     depends_on:
       db-auth:
         condition: service_healthy
@@ -79,7 +79,7 @@ services:
   # --- AUTHENTICATION DATABASE ---
   db-auth:
     image: postgres:18.3-alpine
-    container_name: db-test
+    container_name: db-auth
     restart: ${DOCKER_RESTART_POLICY:-no}
     environment:
       POSTGRES_USER: ${AUTH_DB_ROOT_USER:-auth_db_root}
@@ -89,47 +89,19 @@ services:
     secrets:
       - auth_db_root_pass
       - kms_admin_pass
-    ports: 
+    ports:
       - "5450:5432"
     networks:
-        - gateway-net
-        - target-admin-net
-        - auth-db-net
+      - target-admin-net
+      - auth-db-net
     volumes:
-      - pg_test_data:/var/lib/postgresql
+      - pg_auth_data:/var/lib/postgresql
       - ./scripts/init-kms-admin.sh:/docker-entrypoint-initdb.d/01-init-kms-admin.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 10s
       timeout: 5s
       retries: 5
-      
-# region TEST
-  db-test:
-      image: postgres:18.3-alpine
-      container_name: db-test
-      environment:
-        POSTGRES_USER: ${AUTH_DB_ROOT_USER:-auth_db_root}
-        POSTGRES_DB: ${AUTH_DB_NAME:-auth_database}
-        POSTGRES_PASSWORD_FILE: /run/secrets/auth_db_root_pass
-        KMS_ADMIN_USER: ${KMS_ADMIN_USER:-kms_admin}
-      secrets:
-        - auth_db_root_pass
-        - kms_admin_pass
-      ports: 
-        - "5450:5432"
-      volumes:
-        - pg_test_data:/var/lib/postgresql
-        - ./scripts/init-kms-admin.sh:/docker-entrypoint-initdb.d/01-init-kms-admin.sh:ro
-      restart: ${DOCKER_RESTART_POLICY:-no}
-      networks:
-        - target-admin-net
-        - auth-db-net
-      healthcheck:
-        test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
-        interval: 10s
-        timeout: 5s
-        retries: 5
 
   # region db-notification
   # --- NOTIFICATION DATABASE ---
@@ -255,6 +227,8 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    networks:
+      - cache-net
 
     # region rabbitmq
   rabbitmq:
@@ -272,7 +246,7 @@ services:
       - rabbitmq_root_pass
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
-  
+
   # region STORAGE S3
   minio:
     <<: *common-settings
@@ -341,9 +315,9 @@ services:
   # region secrets
 secrets:
   auth_db_root_pass:
-    file: ./secrets/.auth_db_password     # HeadAdmin
+    file: ./secrets/.auth_db_password # HeadAdmin
   kms_admin_pass:
-    file: ./secrets/.kms_admin_auth_pass  # Admin for KMS
+    file: ./secrets/.kms_admin_auth_pass # Admin for KMS
   citizen_db_pass:
     file: ./secrets/.citizen_db_password
   notify_db_pass:
@@ -381,9 +355,11 @@ volumes:
   go-modules:
   rabbitmq_data:
   minio_data:
-  secret_agent_sockets:
+  socket-data:
     external: true
     name: secret_agent_sockets
+  go-build-cache:
+  go-mod-cache:
 
   # region networks
 networks:
@@ -393,6 +369,11 @@ networks:
   auth-db-net:
     name: app_auth_db_net
     driver: bridge
+    internal: false
+  cache-net:
+    name: app_cache_net
+    driver: bridge
+    internal: false
   target-admin-net:
     name: kms_target-admin-net
     external: true

@@ -3,8 +3,7 @@
   "files.exclude": {
     "**/go.work.sum": true,
     "**/go.sum": true,
-    "**/go.mod": true,
-    "**/logs/": true,
+    // "**/go.mod": true,
     "**/bin/": true,
     // "**/dbgen/": true,
     "**/backup/": true,
@@ -14,17 +13,17 @@
     "**/LICENSE": true,
     "**/SECURITY.md": true,
     "**/.gitattributes": true,
-    "**/.gitignore": true,
+    // "**/.gitignore": true,
     "**/.github": true,
-    "**/.dockerignore": true,
-    "**/Dockerfile": true,
+    // "**/.dockerignore": true,
+    // "**/Dockerfile": true,
     "**/obywatel-app.code-workspace": true,
 
     "**/admin-bff": true,
     "**/audit-service": true,
-    // "**/citizen-docs": true,
+    "**/citizen-docs": true,
     "**/delegation-service": true,
-    // "**/messaging-service": true,
+    "**/messaging-service": true,
     "**/notification-service": true,
     "**/tally-service": true,
     "**/version-service": true,
@@ -58,6 +57,23 @@
   },
   "go.formatTool": "gofumpt",
   "go.lintTool": "golangci-lint",
+  "evenBetterToml.schema.enabled": false,
   "go.lintOnSave": "package",
-  "editor.rulers": [120, 150]
+  "editor.rulers": [120, 150],
+  "gopls": {
+    "ui.diagnostic.staticcheck": false,
+    "ui.navigation.importShortcut": "Definition",
+    "formatting.gofumpt": false, // Zwykłe gofmt jest znacznie szybsze niż gofumpt
+    // 3. Ignoruj katalogi buildów/tmp, żeby gopls ich nie indeksował!
+    "build.directoryFilters": [
+      "-**/node_modules",
+      "-**/.git",
+      "-**/dist",
+      "-**/bin",
+      "-**/tmp",
+      "-**/vendor"
+    ]
+  },
+  "go.vetOnSave": "off",      // Wyłącz go vet przy zapisie (niech robi to gopls w pamięci)
+  
 }

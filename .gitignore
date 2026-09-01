@@ -7,12 +7,14 @@
 
 # Ignore binary outputs
 **/bin/*
+**/tmp
 
 # Ignore logs
+**/dev-card.json
 **/logs/
 **/combined.txt
 **/temp.md
 **/temp
 **/pgadmin_data/
-*.drawio.bkp
+**/*.drawio.bkp
 .$*.bkp

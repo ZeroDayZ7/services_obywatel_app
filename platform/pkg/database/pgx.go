@@ -10,8 +10,8 @@ import (
 	"github.com/zerodayz7/platform/pkg/viper"
 )
 
-// NewPgxPool tworzy pulę połączeń pgxpool bez zatrzymywania aplikacji przy błędzie.
 //#region NewPgxPool
+// NewPgxPool tworzy pulę połączeń pgxpool bez zatrzymywania aplikacji przy błędzie.
 func NewPgxPool(cfg viper.DBConfig) (*pgxpool.Pool, func(), error) {
 	log := shared.GetLogger()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -50,8 +50,8 @@ func NewPgxPool(cfg viper.DBConfig) (*pgxpool.Pool, func(), error) {
 	return dbPool, cleanup, nil
 }
 
-// MustInitDB to wrapper panikujący na starcie (bootstrapper dla pgxpool).
 //#region MustInitDB
+// MustInitDB to wrapper panikujący na starcie (bootstrapper dla pgxpool).
 func MustInitDB(cfg viper.DBConfig) (*pgxpool.Pool, func()) {
 	pool, cleanup, err := NewPgxPool(cfg)
 	if err != nil {
@@ -60,8 +60,8 @@ func MustInitDB(cfg viper.DBConfig) (*pgxpool.Pool, func()) {
 	return pool, cleanup
 }
 
-// EnsureSchemasPgx tworzy schematy w PostgreSQL dla połączenia pgxpool.
 //#region EnsureSchemasPgx
+// EnsureSchemasPgx tworzy schematy w PostgreSQL dla połączenia pgxpool.
 func EnsureSchemasPgx(ctx context.Context, pool *pgxpool.Pool, schemas ...string) error {
 	for _, schema := range schemas {
 		if schema == "" || schema == "public" {

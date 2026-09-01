@@ -5,6 +5,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/zerodayz7/platform/pkg/database"
 	"github.com/zerodayz7/platform/pkg/httpserver"
 	"github.com/zerodayz7/platform/pkg/rabbitmq"
 	"github.com/zerodayz7/platform/pkg/redis"
@@ -15,6 +16,7 @@ import (
 	"github.com/zerodayz7/platform/services/auth-service/config"
 	"github.com/zerodayz7/platform/services/auth-service/internal/di"
 	"github.com/zerodayz7/platform/services/auth-service/internal/router"
+	"github.com/zerodayz7/platform/services/auth-service/internal/security"
 )
 
 //#region main
@@ -40,7 +42,7 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	rabbitHMACKey, err := LoadSecurityKeys(ctx, &config.AppConfig, keyStore)
+	rabbitHMACKey, err := security.LoadSecurityKeys(ctx, &config.AppConfig, keyStore)
 	if err != nil {
 		log.Error("❌ Nie udało się załadować kluczy bezpieczeństwa z KMS", "error", err)
 		os.Exit(1)
@@ -66,11 +68,54 @@ func main() {
 			log.Error("Failed to close Redis client", "error", err)
 		}
 	}()
+	// =========================================================================
+	// 6a. POBIERANIE POŚWIADCZEŃ Z SIDECARA PRZEZ UDS (BEZPOŚREDNIO)
+	// =========================================================================
+	kmsCfg := shared.Config{
+		SocketPath: config.AppConfig.Agent.SocketPath,
+		Timeout:    5 * time.Second,
+	}
 
-	// 6. Database
+	log.Info("🔌 Łączenie z secret-agent przez UDS...", "path", kmsCfg.SocketPath)
+
+	cacheKey := "postgres_auth_auth_database"
+
+	ctxCreds, cancelCreds := context.WithTimeout(context.Background(), kmsCfg.Timeout)
+	dbCreds, cleanup, err := shared.FetchAgentSecret(ctxCreds, kmsCfg, cacheKey)
+	cancelCreds()
+
+	if err != nil {
+		log.Error("❌ Nie udało się pobrać poświadczeń DB z sidecara", "error", err)
+		os.Exit(1)
+	}
+	defer cleanup()
+
+	// Weryfikacja poświadczeń DB
+	if dbCreds == nil {
+		log.Error("❌ Sidecar zwrócił pustą odpowiedź (brak poświadczeń do Postgresa)")
+		os.Exit(1)
+	}
+
+	log.Info("✅ Pomyślnie pobrano poświadczenia DB z sidecara", "username", dbCreds.Username)
+
+	// Nadpisujemy konfigurację pobranymi danymi
+	config.AppConfig.Database.User = dbCreds.Username
+	config.AppConfig.Database.Password = string(dbCreds.Password)
+
+	// 6. Database Init
 	db, closeDB := config.MustInitDB(config.AppConfig.Database)
 	defer closeDB()
 
+	// Zerujemy wrażliwe dane z konfiguracji po ustanowieniu połączenia
+	config.AppConfig.Database.Password = ""
+
+	// =========================================================================
+	// 6b. GOROUTINE ODŚWIEŻAJĄCA POŚWIADCZENIA W TLE (ROTACJA)
+	// =========================================================================
+	ctxApp, cancelApp := context.WithCancel(context.Background())
+	defer cancelApp()
+
+	go shared.StartPostgresRotationLoop(ctxApp, kmsCfg, 30*time.Minute, database.NewGormAdapter(db))
 	// =========================================================================
 	// 7. RabbitMQ Publisher Setup
 	// =========================================================================

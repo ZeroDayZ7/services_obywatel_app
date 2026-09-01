@@ -5,9 +5,10 @@ KMS_USER="${KMS_ADMIN_USER:-kms_admin}"
 KMS_PASSWORD=$(cat /run/secrets/kms_admin_pass)
 TARGET_DB="${POSTGRES_DB:-auth_database}"
 TARGET_ROLE="kms_auth-service_postgres_auth"
+MAIN_DB_USER="${POSTGRES_USER:-postgres}"
 
-psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$TARGET_DB" <<-EOSQL
-    -- 1. Tworzenie użytkownika kms_admin z prawem CREATEROLE oraz roli grupowej
+psql -v ON_ERROR_STOP=1 --username "$MAIN_DB_USER" --dbname "$TARGET_DB" <<-EOSQL
+    -- 1. Tworzenie użytkownika kms_admin i roli grupowej
     DO \$block\$
     BEGIN
         IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '$KMS_USER') THEN
@@ -16,35 +17,42 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$TARGET_DB" <<-EOS
             EXECUTE format('ALTER USER %I WITH CREATEROLE PASSWORD %L', '$KMS_USER', '$KMS_PASSWORD');
         END IF;
 
-        -- Tworzenie roli grupowej, do której KMS będzie przypisywał tymczasowych userów
         IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '$TARGET_ROLE') THEN
             EXECUTE format('CREATE ROLE %I NOLOGIN', '$TARGET_ROLE');
         END IF;
     END
     \$block\$;
 
-    -- 2. Nadanie praw do bazy danych dla KMS
+    -- 2. Nadanie praw do bazy i schematu public
     GRANT ALL PRIVILEGES ON DATABASE "$TARGET_DB" TO "$KMS_USER";
-
-    -- 3. Nadanie praw do schematu public i istniejących tabel dla KMS
+    GRANT ALL PRIVILEGES ON DATABASE "$TARGET_DB" TO "$TARGET_ROLE";
     GRANT ALL ON SCHEMA public TO "$KMS_USER";
-    GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO "$KMS_USER";
-    GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO "$KMS_USER";
+    GRANT USAGE, CREATE ON SCHEMA public TO "$TARGET_ROLE";
 
-    -- 4. Nadanie domyślnych praw na przyszłe tabele i sekwencje dla KMS
-    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO "$KMS_USER";
-    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO "$KMS_USER";
+    -- 3. Przypisanie praw do obecnych tabel i zmiana właściciela
+    GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO "$TARGET_ROLE";
+    GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO "$TARGET_ROLE";
 
-    -- 5. KONFIGURACJA ROLI DLA AGENTÓW:
-    -- Nadanie uprawnień tabelarycznych dla samej roli grupowej
-    GRANT USAGE ON SCHEMA public TO "$TARGET_ROLE";
-    GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO "$TARGET_ROLE";
-    
-    -- Automatyczne uprawnienia dla nowych tabel tworzonych w przyszłości
-    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "$TARGET_ROLE";
+    DO \$block\$
+    DECLARE
+        r RECORD;
+    BEGIN
+        FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP
+            EXECUTE format('ALTER TABLE public.%I OWNER TO %I', r.tablename, '$TARGET_ROLE');
+        END LOOP;
+    END
+    \$block\$;
 
-    -- 6. KLUCZOWE: Pozwól użytkownikowi KMS nadawać tę rolę innym użytkownikom (ADMIN OPTION)
+    -- 4. Domyślne uprawnienia dla przyszłych tabel (używamy MAIN_DB_USER)
+    ALTER DEFAULT PRIVILEGES FOR ROLE "$MAIN_DB_USER" IN SCHEMA public GRANT ALL ON TABLES TO "$TARGET_ROLE";
+    ALTER DEFAULT PRIVILEGES FOR ROLE "$MAIN_DB_USER" IN SCHEMA public GRANT ALL ON SEQUENCES TO "$TARGET_ROLE";
+
+    ALTER DEFAULT PRIVILEGES FOR ROLE "$KMS_USER" IN SCHEMA public GRANT ALL ON TABLES TO "$TARGET_ROLE";
+    ALTER DEFAULT PRIVILEGES FOR ROLE "$KMS_USER" IN SCHEMA public GRANT ALL ON SEQUENCES TO "$TARGET_ROLE";
+
+    ALTER DEFAULT PRIVILEGES FOR ROLE "$TARGET_ROLE" IN SCHEMA public GRANT ALL ON TABLES TO "$TARGET_ROLE";
+    ALTER DEFAULT PRIVILEGES FOR ROLE "$TARGET_ROLE" IN SCHEMA public GRANT ALL ON SEQUENCES TO "$TARGET_ROLE";
+
+    -- 5. Kluczowe: Nadanie praw administratora do roli dla KMS_USER
     GRANT "$TARGET_ROLE" TO "$KMS_USER" WITH ADMIN OPTION;
 EOSQL
-
-echo "Użytkownik $KMS_USER oraz rola $TARGET_ROLE zostały pomyślnie skonfigurowane w bazie $TARGET_DB."
