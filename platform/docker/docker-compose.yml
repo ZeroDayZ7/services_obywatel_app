@@ -29,7 +29,7 @@ services:
     ports:
       - "8080:8090"
     env_file:
-      - ../services/gateway/.env.test
+      - ../services/gateway/.env.dev
     networks:
       - gateway-net
       - target-admin-net
@@ -65,7 +65,7 @@ services:
     ports:
       - "8082:8082"
     env_file:
-      - ../services/auth-service/.env.test
+      - ../services/auth-service/.env.dev
     networks:
       - gateway-net
       - auth-db-net
@@ -73,6 +73,75 @@ services:
       - cache-net
     depends_on:
       db-auth:
+        condition: service_healthy
+    
+    # region SVC OFFICER-BFF
+  # --- OFFICER BFF SERVICE ---
+  officer-bff:
+    build:
+      context: ../../
+      dockerfile: platform/services/officer-bff/Dockerfile.dev
+    image: officer-bff:dev
+    container_name: app-officer-bff
+    restart: ${DOCKER_RESTART_POLICY:-no}
+    working_dir: /app/services/officer-bff
+    environment:
+      - GOCACHE=/root/.cache/go-build
+      - GOWORK=off
+    volumes:
+      - ../services/officer-bff:/app/services/officer-bff
+      - ../pkg:/app/pkg
+      - ../go.work:/app/go.work
+      - ../go.work.sum:/app/go.work.sum
+      # Cache Go
+      - go-build-cache:/root/.cache/go-build
+      - go-mod-cache:/go/pkg/mod
+    ports:
+      - "8084:8084"
+    env_file:
+      - ../services/officer-bff/.env.dev
+    networks:
+      - gateway-net
+      - target-admin-net
+      - cache-net
+    depends_on:
+      cache-redis:
+        condition: service_started
+
+  # region SVC IDENTITY
+  # --- IDENTITY SERVICE ---
+  identity-service:
+    build:
+      context: ../../
+      dockerfile: platform/services/identity-service/Dockerfile.dev
+    image: identity-service:dev
+    container_name: app-identity-service
+    restart: ${DOCKER_RESTART_POLICY:-no}
+    working_dir: /app/services/identity-service
+    environment:
+      - SECRET_AGENT_SOCKET_PATH=/var/run/agent-sockets/agent.sock
+      - GOCACHE=/root/.cache/go-build
+      - GOWORK=off
+    volumes:
+      - ../services/identity-service:/app/services/identity-service
+      - ../pkg:/app/pkg
+      - ../go.work:/app/go.work
+      - ../go.work.sum:/app/go.work.sum
+      - socket-data:/var/run/agent-sockets:ro
+      # Cache Go
+      - go-build-cache:/root/.cache/go-build
+      - go-mod-cache:/go/pkg/mod
+    ports:
+      - "8081:8081"
+    env_file:
+      - ../services/identity-service/.env.dev
+    networks:
+      - gateway-net
+      - identity-db-net
+      - sec-net
+      - cache-net
+    depends_on:
+      db-identity:
         condition: service_healthy
 
   # region db-auth
@@ -102,6 +171,29 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+   # region db-identity
+  # --- IDENTITY DATABASE ---
+  db-identity:
+    image: postgres:18.3-alpine
+    container_name: db-identity
+    environment:
+      POSTGRES_USER: ${IDENTITY_DB_USER:-identity_user}
+      POSTGRES_DB: ${IDENTITY_DB_NAME:-identity_database}
+      POSTGRES_PASSWORD_FILE: /run/secrets/identity_db_pass
+    secrets:
+      - identity_db_pass
+    ports:
+      - "5437:5432"
+    networks:
+      - target-admin-net
+      - identity-db-net
+    volumes:
+      - pg_identity_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # region db-notification
   # --- NOTIFICATION DATABASE ---
@@ -119,28 +211,6 @@ services:
       - "5434:5432"
     volumes:
       - pg_notification_data:/var/lib/postgresql
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # region db-identity
-  # --- IDENTITY DATABASE ---
-  db-identity:
-    <<: *common-settings
-    image: postgres:18.3-alpine
-    container_name: db-identity
-    environment:
-      POSTGRES_USER: ${IDENTITY_DB_USER:-identity_user}
-      POSTGRES_DB: ${IDENTITY_DB_NAME:-identity_database}
-      POSTGRES_PASSWORD_FILE: /run/secrets/identity_db_pass
-    secrets:
-      - identity_db_pass
-    ports:
-      - "5437:5432"
-    volumes:
-      - pg_identity_data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 10s

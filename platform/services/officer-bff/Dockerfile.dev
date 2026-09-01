@@ -1,0 +1,9 @@
+FROM golang:1.27-alpine
+
+# Instalujemy air do hot-reloadu
+RUN go install github.com/air-verse/air@latest
+
+WORKDIR /app/services/officer-bff
+
+# Komenda budująca i uruchamiająca binarkę dla officer-bff
+CMD ["air", "--build.cmd", "go build -o /tmp/officer-bff ./cmd/main.go", "--build.bin", "/tmp/officer-bff"]

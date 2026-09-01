@@ -17,17 +17,19 @@
     "**/.github": true,
     "**/.dockerignore": true,
     // "**/Dockerfile": true,
-    "**/obywatel-app.code-workspace": true,
+    // "**/obywatel-app.code-workspace": true,
 
-    // "**/admin-bff": true,
-    // "**/audit-service": true,
-    // "**/citizen-docs": true,
-    // "**/delegation-service": true,
-    // "**/messaging-service": true,
-    // "**/notification-service": true,
-    // "**/tally-service": true,
-    // "**/version-service": true,
-    // "**/voting-service": true,
+    "**/admin-bff": true,
+    "**/audit-service": true,
+    "**/citizen-docs": true,
+    "**/delegation-service": true,
+    "**/messaging-service": true,
+    "**/notification-service": true,
+    "**/tally-service": true,
+    "**/version-service": true,
+    "**/voting-service": true,
+
+    "**/*.bkp": true
   },
 
   // (Search)
@@ -74,6 +76,5 @@
       "-**/vendor"
     ]
   },
-  "go.vetOnSave": "off",      // Wyłącz go vet przy zapisie (niech robi to gopls w pamięci)
-  
+  "go.vetOnSave": "off", // Wyłącz go vet przy zapisie (niech robi to gopls w pamięci)
 }
