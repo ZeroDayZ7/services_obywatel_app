@@ -12,7 +12,7 @@ import (
 func Load() (*Config, error) {
 	log := shared.GetLogger()
 
-	viper.SetDBDefaults()
+	// viper.SetDBDefaults()
 	viper.SetRedisDefaults()
 	viper.SetKMSDefaults()
 	viper.SetS3Defaults()

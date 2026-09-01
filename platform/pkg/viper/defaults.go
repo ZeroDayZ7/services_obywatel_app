@@ -22,7 +22,7 @@ func SetBaseDefaults(serviceName string) {
 
 //#region SetDBDefaults
 func SetDBDefaults() {
-	viper.SetDefault("DB_HOST", "127.0.0.1")
+	viper.SetDefault("DB_HOST", "xxxx")
 	viper.SetDefault("DB_PORT", 5432)
 	viper.SetDefault("DB_USER", "postgres")
 	viper.SetDefault("DB_PASSWORD", "secret")

@@ -29,6 +29,8 @@ func main() {
 		os.Exit(1)
 	}
 
+	log.Info("CFG:", cfg)
+
 	dbPool, closeDB := config.MustInitDB(cfg.Database)
 	defer closeDB()
 
@@ -67,7 +69,7 @@ func main() {
 			os.Exit(1)
 		}
 	} else {
-		log.Warn("RabbitMQ is DISABLED. Fallback to No-Op Driver.")
+		log.Warn("⚠️ RabbitMQ is DISABLED. Fallback to No-Op Driver.")
 		eventPublisher = rabbitmq.NewNoOpPublisher()
 	}
 
@@ -93,7 +95,7 @@ func main() {
 		}
 		fileStorage = s3
 	} else {
-		log.Warn("S3 Storage is DISABLED. Using No-Op storage.")
+		log.Warn("⚠️ S3 Storage is DISABLED. Using No-Op storage.")
 		fileStorage = &storage.NoOpStorage{}
 	}
 

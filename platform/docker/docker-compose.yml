@@ -132,7 +132,7 @@ services:
       - go-build-cache:/root/.cache/go-build
       - go-mod-cache:/go/pkg/mod
     ports:
-      - "8081:8081"
+      - "8070:8070"
     env_file:
       - ../services/identity-service/.env.dev
     networks:
@@ -183,7 +183,7 @@ services:
     secrets:
       - identity_db_pass
     ports:
-      - "5437:5432"
+      - "5451:5432"
     networks:
       - target-admin-net
       - identity-db-net
@@ -438,6 +438,10 @@ networks:
     driver: bridge
   auth-db-net:
     name: app_auth_db_net
+    driver: bridge
+    internal: false
+  identity-db-net:
+    name: app_identity_db_net
     driver: bridge
     internal: false
   cache-net:

@@ -3,7 +3,9 @@
 package viper
 
 import (
+	"errors"
 	"fmt"
+	"os"
 	"reflect"
 	"strings"
 
@@ -18,19 +20,34 @@ var validate = validator.New()
 func InitConfig(cfg any, serviceName string) error {
 	SetBaseDefaults(serviceName)
 
-	viper.SetConfigName(".env")
+	// Sprawdź czy zdefiniowano środowisko (domyślnie dev/env)
+	envFile := os.Getenv("APP_ENV")
+	if envFile == "" {
+		envFile = ".env"
+	}
+
+	viper.SetConfigName(envFile)
 	viper.SetConfigType("env")
 	viper.AddConfigPath(".")
+	viper.AddConfigPath("./services/" + serviceName)
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+
+	// Włącz automatyczne czytanie zmiennych środowiskowych
 	viper.AutomaticEnv()
 
+	// Najpierw bindujemy zmienne z tagów
 	if err := bindEnvs(cfg); err != nil {
 		return fmt.Errorf("failed to bind environment variables: %w", err)
 	}
 
+	// Spróbuj odczytać plik, ale nie przerywaj jeśli go nie ma (bo zmienne mogą być z Dockera)
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-			return fmt.Errorf("failed to read config file: %w", err)
+			// Zgłoś błąd tylko jeśli plik istnieje, ale ma błędny format
+			var pathErr *os.PathError
+			if !errors.As(err, &pathErr) {
+				return fmt.Errorf("failed to read config file: %w", err)
+			}
 		}
 	}
 
