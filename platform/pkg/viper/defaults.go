@@ -9,7 +9,7 @@ func SetBaseDefaults(serviceName string) {
 	viper.SetDefault("APP_NAME", serviceName)
 	viper.SetDefault("PORT", "8081")
 	viper.SetDefault("BODY_LIMIT_MB", 2)
-	viper.SetDefault("ENV", "development")
+	viper.SetDefault("APP_ENV", "development")
 	viper.SetDefault("IDLE_TIMEOUT", "30s")
 	viper.SetDefault("READ_TIMEOUT", "15s")
 	viper.SetDefault("WRITE_TIMEOUT", "15s")
