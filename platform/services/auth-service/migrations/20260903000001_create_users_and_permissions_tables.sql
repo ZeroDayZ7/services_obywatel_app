@@ -1,13 +1,9 @@
 -- +goose Up
 -- +goose StatementBegin
 
--- 1. Upewniamy się, że w PostgreSQL dostępna jest funkcja uuidv7() (dostępna w Postgres 17+ lub przez wtyczki/funkcje pgsql)
--- Jeśli używasz starszego Postgresa bez natywnego uuidv7(), usuń tę linię lub zamień default na gen_random_uuid().
-CREATE EXTENSION IF NOT EXISTS "pgcrypto";
-
--- 2. Tworzenie tabeli USERS
+-- 1. Tabela USERS z natywną funkcją uuidv7() z PostgreSQL 17+
 CREATE TABLE IF NOT EXISTS users (
-    id                    UUID PRIMARY KEY DEFAULT uuidv7(), -- lub uuidv7() jeśli Twój PG 18 to wspiera natywnie
+    id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     username              VARCHAR(30) NOT NULL,
     email                 VARCHAR(100) NOT NULL,
     password              VARCHAR(128) NOT NULL,
@@ -24,29 +20,25 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at            TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted_at            TIMESTAMPTZ NULL,
 
-    -- Unikalność
     CONSTRAINT idx_users_username UNIQUE (username),
     CONSTRAINT idx_users_email UNIQUE (email)
 );
 
--- Indeksy wyciągnięte z tagów GORM
 CREATE INDEX IF NOT EXISTS idx_users_locked_until ON users (locked_until);
 CREATE INDEX IF NOT EXISTS idx_users_deleted_at ON users (deleted_at);
 
--- 3. Tworzenie tabeli AVAILABLE_PERMISSIONS
+-- 2. Tabela AVAILABLE_PERMISSIONS z natywnym uuidv7()
 CREATE TABLE IF NOT EXISTS available_permissions (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id          UUID PRIMARY KEY DEFAULT uuidv7(),
     key         VARCHAR(100) NOT NULL,
     department  VARCHAR(50) NOT NULL,
     description VARCHAR(255) NOT NULL,
     is_special  BOOLEAN NOT NULL DEFAULT FALSE,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    -- Unikalność klucza
     CONSTRAINT idx_available_permissions_key UNIQUE (key)
 );
 
--- Indeksy wyciągnięte z tagów GORM
 CREATE INDEX IF NOT EXISTS idx_available_permissions_department ON available_permissions (department);
 
 -- +goose StatementEnd
@@ -54,7 +46,6 @@ CREATE INDEX IF NOT EXISTS idx_available_permissions_department ON available_per
 -- +goose Down
 -- +goose StatementBegin
 
--- Usuwanie tabel w odwrotnej kolejności (najpierw zależności, potem tabele nadrzędne)
 DROP TABLE IF EXISTS available_permissions;
 DROP TABLE IF EXISTS users;
 
