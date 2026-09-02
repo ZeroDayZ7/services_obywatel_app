@@ -21,7 +21,7 @@ func StartAutoRotation(ctx context.Context, manifest *Manifest, db PostgresRotat
 
 	for _, spec := range manifest.Credentials {
 		if !spec.Enabled || spec.RotationInterval <= 0 {
-			log.InfoMap("⏸️ Rotacja wyłączona dla zasobu", map[string]any{"resource": spec.Name})
+			log.InfoMap("Rotacja wyłączona dla zasobu", map[string]any{"resource": spec.Name})
 			continue
 		}
 
@@ -46,7 +46,7 @@ func runPostgresRotationLoop(ctx context.Context, socketPath string, timeout tim
 	ticker := time.NewTicker(spec.RotationInterval)
 	defer ticker.Stop()
 
-	log.InfoMap("⏱️ Uruchomiono automatyczną pętlę rotacji Postgres", map[string]any{
+	log.InfoMap("Uruchomiono automatyczną pętlę rotacji Postgres", map[string]any{
 		"resource": spec.Name,
 		"interval": spec.RotationInterval.String(),
 	})
@@ -65,7 +65,7 @@ func runPostgresRotationLoop(ctx context.Context, socketPath string, timeout tim
 			cancel()
 
 			if err != nil {
-				log.WarnObj("⚠️ Nie udało się pobrać nowych poświadczeń", map[string]any{
+				log.WarnObj("Nie udało się pobrać nowych poświadczeń", map[string]any{
 					"resource": spec.Name,
 					"err":      err.Error(),
 				})

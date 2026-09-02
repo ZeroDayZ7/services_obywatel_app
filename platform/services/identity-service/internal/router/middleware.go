@@ -14,7 +14,7 @@ func SetupMiddleware(handler http.Handler, container *di.Container) http.Handler
 
 	bffSecret, _, ok := container.KeyStore.GetKey("officer-bff")
 	if !ok {
-		logger.Warn("⚠️ Brak klucza HMAC dla officer-bff w KeyStore identity-service!")
+		logger.Warn("Brak klucza HMAC dla officer-bff w KeyStore identity-service!")
 	}
 
 	hmacMiddleware := httpserver.InternalAuthMiddleware(bffSecret)

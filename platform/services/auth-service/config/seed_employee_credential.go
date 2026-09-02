@@ -84,7 +84,7 @@ func SeedInitialEmployeeCredential(db *gorm.DB) error {
 		_ = os.WriteFile("dev-card.json", fileData, 0644)
 		log.Info("✅ Zaseedowano poświadczenie urzędnika (zapisano w pliku dev-card.json)", "card_serial", credential.CardSerialNumber)
 	} else {
-		log.Warn("⚠️ Nie udało się zapisać pliku dev-card.json", "error", err)
+		log.Warn("Nie udało się zapisać pliku dev-card.json", "error", err)
 	}
 
 	return nil

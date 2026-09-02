@@ -82,7 +82,7 @@ func main() {
 	// Filtrujemy manifest – pobieramy tylko zasoby z enabled: true (np. ["postgres"])
 	requiredServices := agentManifest.GetEnabledResourceNames()
 	if len(requiredServices) == 0 {
-		log.Warn("⚠️ Brak aktywnych zasobów w manifeście do pobrania podczas bootstrapu")
+		log.Warn("Brak aktywnych zasobów w manifeście do pobrania podczas bootstrapu")
 	}
 
 	log.Info("🚀 Rozpoczynanie zbiorczego bootstrapu poświadczeń",
@@ -195,7 +195,7 @@ func main() {
 			}
 		}()
 	} else {
-		log.Warn("⚠️ RabbitMQ jest wyłączony - konsumery w tle nie zostały uruchomione.")
+		log.Warn("RabbitMQ jest wyłączony - konsumery w tle nie zostały uruchomione.")
 	}
 
 	router.SetupRoutes(authApp, container)

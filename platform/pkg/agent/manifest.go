@@ -45,15 +45,6 @@ func LoadManifest(path string) (*Manifest, error) {
 	return &m, nil
 }
 
-func (m *Manifest) GetResourceSpec(name string) (ResourceSpec, bool) {
-	for _, spec := range m.Credentials {
-		if spec.Name == name {
-			return spec, true
-		}
-	}
-	return ResourceSpec{}, false
-}
-
 // GetEnabledResourceNames zwraca listę nazw zasobów, które mają flaga enabled = true.
 func (m *Manifest) GetEnabledResourceNames() []string {
 	names := make([]string, 0, len(m.Credentials))

@@ -95,7 +95,7 @@ func main() {
 		}
 		fileStorage = s3
 	} else {
-		log.Warn("⚠️ S3 Storage is DISABLED. Using No-Op storage.")
+		log.Warn("S3 Storage is DISABLED. Using No-Op storage.")
 		fileStorage = &storage.NoOpStorage{}
 	}
 
@@ -114,7 +114,7 @@ func main() {
 		)
 		go auditWorker.Start(ctx)
 	} else {
-		log.Warn("⚠️ Audit Worker jest wyłączony (Enabled=false).")
+		log.Warn("Audit Worker jest wyłączony (Enabled=false).")
 	}
 
 	registrationWorker := worker.NewRegistrationWorker(
@@ -130,7 +130,7 @@ func main() {
 		)
 		go registrationWorker.Start(ctx)
 	} else {
-		log.Warn("⚠️ Registration Worker jest wyłączony (Enabled=false).")
+		log.Warn("Registration Worker jest wyłączony (Enabled=false).")
 	}
 
 	r := router.NewRouter(container)

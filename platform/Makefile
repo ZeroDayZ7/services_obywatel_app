@@ -32,7 +32,7 @@ updatedeps:
 			go mod tidy && \
 			cd - > /dev/null; \
 		else \
-			echo "⚠️ Directory $(SERVICES_DIR)/$$service does not exist, skipping..."; \
+			echo "Directory $(SERVICES_DIR)/$$service does not exist, skipping..."; \
 		fi \
 	done
 	@if [ -d "$(PKG_DIR)" ]; then \
