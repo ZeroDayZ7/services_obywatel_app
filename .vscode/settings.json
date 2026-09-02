@@ -19,17 +19,18 @@
     // "**/Dockerfile": true,
     // "**/obywatel-app.code-workspace": true,
 
-    "**/admin-bff": true,
-    "**/audit-service": true,
-    "**/citizen-docs": true,
-    "**/delegation-service": true,
-    "**/messaging-service": true,
-    "**/notification-service": true,
-    "**/tally-service": true,
-    "**/version-service": true,
-    "**/voting-service": true,
+    // "**/admin-bff": true,
+    // "**/audit-service": true,
+    // "**/citizen-docs": true,
+    // "**/delegation-service": true,
+    // "**/messaging-service": true,
+    // "**/notification-service": true,
+    // "**/tally-service": true,
+    // "**/version-service": true,
+    // "**/voting-service": true,
 
-    "**/*.bkp": true
+    "**/*.bkp": true,
+    "**/tmp": true
   },
 
   // (Search)

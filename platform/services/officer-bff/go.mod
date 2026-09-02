@@ -5,7 +5,7 @@ go 1.27.0
 require (
 	github.com/google/uuid v1.6.0
 	github.com/spf13/viper v1.21.0
-	github.com/zerodayz7/platform/pkg v0.0.0-00010101000000-000000000000
+	github.com/zerodayz7/platform/pkg v0.0.0
 )
 
 require (
