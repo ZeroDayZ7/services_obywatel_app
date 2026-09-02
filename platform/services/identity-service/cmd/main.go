@@ -69,7 +69,7 @@ func main() {
 			os.Exit(1)
 		}
 	} else {
-		log.Warn("⚠️ RabbitMQ is DISABLED. Fallback to No-Op Driver.")
+		log.Warn("RabbitMQ is DISABLED. Fallback to No-Op Driver.")
 		eventPublisher = rabbitmq.NewNoOpPublisher()
 	}
 
