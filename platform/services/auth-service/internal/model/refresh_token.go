@@ -12,7 +12,7 @@ type RefreshToken struct {
 	ID                uuid.UUID      `gorm:"type:uuid;primaryKey;default:uuidv7()"`
 	UserID            uuid.UUID      `gorm:"type:uuid;not null;index"`
 	DeviceID          *uuid.UUID     `gorm:"type:uuid;index"`
-	Token             string         `gorm:"size:64;not null;uniqueIndex"`
+	Token             string         `gorm:"size:128;not null;uniqueIndex"`
 	DeviceFingerprint string         `gorm:"size:128;not null"`
 	Revoked           bool           `gorm:"default:false;index"`
 	ExpiresAt         time.Time      `gorm:"not null;index"`
