@@ -150,7 +150,7 @@ func RefreshPostgres(ctx context.Context, cfg Config) (*PostgresCredentials, fun
 
 // ExecCommand realizuje binarny protokół UDS IPC w standardzie Length-Delimited.
 func ExecCommand(ctx context.Context, socketPath string, timeout time.Duration, commandPayload []byte) ([]byte, error) {
-	// log := GetLogger()
+	log := GetLogger()
 
 	var d net.Dialer
 	conn, err := d.DialContext(ctx, "unix", socketPath)
@@ -164,6 +164,12 @@ func ExecCommand(ctx context.Context, socketPath string, timeout time.Duration, 
 	}
 
 	reqLen := uint32(len(commandPayload))
+
+	log.InfoMap("UDS ExecCommand - Wysyłanie ramki", map[string]any{
+		"payload_raw": string(commandPayload),
+		"payload_len": reqLen,
+	})
+
 	if err := binary.Write(conn, binary.BigEndian, reqLen); err != nil {
 		return nil, fmt.Errorf("błąd zapisu nagłówka długości: %w", err)
 	}

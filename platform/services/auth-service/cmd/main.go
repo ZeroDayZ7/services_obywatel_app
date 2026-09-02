@@ -72,17 +72,19 @@ func main() {
 	// 6a. POBIERANIE POŚWIADCZEŃ Z SIDECARA PRZEZ UDS (BEZPOŚREDNIO)
 	// =========================================================================
 	kmsCfg := shared.Config{
-		SocketPath: config.AppConfig.Agent.SocketPath,
-		Timeout:    5 * time.Second,
+		SocketPath:    config.AppConfig.Agent.SocketPath,
+		TargetService: "auth_service",
+		Timeout:       5 * time.Second,
 	}
 
 	log.Info("🔌 Łączenie z secret-agent przez UDS...", "path", kmsCfg.SocketPath)
 
-	cacheKey := "postgres_auth_auth_database"
+	cacheKey := "postgres"
 
 	ctxCreds, cancelCreds := context.WithTimeout(context.Background(), kmsCfg.Timeout)
 	dbCreds, cleanup, err := shared.FetchAgentSecret(ctxCreds, kmsCfg, cacheKey)
 	cancelCreds()
+	// defer cleanup()
 
 	if err != nil {
 		log.Error("❌ Nie udało się pobrać poświadczeń DB z sidecara", "error", err)
