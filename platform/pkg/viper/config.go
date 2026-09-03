@@ -40,12 +40,9 @@ func InitConfig(cfg any, serviceName string) error {
 		return fmt.Errorf("failed to bind environment variables: %w", err)
 	}
 
-	// Spróbuj odczytać plik, ale nie przerywaj jeśli go nie ma (bo zmienne mogą być z Dockera)
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-			// Zgłoś błąd tylko jeśli plik istnieje, ale ma błędny format
-			var pathErr *os.PathError
-			if !errors.As(err, &pathErr) {
+			if _, ok := errors.AsType[*os.PathError](err); !ok {
 				return fmt.Errorf("failed to read config file: %w", err)
 			}
 		}

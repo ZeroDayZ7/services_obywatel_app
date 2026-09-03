@@ -46,7 +46,7 @@ func JWTMiddleware() fiber.Handler {
 // jwtErrorHandler — standardowa obsługa błędów JWT
 func jwtErrorHandler(c *fiber.Ctx, err error) error {
 	log := shared.GetLogger()
-	log.WarnObj("JWT error", map[string]any{"error": err.Error()}) // Dopasowano do WarnObj przyjmującego mapę/strukturę
+	log.WarnObj("JWT error", map[string]any{"error": err.Error()})
 
 	return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 		"error": "Unauthorized or invalid token",
