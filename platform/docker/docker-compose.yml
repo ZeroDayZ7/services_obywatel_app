@@ -319,9 +319,9 @@ services:
 
   # region STORAGE S3
   minio:
-    <<: *common-settings
     image: minio/minio:latest
     container_name: storage_minio_s3
+    restart: ${DOCKER_RESTART_POLICY:-no}
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -331,6 +331,8 @@ services:
     secrets:
       - minio_root_user
       - minio_root_pass
+    networks:
+      - cache-net
     command: server /data --console-address ":9001"
     volumes:
       - minio_data:/data

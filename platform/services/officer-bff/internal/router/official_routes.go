@@ -6,8 +6,8 @@ import (
 	"github.com/zerodayz7/services/officer-bff/internal/di"
 )
 
-//#region registerOfficialRoutes
 func registerOfficialRoutes(mux *http.ServeMux, c *di.Container) {
+	// 1. Rejestracja obywatela (Mapujemy /official/citizens/register -> /api/v1/citizens)
 	registerProxy, err := NewSingleHostProxy(
 		c.Config.IdentityServiceURL,
 		"/api/v1/citizens",
@@ -19,6 +19,7 @@ func registerOfficialRoutes(mux *http.ServeMux, c *di.Container) {
 	}
 	mux.HandleFunc("POST /api/v1/official/citizens/register", registerProxy)
 
+	// 2. Pobieranie umowy (Mapujemy /official/agreements/{id}/download -> /api/v1/agreements/{id}/download)
 	agreementProxy, err := NewSingleHostProxy(
 		c.Config.IdentityServiceURL,
 		"/api/v1/agreements/{agreement_id}/download",

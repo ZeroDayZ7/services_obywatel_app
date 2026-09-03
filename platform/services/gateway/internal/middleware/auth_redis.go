@@ -29,7 +29,7 @@ func AuthRedisMiddleware(cache *rdy.Cache) fiber.Handler {
 		// 1. Pobieramy i hashujemy fingerprint od klienta
 		clientFingerprint := c.Get(constants.HeaderDeviceFingerprint)
 		if clientFingerprint == "" {
-			log.Warn("Missing X-Device-Fingerprint header")
+			log.Warn("Missing X-Device-Fingerprint header", clientFingerprint)
 			return apperr.SendAppError(c, apperr.ErrInvalidDeviceFingerprint)
 		}
 
@@ -150,7 +150,5 @@ func AuthRedisMiddleware(cache *rdy.Cache) fiber.Handler {
 		}
 
 		return c.Next()
-
 	}
-
 }
