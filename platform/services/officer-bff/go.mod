@@ -3,7 +3,6 @@ module github.com/zerodayz7/services/officer-bff
 go 1.27.0
 
 require (
-	github.com/google/uuid v1.6.0
 	github.com/spf13/viper v1.21.0
 	github.com/zerodayz7/platform/pkg v0.0.0
 )
@@ -18,6 +17,7 @@ require (
 	github.com/go-playground/validator/v10 v10.30.3 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/gofiber/fiber/v2 v2.52.14 // indirect
+	github.com/google/uuid v1.6.0 // indirect
 	github.com/klauspost/compress v1.19.2 // indirect
 	github.com/leodido/go-urn v1.5.0 // indirect
 	github.com/mattn/go-colorable v0.1.15 // indirect

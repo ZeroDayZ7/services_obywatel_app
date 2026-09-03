@@ -19,20 +19,14 @@ func registerOfficialRoutes(mux *http.ServeMux, c *di.Container) {
 	}
 	mux.HandleFunc("POST /api/v1/official/citizens/register", registerProxy)
 
-	mux.HandleFunc("GET /api/v1/official/agreements/{agreement_id}/download", func(w http.ResponseWriter, r *http.Request) {
-		agreementID := r.PathValue("agreement_id")
-
-		agreementProxy, err := NewSingleHostProxy(
-			c.Config.IdentityServiceURL,
-			"/api/v1/agreements/"+agreementID+"/download",
-			"identity-service",
-			c.KeyStore,
-		)
-		if err != nil {
-			http.Error(w, "failed to create agreement download proxy", http.StatusInternalServerError)
-			return
-		}
-
-		agreementProxy(w, r)
-	})
+	agreementProxy, err := NewSingleHostProxy(
+		c.Config.IdentityServiceURL,
+		"/api/v1/agreements/{agreement_id}/download",
+		"identity-service",
+		c.KeyStore,
+	)
+	if err != nil {
+		panic("failed to create agreement download proxy: " + err.Error())
+	}
+	mux.HandleFunc("GET /api/v1/official/agreements/{agreement_id}/download", agreementProxy)
 }
