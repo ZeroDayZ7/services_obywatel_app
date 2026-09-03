@@ -3,7 +3,6 @@ package app
 import (
 	"github.com/gofiber/contrib/otelfiber/v2"
 	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/gofiber/fiber/v2/middleware/requestid"
 	"github.com/zerodayz7/platform/pkg/middleware"
@@ -41,10 +40,10 @@ func NewAuthApp(container *di.Container) *fiber.App {
 	// Middleware
 	app.Use(otelfiber.Middleware())
 	app.Use(requestid.New())
-	app.Use(logger.New())
+	// app.Use(logger.New())
 	app.Use(recover.New())
 	app.Use(shared.GetLimiter(shared.LimitGlobal, nil))
-	// app.Use(shared.RequestLoggerMiddleware())
+	app.Use(shared.RequestLoggerMiddleware())
 	app.Use(middleware.InternalAuthMiddleware(container.KeyStore))
 
 	return app

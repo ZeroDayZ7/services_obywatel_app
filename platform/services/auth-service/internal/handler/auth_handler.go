@@ -188,6 +188,7 @@ func (h *AuthHandler) RegisterDevice(c *fiber.Ctx) error {
 		ctx,
 		*rc.UserID,
 		*rc.SessionID,
+		rc.DeviceID,
 		rc.IP,
 		body,
 	)

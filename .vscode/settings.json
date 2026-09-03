@@ -4,6 +4,9 @@
     "**/go.work.sum": true,
     "**/go.sum": true,
     // "**/go.mod": true,
+    "**/.gitattributes": true,
+    "**/.github": true,
+    // "**/.gitignore": true,
     "**/bin/": true,
     // "**/dbgen/": true,
     "**/backup/": true,
@@ -12,12 +15,9 @@
     "**/README.md": true,
     "**/LICENSE": true,
     "**/SECURITY.md": true,
-    "**/.gitattributes": true,
-    // "**/.gitignore": true,
-    "**/.github": true,
+
     "**/.dockerignore": true,
-    // "**/Dockerfile": true,
-    // "**/obywatel-app.code-workspace": true,
+    "**/Dockerfile": true,
 
     "**/admin-bff": true,
     "**/audit-service": true,
@@ -66,16 +66,16 @@
   "gopls": {
     "ui.diagnostic.staticcheck": false,
     "ui.navigation.importShortcut": "Definition",
-    "formatting.gofumpt": false, // Zwykłe gofmt jest znacznie szybsze niż gofumpt
-    // 3. Ignoruj katalogi buildów/tmp, żeby gopls ich nie indeksował!
+    "formatting.gofumpt": false,
     "build.directoryFilters": [
       "-**/node_modules",
       "-**/.git",
       "-**/dist",
       "-**/bin",
       "-**/tmp",
-      "-**/vendor"
+      "-**/vendor",
+      "-**/docker",
     ]
   },
-  "go.vetOnSave": "off", // Wyłącz go vet przy zapisie (niech robi to gopls w pamięci)
+  "go.vetOnSave": "off"
 }

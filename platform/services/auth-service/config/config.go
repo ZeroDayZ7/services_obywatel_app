@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gofiber/fiber/v2/middleware/session"
 	spfViper "github.com/spf13/viper"
 	"github.com/zerodayz7/platform/pkg/kms"
 	"github.com/zerodayz7/platform/pkg/shared"
@@ -67,10 +66,7 @@ func (c *Config) IsLocalDev() bool {
 	return c.Server.Env == "local" || c.Server.Env == "development" || c.Server.Env == "dev"
 }
 
-var (
-	AppConfig Config
-	Store     *session.Store
-)
+var AppConfig Config
 
 //#region LoadConfigGlobal
 func LoadConfigGlobal() error {

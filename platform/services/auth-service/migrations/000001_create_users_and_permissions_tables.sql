@@ -1,7 +1,7 @@
 -- +goose Up
 -- +goose StatementBegin
 
--- 1. Tabela USERS z natywną funkcją uuidv7() z PostgreSQL 17+
+-- 1. Tabela USERS
 CREATE TABLE IF NOT EXISTS users (
     id                    UUID PRIMARY KEY DEFAULT uuidv7(),
     username              VARCHAR(30) NOT NULL,
@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE INDEX IF NOT EXISTS idx_users_locked_until ON users (locked_until);
 CREATE INDEX IF NOT EXISTS idx_users_deleted_at ON users (deleted_at);
 
--- 2. Tabela AVAILABLE_PERMISSIONS z natywnym uuidv7()
+-- 2. Tabela AVAILABLE_PERMISSIONS
 CREATE TABLE IF NOT EXISTS available_permissions (
     id          UUID PRIMARY KEY DEFAULT uuidv7(),
     key         VARCHAR(100) NOT NULL,

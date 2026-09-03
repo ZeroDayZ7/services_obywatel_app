@@ -149,10 +149,10 @@ func (s *authService) handleFailedLogin(ctx context.Context, userID uuid.UUID) e
 // #endregion
 
 // #region createChallengeSession
-func (s *authService) createChallengeSession(ctx context.Context, userID uuid.UUID, fingerprint string) (setupToken string, sessionID uuid.UUID, challenge string, err error) {
+func (s *authService) createChallengeSession(ctx context.Context, userID uuid.UUID, deviceID string) (setupToken string, sessionID uuid.UUID, challenge string, err error) {
 	log := shared.GetLogger()
 
-	setupToken, sessionID, err = s.CreateSetupToken(ctx, userID, fingerprint)
+	setupToken, sessionID, err = s.CreateSetupToken(ctx, userID, deviceID)
 	if err != nil {
 		log.ErrorObj("Failed to create setup token", err)
 		return "", uuid.Nil, "", errors.ErrInternal
@@ -164,37 +164,23 @@ func (s *authService) createChallengeSession(ctx context.Context, userID uuid.UU
 		return "", uuid.Nil, "", errors.ErrInternal
 	}
 
-	if err := s.cache.SetChallenge(ctx, sessionID, challenge, 5*time.Minute); err != nil {
-		log.ErrorObj("Failed to save challenge in Redis", err)
-		return "", uuid.Nil, "", errors.ErrInternal
-	}
-
 	return setupToken, sessionID, challenge, nil
 }
 
 // #region verifyChallengeSession
-func (s *authService) verifyChallengeSession(ctx context.Context, sessionID uuid.UUID, signatureB64 string, pubKeyBytes []byte) error {
+func (s *authService) verifyChallengeSession(challenge string, signatureB64 string, pubKeyBytes []byte) error {
 	log := shared.GetLogger()
 
-	// 1. Odczyt challenge z Redisa
-	storedChallenge, err := s.cache.GetChallenge(ctx, sessionID)
-	if err != nil || storedChallenge == "" {
-		log.WarnMap("Challenge session expired or not found in Redis", map[string]any{
-			"sessionID": sessionID,
-			"err":       err,
-		})
+	if challenge == "" {
+		log.Warn("Challenge in setup session is empty")
 		return errors.ErrChallengeExpired
 	}
 
-	// 2. Bezwzględne usunięcie z Redisa
-	_ = s.cache.DeleteChallenge(ctx, sessionID)
-
-	// 3. Kryptograficzne sprawdzenie podpisu z użyciem funkcji z pkg/security
+	// Kryptograficzne sprawdzenie podpisu Ed25519 z użyciem funkcji z pkg/security
 	domain := s.cfg.Auth.Domain
-	if err := security.VerifyEd25519Challenge(pubKeyBytes, storedChallenge, signatureB64, domain); err != nil {
+	if err := security.VerifyEd25519Challenge(pubKeyBytes, challenge, signatureB64, domain); err != nil {
 		log.WarnMap("Cryptographic signature verification failed", map[string]any{
-			"sessionID": sessionID,
-			"error":     err,
+			"error": err,
 		})
 		return errors.ErrInvalidSignature
 	}
