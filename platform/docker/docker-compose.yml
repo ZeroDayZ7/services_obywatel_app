@@ -120,6 +120,7 @@ services:
     working_dir: /app/services/identity-service
     environment:
       - SECRET_AGENT_SOCKET_PATH=/var/run/agent-sockets/agent.sock
+      - CHROME_WS_URL=ws://chrome-renderer:9222
       - GOCACHE=/root/.cache/go-build
       - GOWORK=off
     volumes:
@@ -334,6 +335,29 @@ services:
     command: server /data --console-address ":9001"
     volumes:
       - minio_data:/data
+  
+  # region SVC CHROMIUM PDF RENDERER
+  # --- HEADLESS CHROMIUM FOR PDF GENERATION ---
+  chrome-renderer:
+    <<: *common-settings
+    image: zenika/alpine-chrome:124-with-node
+    container_name: app-chrome-renderer
+    command:
+      - chromium-browser
+      - --headless
+      - --remote-debugging-address=0.0.0.0
+      - --remote-debugging-port=9222
+      - --no-sandbox
+      - --disable-gpu
+      - --disable-software-rasterizer
+      - --disable-dev-shm-usage
+    ports:
+      - "9222:9222"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9222/json/version || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   # region ADMINISTRATION TOOLS
   #

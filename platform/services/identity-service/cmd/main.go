@@ -99,7 +99,7 @@ func main() {
 		fileStorage = &storage.NoOpStorage{}
 	}
 
-	container := di.BuildContainer(cfg, dbPool, eventPublisher, cfg.ToKMSServiceConfig(), keyStore, fileStorage)
+	container := di.BuildContainer(cfg, dbPool, eventPublisher, keyStore, fileStorage)
 
 	auditWorker := worker.NewAuditWorker(
 		dbPool,

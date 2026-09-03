@@ -23,6 +23,10 @@ type RabbitMQConsumersConfig struct {
 	TrustedSenders map[string]KeyTarget `mapstructure:"RABBITMQ_TRUSTED_SENDERS"`
 }
 
+type PDFConfig struct {
+	ChromeWSURL string `mapstructure:"CHROME_WS_URL" validate:"required"`
+}
+
 type AuditWorkerConfig struct {
 	Enabled       bool          `mapstructure:"AUDIT_WORKER_ENABLED"`
 	BatchSize     int           `mapstructure:"AUDIT_WORKER_BATCH_SIZE" validate:"min=1"`
@@ -56,6 +60,7 @@ type Config struct {
 	RabbitConsumers    RabbitMQConsumersConfig  `mapstructure:",squash"`
 	KMS                viper.KMSConfig          `mapstructure:",squash"`
 	OTEL               viper.OTELConfig         `mapstructure:",squash"`
+	PDF                PDFConfig                `mapstructure:",squash"`
 	AuditWorker        AuditWorkerConfig        `mapstructure:",squash"`
 	RegistrationWorker RegistrationWorkerConfig `mapstructure:",squash"`
 	Shutdown           time.Duration            `mapstructure:"SHUTDOWN_TIMEOUT" validate:"required"`
