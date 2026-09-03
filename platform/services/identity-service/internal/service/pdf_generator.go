@@ -1,21 +1,32 @@
 package service
 
 import (
-	"bytes"
 	"context"
-	"embed"
 	"fmt"
-	"html/template"
-	"io"
 
-	"github.com/go-rod/rod"
-	"github.com/go-rod/rod/lib/launcher"
-	"github.com/go-rod/rod/lib/proto"
-	"github.com/zerodayz7/services/identity-service/config"
+	"github.com/johnfercher/maroto/v2"
+	"github.com/johnfercher/maroto/v2/pkg/components/code"
+	"github.com/johnfercher/maroto/v2/pkg/components/col"
+	"github.com/johnfercher/maroto/v2/pkg/components/line"
+	"github.com/johnfercher/maroto/v2/pkg/components/row"
+	"github.com/johnfercher/maroto/v2/pkg/components/text"
+	"github.com/johnfercher/maroto/v2/pkg/config"
+	"github.com/johnfercher/maroto/v2/pkg/consts/align"
+	"github.com/johnfercher/maroto/v2/pkg/consts/fontstyle"
+	"github.com/johnfercher/maroto/v2/pkg/consts/orientation"
+	"github.com/johnfercher/maroto/v2/pkg/consts/pagesize"
+	"github.com/johnfercher/maroto/v2/pkg/props"
 )
 
-//go:embed templates/agreement.html
-var templateFS embed.FS
+type PDFGenerator interface {
+	GenerateAgreementPDF(ctx context.Context, data AgreementTemplateData) ([]byte, error)
+}
+
+type pdfGenerator struct{}
+
+func NewPDFGenerator() PDFGenerator {
+	return &pdfGenerator{}
+}
 
 type AgreementTemplateData struct {
 	AgreementID     string
@@ -41,61 +52,120 @@ type AgreementTemplateData struct {
 	InstitutionID string
 }
 
-type PDFGenerator interface {
-	GenerateAgreementPDF(ctx context.Context, data AgreementTemplateData) ([]byte, error)
-}
+func (p *pdfGenerator) GenerateAgreementPDF(ctx context.Context, data AgreementTemplateData) ([]byte, error) {
+	cfg := config.NewBuilder().
+		WithPageSize(pagesize.A4).
+		WithOrientation(orientation.Vertical).
+		WithLeftMargin(15).
+		WithTopMargin(15).
+		WithRightMargin(15).
+		Build()
 
-type pdfGenerator struct {
-	tmpl        *template.Template
-	chromeWSURL string
-}
+	m := maroto.New(cfg)
 
-//#region NewPDFGenerator
-func NewPDFGenerator(cfg config.PDFConfig) (PDFGenerator, error) {
-	tmpl, err := template.ParseFS(templateFS, "templates/agreement.html")
+	// --- NAGŁÓWEK DOKUMENTU ---
+	m.AddRows(
+		row.New(12).Add(
+			text.NewCol(12, "POTWIERDZENIE ZŁOŻENIA OŚWIADCZENIA", props.Text{
+				Size:  14,
+				Style: fontstyle.Bold,
+				Align: align.Center,
+				Color: &props.Color{Red: 30, Green: 64, Blue: 175},
+			}),
+		),
+		row.New(8).Add(
+			text.NewCol(12, fmt.Sprintf("Numer umowy: %s", data.AgreementNumber), props.Text{
+				Size:  10,
+				Style: fontstyle.Bold,
+				Align: align.Center,
+				Color: &props.Color{Red: 100, Green: 116, Blue: 139},
+			}),
+		),
+		line.NewRow(2, props.Line{
+			Color: &props.Color{Red: 226, Green: 232, Blue: 240},
+		}),
+	)
+
+	// --- DANE OBYWATELA ---
+	m.AddRows(
+		row.New(8),
+		row.New(8).Add(
+			text.NewCol(12, "DANE WNIOSKODAWCY", props.Text{
+				Size:  11,
+				Style: fontstyle.Bold,
+				Color: &props.Color{Red: 15, Green: 23, Blue: 42},
+			}),
+		),
+		row.New(6).Add(
+			text.NewCol(6, fmt.Sprintf("Imię i nazwisko: %s", formatFullName(data.FirstName, data.SecondName, data.LastName)), props.Text{Size: 9}),
+			text.NewCol(6, fmt.Sprintf("PESEL: %s", data.PESEL), props.Text{Size: 9}),
+		),
+		row.New(6).Add(
+			text.NewCol(6, fmt.Sprintf("E-mail: %s", data.Email), props.Text{Size: 9}),
+			text.NewCol(6, fmt.Sprintf("Telefon: %s", data.PhoneNumber), props.Text{Size: 9}),
+		),
+		row.New(6).Add(
+			text.NewCol(12, fmt.Sprintf("Adres: %s", formatAddress(data.Street, data.HouseNumber, data.FlatNumber, data.PostalCode, data.City)), props.Text{Size: 9}),
+		),
+	)
+
+	// --- DANE ORGANU REJESTRUJĄCEGO (JEŚLI OBECNE) ---
+	if data.OfficerName != "" || data.InstitutionID != "" {
+		m.AddRows(
+			row.New(8),
+			row.New(8).Add(
+				text.NewCol(12, "DANE ORGANU REJESTRUJĄCEGO", props.Text{
+					Size:  11,
+					Style: fontstyle.Bold,
+					Color: &props.Color{Red: 15, Green: 23, Blue: 42},
+				}),
+			),
+			row.New(6).Add(
+				text.NewCol(6, fmt.Sprintf("Urzędnik: %s (ID: %s)", data.OfficerName, data.OfficerID), props.Text{Size: 9}),
+				text.NewCol(6, fmt.Sprintf("Instytucja: %s / Dept: %s", data.InstitutionID, data.DepartmentID), props.Text{Size: 9}),
+			),
+		)
+	}
+
+	// --- FOOTER Z KODEM QR I HASH ---
+	m.AddRows(
+		row.New(12),
+		line.NewRow(1, props.Line{
+			Color: &props.Color{Red: 226, Green: 232, Blue: 240},
+		}),
+		row.New(6),
+		row.New(30).Add(
+			col.New(8).Add(
+				text.New(fmt.Sprintf("Podpisano dnia: %s", data.SignedAt), props.Text{Size: 8, Style: fontstyle.Bold}),
+				text.New(fmt.Sprintf("Identyfikator umowy: %s", data.AgreementID), props.Text{Size: 8}),
+				text.New(fmt.Sprintf("Wersja klucza KMS: v%d", data.KeyVersion), props.Text{Size: 8}),
+				text.New(fmt.Sprintf("Hash dokumentu (SHA-256): %s", data.DocumentHash), props.Text{Size: 7, Color: &props.Color{Red: 100, Green: 116, Blue: 139}}),
+			),
+			code.NewQrCol(4, data.DocumentHash, props.Rect{
+				Percent: 100,
+				Center:  true,
+			}),
+		),
+	)
+
+	document, err := m.Generate()
 	if err != nil {
-		return nil, fmt.Errorf("pdf_gen: failed to parse template: %w", err)
+		return nil, fmt.Errorf("pdf_gen: failed to generate pdf: %w", err)
 	}
 
-	return &pdfGenerator{
-		tmpl:        tmpl,
-		chromeWSURL: cfg.ChromeWSURL,
-	}, nil
+	return document.GetBytes(), nil
 }
 
-//#region GenerateAgreementPDF
-func (g *pdfGenerator) GenerateAgreementPDF(ctx context.Context, data AgreementTemplateData) ([]byte, error) {
-	var htmlBuf bytes.Buffer
-	if err := g.tmpl.Execute(&htmlBuf, data); err != nil {
-		return nil, fmt.Errorf("pdf_gen: failed to execute template: %w", err)
+func formatFullName(first string, second *string, last string) string {
+	if second != nil && *second != "" {
+		return fmt.Sprintf("%s %s %s", first, *second, last)
 	}
+	return fmt.Sprintf("%s %s", first, last)
+}
 
-	var browser *rod.Browser
-	if g.chromeWSURL != "" {
-		browser = rod.New().ControlURL(g.chromeWSURL).Context(ctx).MustConnect()
-	} else {
-		u := launcher.New().Headless(true).MustLaunch()
-		browser = rod.New().ControlURL(u).Context(ctx).MustConnect()
+func formatAddress(street, house string, flat *string, code, city string) string {
+	if flat != nil && *flat != "" {
+		return fmt.Sprintf("ul. %s %s/%s, %s %s", street, house, *flat, code, city)
 	}
-	defer browser.MustClose()
-
-	page := browser.MustPage()
-	defer page.MustClose()
-
-	page.MustSetDocumentContent(htmlBuf.String())
-	page.MustWaitLoad()
-
-	margin := 0.4
-	pdfStream, err := page.PDF(&proto.PagePrintToPDF{
-		PrintBackground: true,
-		MarginTop:       &margin,
-		MarginBottom:    &margin,
-		MarginLeft:      &margin,
-		MarginRight:     &margin,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("pdf_gen: failed to print pdf: %w", err)
-	}
-
-	return io.ReadAll(pdfStream)
+	return fmt.Sprintf("ul. %s %s, %s %s", street, house, code, city)
 }
