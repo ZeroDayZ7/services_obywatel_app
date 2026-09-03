@@ -91,12 +91,13 @@ func (h *AuthHandler) LoginStep2(c *fiber.Ctx) error {
 		return apperr.SendAppError(c, apperr.ErrInvalidRequest)
 	}
 
+	// POPRAWIONE: fingerprint jako 4. parametr (deviceID), body.Signature jako 5. (signature)
 	response, err := h.authService.AttemptLoginStep2(
 		ctx,
 		parsedUserID,
 		*rc.SessionID,
-		body.Signature,
-		fingerprint,
+		fingerprint,    // deviceID
+		body.Signature, // signature
 		rc.IP,
 	)
 	if err != nil {

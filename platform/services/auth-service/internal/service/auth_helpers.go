@@ -146,7 +146,7 @@ func (s *authService) handleFailedLogin(ctx context.Context, userID uuid.UUID) e
 	return errors.ErrInvalidCredentials
 }
 
-// #endregion
+
 
 // #region createChallengeSession
 func (s *authService) createChallengeSession(ctx context.Context, userID uuid.UUID, deviceID string) (setupToken string, sessionID uuid.UUID, challenge string, err error) {

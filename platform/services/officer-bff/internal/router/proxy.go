@@ -89,7 +89,7 @@ func NewSingleHostProxy(targetURL, targetPath, targetServiceID string, keyStore 
 	return proxy.ServeHTTP, nil
 }
 
-// #endregion
+
 
 // NewReverseProxy tworzy zwykłe proxy przelotowe (np. dla GET /auth/me oraz Krok 1 logowania)
 //#region NewReverseProxy
@@ -224,7 +224,7 @@ func NewAuthLogoutProxy(authServiceURL, targetPath string, keyStore *httpserver.
 	return proxy.ServeHTTP, nil
 }
 
-// #endregion
+
 
 // setAuthCookie ustawia bezpieczne ciasteczko HttpOnly
 //#region setAuthCookie
@@ -258,4 +258,4 @@ func clearAuthCookie(resp *http.Response, name string) {
 	resp.Header.Add("Set-Cookie", cookie.String())
 }
 
-// #endregion
+
