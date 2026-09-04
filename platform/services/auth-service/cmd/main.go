@@ -5,6 +5,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/zerodayz7/platform/pkg/agent"
 	"github.com/zerodayz7/platform/pkg/database"
 	"github.com/zerodayz7/platform/pkg/httpserver"
 	"github.com/zerodayz7/platform/pkg/rabbitmq"
@@ -68,54 +69,77 @@ func main() {
 			log.Error("Failed to close Redis client", "error", err)
 		}
 	}()
+
 	// =========================================================================
-	// 6a. POBIERANIE POŚWIADCZEŃ Z SIDECARA PRZEZ UDS (BEZPOŚREDNIO)
+	// 6a. ZBIORCZY BOOTSTRAP POŚWIADCZEŃ Z SIDECARA NA PODSTAWIE MANIFESTU
 	// =========================================================================
-	kmsCfg := shared.Config{
-		SocketPath: config.AppConfig.Agent.SocketPath,
-		Timeout:    5 * time.Second,
+	agentManifest, err := agent.LoadManifest("secrets.yaml")
+	if err != nil {
+		log.Error("❌ Nie udało się wczytać manifestu agenta (secrets.yaml)", "error", err)
+		os.Exit(1)
 	}
 
-	log.Info("🔌 Łączenie z secret-agent przez UDS...", "path", kmsCfg.SocketPath)
+	// Filtrujemy manifest – pobieramy tylko zasoby z enabled: true (np. ["postgres"])
+	requiredServices := agentManifest.GetEnabledResourceNames()
+	if len(requiredServices) == 0 {
+		log.Warn("Brak aktywnych zasobów w manifeście do pobrania podczas bootstrapu")
+	}
 
-	cacheKey := "postgres_auth_auth_database"
+	log.Info("🚀 Rozpoczynanie zbiorczego bootstrapu poświadczeń",
+		"service", agentManifest.Service,
+		"resources", requiredServices,
+		"socket_path", agentManifest.SocketPath,
+	)
 
-	ctxCreds, cancelCreds := context.WithTimeout(context.Background(), kmsCfg.Timeout)
-	dbCreds, cleanup, err := shared.FetchAgentSecret(ctxCreds, kmsCfg, cacheKey)
-	cancelCreds()
+	agentCfg := agent.Config{
+		SocketPath:    agentManifest.SocketPath,
+		TargetService: agentManifest.Service,
+		Timeout:       agentManifest.Timeout,
+	}
+
+	ctxBootstrap, cancelBootstrap := context.WithTimeout(context.Background(), agentManifest.Timeout)
+	bootResp, cleanupSecrets, err := agent.BootstrapApp(ctxBootstrap, agentCfg, requiredServices)
+	cancelBootstrap()
 
 	if err != nil {
-		log.Error("❌ Nie udało się pobrać poświadczeń DB z sidecara", "error", err)
+		log.Error("❌ Zbiorczy bootstrap poświadczeń z sidecara nie powiódł się", "error", err)
 		os.Exit(1)
 	}
-	defer cleanup()
+	// Pamiętamy o wyczyszczeniu czystych bajtów haseł z RAM po zakończeniu bootstrapu
+	defer cleanupSecrets()
 
-	// Weryfikacja poświadczeń DB
-	if dbCreds == nil {
-		log.Error("❌ Sidecar zwrócił pustą odpowiedź (brak poświadczeń do Postgresa)")
-		os.Exit(1)
+	// Podpinamy pobrane dane pod konfig (jeśli dany zasób został zwrócony):
+	if bootResp.Postgres != nil {
+		log.Info("✅ Pomyślnie pobrano poświadczenia Postgres w zbiorczym paczce", "user", bootResp.Postgres.Username)
+		config.AppConfig.Database.User = bootResp.Postgres.Username
+		config.AppConfig.Database.Password = string(bootResp.Postgres.Password)
 	}
 
-	log.Info("✅ Pomyślnie pobrano poświadczenia DB z sidecara", "username", dbCreds.Username)
+	if bootResp.Redis != nil {
+		log.Info("✅ Pomyślnie pobrano poświadczenia Redis w zbiorczym paczce")
+		config.AppConfig.Redis.Password = string(bootResp.Redis.Password)
+	}
 
-	// Nadpisujemy konfigurację pobranymi danymi
-	config.AppConfig.Database.User = dbCreds.Username
-	config.AppConfig.Database.Password = string(dbCreds.Password)
+	if bootResp.RabbitMQ != nil {
+		log.Info("✅ Pomyślnie pobrano poświadczenia RabbitMQ w zbiorczym paczce", "user", bootResp.RabbitMQ.Username)
+		config.AppConfig.RabbitMQ.User = bootResp.RabbitMQ.Username
+		config.AppConfig.RabbitMQ.Password = string(bootResp.RabbitMQ.Password)
+	}
 
-	// 6. Database Init
+	// 6b. Database Init (łączenie z bazą przy użyciu pobranych poświadczeń)
 	db, closeDB := config.MustInitDB(config.AppConfig.Database)
 	defer closeDB()
 
-	// Zerujemy wrażliwe dane z konfiguracji po ustanowieniu połączenia
-	config.AppConfig.Database.Password = ""
-
 	// =========================================================================
-	// 6b. GOROUTINE ODŚWIEŻAJĄCA POŚWIADCZENIA W TLE (ROTACJA)
+	// 6c. START LICZNIKA / PĘTLI ROTACJI W TLE (Dopiero PO udanym bootstrapie)
 	// =========================================================================
 	ctxApp, cancelApp := context.WithCancel(context.Background())
 	defer cancelApp()
 
-	go shared.StartPostgresRotationLoop(ctxApp, kmsCfg, 30*time.Minute, database.NewGormAdapter(db))
+	gormAdapter := database.NewGormAdapter(db)
+	if err := agent.StartAutoRotation(ctxApp, agentManifest, gormAdapter); err != nil {
+		log.Error("❌ Nie udało się uruchomić automatycznej rotacji poświadczeń", "error", err)
+	}
 	// =========================================================================
 	// 7. RabbitMQ Publisher Setup
 	// =========================================================================
@@ -171,7 +195,7 @@ func main() {
 			}
 		}()
 	} else {
-		log.Warn("⚠️ RabbitMQ jest wyłączony - konsumery w tle nie zostały uruchomione.")
+		log.Warn("RabbitMQ jest wyłączony - konsumery w tle nie zostały uruchomione.")
 	}
 
 	router.SetupRoutes(authApp, container)

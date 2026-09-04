@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gofiber/fiber/v2/middleware/session"
 	spfViper "github.com/spf13/viper"
 	"github.com/zerodayz7/platform/pkg/kms"
 	"github.com/zerodayz7/platform/pkg/shared"
@@ -53,10 +52,7 @@ func (c *Config) ToKMSServiceConfig() kms.Config {
 	return c.KMS.ToKMSServiceConfig()
 }
 
-var (
-	AppConfig Config
-	Store     *session.Store
-)
+var AppConfig Config
 
 //#region SetGatewayDefaults
 func SetGatewayDefaults() {

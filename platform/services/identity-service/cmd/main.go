@@ -29,6 +29,8 @@ func main() {
 		os.Exit(1)
 	}
 
+	// log.Info("CFG:", cfg)
+
 	dbPool, closeDB := config.MustInitDB(cfg.Database)
 	defer closeDB()
 
@@ -97,7 +99,7 @@ func main() {
 		fileStorage = &storage.NoOpStorage{}
 	}
 
-	container := di.BuildContainer(cfg, dbPool, eventPublisher, cfg.ToKMSServiceConfig(), keyStore, fileStorage)
+	container := di.BuildContainer(cfg, dbPool, eventPublisher, keyStore, fileStorage)
 
 	auditWorker := worker.NewAuditWorker(
 		dbPool,
@@ -112,7 +114,7 @@ func main() {
 		)
 		go auditWorker.Start(ctx)
 	} else {
-		log.Warn("⚠️ Audit Worker jest wyłączony (Enabled=false).")
+		log.Warn("Audit Worker jest wyłączony (Enabled=false).")
 	}
 
 	registrationWorker := worker.NewRegistrationWorker(
@@ -128,7 +130,7 @@ func main() {
 		)
 		go registrationWorker.Start(ctx)
 	} else {
-		log.Warn("⚠️ Registration Worker jest wyłączony (Enabled=false).")
+		log.Warn("Registration Worker jest wyłączony (Enabled=false).")
 	}
 
 	r := router.NewRouter(container)

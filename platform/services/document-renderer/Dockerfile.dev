@@ -1,0 +1,17 @@
+FROM golang:1.27-alpine
+
+RUN apk add --no-cache \
+    chromium \
+    nss \
+    freetype \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont \
+    font-noto-emoji \
+    git
+
+WORKDIR /app/services/document-renderer
+
+ENV CHROME_BIN=/usr/bin/chromium-browser
+
+CMD ["go", "run", "./cmd/server/main.go"]

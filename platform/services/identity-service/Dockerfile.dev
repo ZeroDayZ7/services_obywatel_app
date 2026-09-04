@@ -1,0 +1,9 @@
+FROM golang:1.27-alpine
+
+# Instalujemy air do hot-reloadu
+RUN go install github.com/air-verse/air@latest
+
+WORKDIR /app/services/identity-service
+
+# Komenda budująca i uruchamiająca binarkę dla identity-service
+CMD ["air", "--build.cmd", "go build -o /tmp/identity-service ./cmd/main.go", "--build.bin", "/tmp/identity-service"]

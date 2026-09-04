@@ -15,12 +15,23 @@ import (
 )
 
 // #region VerifyDeviceSignature
-func (s *authService) VerifyDeviceSignature(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID, signature, fingerprint string) (*http.LoginResponse, error) {
+func (s *authService) VerifyDeviceSignature(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID, deviceID string, signature string) (*http.LoginResponse, error) {
 	log := shared.GetLogger()
 
-	device, err := s.userRepo.GetDeviceByFingerprint(ctx, userID, fingerprint)
+	// 1. Pobranie sesji parowania/wyzwania z Redisa
+	setupSess, err := s.cache.GetSetupSession(ctx, sessionID)
+	if err != nil || setupSess == nil {
+		log.WarnMap("[VerifyDeviceSignature] Challenge session expired or not found", map[string]any{
+			"session_id": sessionID,
+			"err":        err,
+		})
+		return nil, errors.ErrChallengeExpired
+	}
+
+	// 2. Pobranie klucza publicznego zaufanego urządzenia po deviceID (zhashowany fingerprint)
+	device, err := s.userRepo.GetDeviceByFingerprint(ctx, userID, deviceID)
 	if err != nil || device == nil {
-		log.WarnMap("Device not found or inactive", map[string]any{"user": userID, "fpt": fingerprint})
+		log.WarnMap("Device not found or inactive", map[string]any{"user": userID, "device_id": deviceID})
 		return nil, errors.ErrUntrustedDevice
 	}
 
@@ -30,11 +41,15 @@ func (s *authService) VerifyDeviceSignature(ctx context.Context, userID uuid.UUI
 		return nil, errors.ErrInternal
 	}
 
-	// Weryfikacja challenge session (odczyt z Redisa, usuwanie i sprawdzanie podpisu Ed25519 z Domain Separator)
-	if err := s.verifyChallengeSession(ctx, sessionID, signature, pubKeyBytes); err != nil {
+	// 3. Weryfikacja kryptograficzna podpisu
+	if err := s.verifyChallengeSession(setupSess.Challenge, signature, pubKeyBytes); err != nil {
 		return nil, err
 	}
 
+	// Posprzątaj sesję wyzwania po użyciu
+	_ = s.cache.DeleteSetupSession(ctx, sessionID)
+
+	// 4. Pobranie użytkownika i weryfikacja stanu konta
 	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil || user == nil {
 		return nil, errors.ErrUserNotFound
@@ -48,17 +63,18 @@ func (s *authService) VerifyDeviceSignature(ctx context.Context, userID uuid.UUI
 		return nil, err
 	}
 
-	accessToken, newSessionID, err := s.CreateAccessToken(ctx, user.ID, fingerprint)
+	// 5. Generowanie docelowych tokenów JWT oraz wpisu sesji w Redis
+	accessToken, newSessionID, err := s.CreateAccessToken(ctx, user.ID, deviceID)
 	if err != nil {
 		return nil, errors.ErrInternal
 	}
 
-	refreshToken, err := s.CreateRefreshToken(user.ID, fingerprint, nil)
+	refreshToken, err := s.CreateRefreshToken(user.ID, deviceID, &device.ID)
 	if err != nil {
 		return nil, errors.ErrInternal
 	}
 
-	sessionData := s.buildUserSession(user, fingerprint, device.PublicKey, false)
+	sessionData := s.buildUserSession(user, deviceID, device.PublicKey, false)
 
 	if err := s.cache.SetSession(ctx, newSessionID, &sessionData, s.cfg.Session.TTL); err != nil {
 		log.ErrorObj("Failed to save session in Redis", err)
@@ -121,7 +137,14 @@ func (s *authService) RegisterUserDevice(ctx context.Context, userID uuid.UUID, 
 }
 
 // #region RegisterDevice
-func (s *authService) RegisterDevice(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID, clientIP string, req schemas.RegisterDeviceRequest) (*http.RegisterDeviceResponse, error) {
+func (s *authService) RegisterDevice(
+	ctx context.Context,
+	userID uuid.UUID,
+	sessionID uuid.UUID,
+	deviceID string,
+	clientIP string,
+	req schemas.RegisterDeviceRequest,
+) (*http.RegisterDeviceResponse, error) {
 	log := shared.GetLogger()
 
 	if sessionID == uuid.Nil {
@@ -136,24 +159,19 @@ func (s *authService) RegisterDevice(ctx context.Context, userID uuid.UUID, sess
 		return nil, errors.ErrSessionExpired
 	}
 
-	if setupSess.Fingerprint != req.DeviceFingerprint {
-		log.WarnMap("[RegisterDevice] Fingerprint mismatch", map[string]any{"sid": sessionID})
-		return nil, errors.ErrInvalidDeviceFingerprint
-	}
-
-	// 2. Weryfikacja kryptograficzna wyzwania (Atomic challenge verification & deletion)
+	// 2. Weryfikacja kryptograficzna wyzwania z pobranej wyżej sesji
 	pubKeyBytes, err := base64.StdEncoding.DecodeString(req.PublicKey)
 	if err != nil || len(pubKeyBytes) != ed25519.PublicKeySize {
 		log.ErrorObj("[RegisterDevice] Invalid public key format", err)
 		return nil, errors.ErrInvalidPairingData
 	}
 
-	if err := s.verifyChallengeSession(ctx, sessionID, req.Signature, pubKeyBytes); err != nil {
+	if err := s.verifyChallengeSession(setupSess.Challenge, req.Signature, pubKeyBytes); err != nil {
 		log.WarnMap("[RegisterDevice] Cryptographic verification failed", map[string]any{"sid": sessionID, "err": err})
 		return nil, err
 	}
 
-	// Posprzątaj sesję setup po przejściu testu kryptograficznego
+	// Usunięcie całej sesji setup po pomyślnej weryfikacji
 	_ = s.cache.DeleteSetupSession(ctx, sessionID)
 
 	// 3. Pobranie użytkownika i weryfikacja stanu konta
@@ -171,7 +189,7 @@ func (s *authService) RegisterDevice(ctx context.Context, userID uuid.UUID, sess
 	// 4. Utworzenie lub aktualizacja rekordu urządzenia
 	device := &model.UserDevice{
 		UserID:              userID,
-		DeviceFingerprint:   req.DeviceFingerprint,
+		DeviceFingerprint:   deviceID,
 		PublicKey:           req.PublicKey,
 		DeviceNameEncrypted: req.DeviceNameEncrypted,
 		Platform:            req.Platform,
@@ -186,18 +204,18 @@ func (s *authService) RegisterDevice(ctx context.Context, userID uuid.UUID, sess
 	}
 
 	// 5. Generowanie poświadczeń (JWT Access & Refresh Token)
-	accessToken, newSID, err := s.CreateAccessToken(ctx, userID, req.DeviceFingerprint)
+	accessToken, newSID, err := s.CreateAccessToken(ctx, userID, deviceID)
 	if err != nil {
 		return nil, errors.ErrInternal
 	}
 
-	refreshToken, err := s.CreateRefreshToken(userID, req.DeviceFingerprint, &device.ID)
+	refreshToken, err := s.CreateRefreshToken(userID, deviceID, &device.ID)
 	if err != nil {
 		return nil, errors.ErrInternal
 	}
 
 	// 6. Zapis pełnej sesji użytkownika w Redis (dla API Gateway)
-	sessionData := s.buildUserSession(user, req.DeviceFingerprint, req.PublicKey, false)
+	sessionData := s.buildUserSession(user, deviceID, req.PublicKey, false)
 	if err := s.cache.SetSession(ctx, newSID, &sessionData, s.cfg.Session.TTL); err != nil {
 		log.ErrorObj("[RegisterDevice] Failed to persist session in Redis", err)
 		return nil, errors.ErrInternal

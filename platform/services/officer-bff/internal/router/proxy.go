@@ -11,6 +11,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/zerodayz7/platform/pkg/constants"
@@ -64,18 +65,25 @@ func NewSingleHostProxy(targetURL, targetPath, targetServiceID string, keyStore 
 			pr.SetURL(target)
 			pr.SetXForwarded()
 
-			// Jawnie ustawiamy docelową ścieżkę
-			pr.Out.URL.Path = targetPath
-			pr.Out.URL.RawPath = targetPath
+			if targetPath != "" {
+				// Jeśli ścieżka zawiera parametr dynamiczny (np. UUID), podmieniamy tylko prefix
+				if strings.Contains(targetPath, "{agreement_id}") {
+					inPath := pr.In.URL.Path
+					// Zamieniamy /api/v1/official/agreements/ na /api/v1/agreements/
+					outPath := strings.Replace(inPath, "/api/v1/official/agreements/", "/api/v1/agreements/", 1)
+					pr.Out.URL.Path = outPath
+					pr.Out.URL.RawPath = outPath
+				} else {
+					// Dla sztywnych tras (np. /api/v1/citizens) wpisujemy dokładną ścieżkę
+					pr.Out.URL.Path = targetPath
+					pr.Out.URL.RawPath = targetPath
+				}
+			}
 
-			// Kluczowe dla POST/PUT: Jeśli istnieje body, musimy je zbuforować i sklonować,
-			// aby ReverseProxy nie "pochłonęło" strumienia przed wysłaniem do serwisu docelowego.
 			if pr.In.Body != nil {
 				bodyBytes, err := io.ReadAll(pr.In.Body)
 				if err == nil && len(bodyBytes) > 0 {
-					// Odtwarzamy body dla wejścia (żeby middleware w BFF mogło go ewentualnie odczytać)
 					pr.In.Body = io.NopCloser(bytes.NewReader(bodyBytes))
-					// Ustawiamy body dla żądania wychodzącego do identity-service
 					pr.Out.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 					pr.Out.ContentLength = int64(len(bodyBytes))
 					pr.Out.Header.Set("Content-Length", strconv.Itoa(len(bodyBytes)))
@@ -88,8 +96,6 @@ func NewSingleHostProxy(targetURL, targetPath, targetServiceID string, keyStore 
 
 	return proxy.ServeHTTP, nil
 }
-
-// #endregion
 
 // NewReverseProxy tworzy zwykłe proxy przelotowe (np. dla GET /auth/me oraz Krok 1 logowania)
 //#region NewReverseProxy
@@ -224,8 +230,6 @@ func NewAuthLogoutProxy(authServiceURL, targetPath string, keyStore *httpserver.
 	return proxy.ServeHTTP, nil
 }
 
-// #endregion
-
 // setAuthCookie ustawia bezpieczne ciasteczko HttpOnly
 //#region setAuthCookie
 func setAuthCookie(resp *http.Response, name, value string, duration time.Duration, path string) {
@@ -257,5 +261,3 @@ func clearAuthCookie(resp *http.Response, name string) {
 	}
 	resp.Header.Add("Set-Cookie", cookie.String())
 }
-
-// #endregion

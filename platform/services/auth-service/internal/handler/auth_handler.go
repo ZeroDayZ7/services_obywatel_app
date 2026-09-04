@@ -37,8 +37,6 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(c.UserContext(), 2*time.Second)
 	defer cancel()
 	log := shared.GetLogger()
-	log.Error("DUPA", "DUPA")
-	// log.Info("DUPA", "DUPA")
 
 	body := c.Locals("validatedBody").(schemas.LoginRequest)
 	rc := reqctx.MustFromFiber(c)
@@ -91,12 +89,13 @@ func (h *AuthHandler) LoginStep2(c *fiber.Ctx) error {
 		return apperr.SendAppError(c, apperr.ErrInvalidRequest)
 	}
 
+	// POPRAWIONE: fingerprint jako 4. parametr (deviceID), body.Signature jako 5. (signature)
 	response, err := h.authService.AttemptLoginStep2(
 		ctx,
 		parsedUserID,
 		*rc.SessionID,
-		body.Signature,
-		fingerprint,
+		fingerprint,    // deviceID
+		body.Signature, // signature
 		rc.IP,
 	)
 	if err != nil {
@@ -188,6 +187,7 @@ func (h *AuthHandler) RegisterDevice(c *fiber.Ctx) error {
 		ctx,
 		*rc.UserID,
 		*rc.SessionID,
+		rc.DeviceID,
 		rc.IP,
 		body,
 	)

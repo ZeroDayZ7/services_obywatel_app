@@ -1,12 +1,9 @@
 package di
 
 import (
-	"fmt"
-
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/zerodayz7/platform/pkg/envelope"
 	"github.com/zerodayz7/platform/pkg/httpserver"
-	"github.com/zerodayz7/platform/pkg/kms"
 	"github.com/zerodayz7/platform/pkg/rabbitmq"
 	"github.com/zerodayz7/platform/pkg/storage"
 	"github.com/zerodayz7/services/identity-service/config"
@@ -25,12 +22,10 @@ type Container struct {
 	Storage        storage.StorageClient
 }
 
-//#region BuildContainer
 func BuildContainer(
 	cfg *config.Config,
 	db *pgxpool.Pool,
 	eventPublisher rabbitmq.EventPublisher,
-	kmsCfg kms.Config,
 	keyStore *httpserver.KeyStore,
 	fileStorage storage.StorageClient,
 ) *Container {
@@ -64,14 +59,12 @@ func BuildContainer(
 	citizenRepo := repository.NewCitizenRepository(db, auditHmacKey)
 	outboxRepo := repository.NewOutboxRepository(db)
 
-	cryptor := envelope.NewEnvelopeCryptor(kmsCfg)
+	cryptor := envelope.NewEnvelopeCryptor(cfg.ToKMSServiceConfig())
 
-	pdfGen, err := service.NewPDFGenerator()
-	if err != nil {
-		panic(fmt.Sprintf("critical error: failed to initialize PDF generator: %v", err))
-	}
+	// Generator PDF
+	pdfGen := service.NewPDFGenerator(cfg.DocumentRendererURL)
 
-	// 2. Przekazanie osobnych kluczy HMAC do serwisu obywatela
+	// 2. Przekazanie generatora PDF oraz osobnych kluczy HMAC do serwisu obywatela
 	citizenSvc := service.NewCitizenService(
 		citizenRepo,
 		cryptor,

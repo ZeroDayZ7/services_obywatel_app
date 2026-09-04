@@ -15,7 +15,7 @@ type ServerConfig struct {
 	AppName       string        `mapstructure:"APP_NAME" validate:"required"`
 	Port          string        `mapstructure:"PORT" validate:"required,numeric"`
 	BodyLimitMB   int           `mapstructure:"BODY_LIMIT_MB" validate:"min=1"`
-	Env           string        `mapstructure:"ENV" validate:"required,oneof=development staging production"`
+	Env           string        `mapstructure:"APP_ENV" validate:"required,oneof=development staging production"`
 	AppVersion    string        `mapstructure:"APP_VERSION"`
 	ServerHeader  string        `mapstructure:"SERVER_HEADER"`
 	Prefork       bool          `mapstructure:"PREFORK"`
@@ -119,7 +119,7 @@ type ServicesConfig struct {
 	OfficerBFF string `mapstructure:"SERVICE_OFFICER_BFF_URL" validate:"required,url"`
 }
 
-// #endregion
+
 
 // #region GetURL
 //#region GetURL

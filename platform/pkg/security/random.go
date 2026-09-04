@@ -36,7 +36,7 @@ func GenerateRandomString(length int) (string, error) {
 // GenerateRefreshToken generuje domyślny 64-bajtowy token odświeżający
 // #region GenerateRefreshToken
 func GenerateRefreshToken() (string, error) {
-	return GenerateRandomString(64)
+	return GenerateRandomString(47)
 }
 
 // GenerateOTPBytes generuje cyfrowy kod jednorazowy o określonej długości jako []byte.

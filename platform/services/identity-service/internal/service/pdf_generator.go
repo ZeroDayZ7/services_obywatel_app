@@ -1,101 +1,98 @@
+// cmdr: internal\service\pdf_generator.go
+
 package service
 
 import (
 	"bytes"
 	"context"
-	"embed"
+	"encoding/json"
 	"fmt"
-	"html/template"
-	"io"
-
-	"github.com/go-rod/rod"
-	"github.com/go-rod/rod/lib/launcher"
-	"github.com/go-rod/rod/lib/proto"
+	"net/http"
+	"time"
 )
-
-//go:embed templates/agreement.html
-var templateFS embed.FS
-
-type AgreementTemplateData struct {
-	AgreementID     string
-	AgreementNumber string
-	FirstName       string
-	SecondName      *string
-	LastName        string
-	PESEL           string
-	Email           string
-	PhoneNumber     string // <-- Dodane
-	Street          string
-	HouseNumber     string
-	FlatNumber      *string
-	PostalCode      string
-	City            string
-	SignedAt        string
-	KeyVersion      int
-	DocumentHash    string
-
-	OfficerName   string
-	OfficerID     string
-	DepartmentID  string
-	InstitutionID string
-}
 
 type PDFGenerator interface {
 	GenerateAgreementPDF(ctx context.Context, data AgreementTemplateData) ([]byte, error)
 }
 
-type pdfGenerator struct {
-	tmpl *template.Template
+type documentRendererClient struct {
+	baseURL    string
+	httpClient *http.Client
 }
 
-//#region NewPDFGenerator
-func NewPDFGenerator() (PDFGenerator, error) {
-	tmpl, err := template.ParseFS(templateFS, "templates/agreement.html")
-	if err != nil {
-		return nil, fmt.Errorf("pdf_gen: failed to parse template: %w", err)
+func NewPDFGenerator(documentRendererURL string) PDFGenerator {
+	return &documentRendererClient{
+		baseURL: documentRendererURL,
+		httpClient: &http.Client{
+			Timeout: 30 * time.Second,
+		},
 	}
-
-	return &pdfGenerator{tmpl: tmpl}, nil
 }
 
-//#region GenerateAgreementPDF
-func (g *pdfGenerator) GenerateAgreementPDF(ctx context.Context, data AgreementTemplateData) ([]byte, error) {
-	var htmlBuf bytes.Buffer
-	if err := g.tmpl.Execute(&htmlBuf, data); err != nil {
-		return nil, fmt.Errorf("pdf_gen: failed to execute template: %w", err)
+type AgreementTemplateData struct {
+	AgreementID     string  `json:"agreement_id"`
+	AgreementNumber string  `json:"agreement_number"`
+	FirstName       string  `json:"first_name"`
+	SecondName      *string `json:"second_name,omitempty"`
+	LastName        string  `json:"last_name"`
+	PESEL           string  `json:"pesel"`
+	Email           string  `json:"email"`
+	PhoneNumber     string  `json:"phone_number"`
+	Street          string  `json:"street"`
+	HouseNumber     string  `json:"house_number"`
+	FlatNumber      *string `json:"flat_number,omitempty"`
+	PostalCode      string  `json:"postal_code"`
+	City            string  `json:"city"`
+	SignedAt        string  `json:"signed_at"`
+	KeyVersion      int     `json:"key_version"`
+	DocumentHash    string  `json:"document_hash"`
+
+	OfficerName   string `json:"officer_name,omitempty"`
+	OfficerID     string `json:"officer_id,omitempty"`
+	DepartmentID  string `json:"department_id,omitempty"`
+	InstitutionID string `json:"institution_id,omitempty"`
+}
+
+// Request wysyłany do mikroserwisu document-renderer
+type renderPDFRequest struct {
+	Template string                `json:"template"`
+	Data     AgreementTemplateData `json:"data"`
+}
+
+func (c *documentRendererClient) GenerateAgreementPDF(ctx context.Context, data AgreementTemplateData) ([]byte, error) {
+	reqBody := renderPDFRequest{
+		Template: "contracts/identity_certificate.html",
+		Data:     data,
 	}
 
-	chromePath := `C:\Program Files\Google\Chrome\Application\chrome.exe`
-
-	u := launcher.New().
-		Bin(chromePath).
-		Headless(true).
-		MustLaunch()
-
-	browser := rod.New().ControlURL(u).Context(ctx).MustConnect()
-	defer browser.MustClose()
-
-	page := browser.MustPage()
-	defer page.MustClose()
-
-	page.MustSetDocumentContent(htmlBuf.String())
-	page.MustWaitLoad()
-
-	pdfStream, err := page.PDF(&proto.PagePrintToPDF{
-		PrintBackground: true,
-		MarginTop:       new(0.4),
-		MarginBottom:    new(0.4),
-		MarginLeft:      new(0.4),
-		MarginRight:     new(0.4),
-	})
+	payload, err := json.Marshal(reqBody)
 	if err != nil {
-		return nil, fmt.Errorf("pdf_gen: failed to print pdf: %w", err)
+		return nil, fmt.Errorf("pdf_gen: failed to marshal request: %w", err)
 	}
 
-	pdfBytes, err := io.ReadAll(pdfStream)
+	url := fmt.Sprintf("%s/api/v1/render", c.baseURL)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(payload))
 	if err != nil {
-		return nil, fmt.Errorf("pdf_gen: failed to read pdf stream: %w", err)
+		return nil, fmt.Errorf("pdf_gen: failed to create request: %w", err)
 	}
 
-	return pdfBytes, nil
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("pdf_gen: document-renderer service unavailable: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("pdf_gen: renderer returned status %d", resp.StatusCode)
+	}
+
+	// Odbieramy czysty bufor bajtów pliku PDF
+	var buf bytes.Buffer
+	if _, err := buf.ReadFrom(resp.Body); err != nil {
+		return nil, fmt.Errorf("pdf_gen: failed to read response body: %w", err)
+	}
+
+	return buf.Bytes(), nil
 }

@@ -28,7 +28,7 @@ type AuthService interface {
 	Verify2FA(ctx context.Context, token uuid.UUID, code []byte, fingerprint string, ip string) (*http.LoginResponse, error)
 	Resend2FACode(ctx context.Context, email string, token uuid.UUID) error
 	Logout(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID, fingerprint string) error
-	RegisterDevice(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID, clientIP string, req schemas.RegisterDeviceRequest) (*http.RegisterDeviceResponse, error)
+	RegisterDevice(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID, deviceID string, clientIP string, req schemas.RegisterDeviceRequest) (*http.RegisterDeviceResponse, error)
 	CreateTemporarySession(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID, clientIP string) (*http.LoginResponse, error)
 	RefreshToken(ctx context.Context, tokenStr string, fingerprint string) (*http.RefreshResponse, error)
 
@@ -113,10 +113,20 @@ func (s *authService) AttemptLogin(ctx context.Context, email string, password [
 }
 
 // #region AttemptLoginStep2
-func (s *authService) AttemptLoginStep2(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID, signature string, fingerprint string, clientIP string) (*http.LoginResponse, error) {
+func (s *authService) AttemptLoginStep2(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID, deviceID string, signature string, clientIP string) (*http.LoginResponse, error) {
 	log := shared.GetLogger()
 
-	// 1. Pobranie aktywnego poświadczenia pracownika (klucz publiczny z DB)
+	// 1. Pobranie sesji parowania/wyzwania (Setup Session) z Redisa
+	setupSess, err := s.cache.GetSetupSession(ctx, sessionID)
+	if err != nil || setupSess == nil {
+		log.WarnMap("[AttemptLoginStep2] Challenge session expired or not found", map[string]any{
+			"session_id": sessionID,
+			"err":        err,
+		})
+		return nil, errors.ErrChallengeExpired
+	}
+
+	// 2. Pobranie aktywnego poświadczenia pracownika (klucz publiczny z DB)
 	cred, err := s.employeeRepo.GetActiveCredentialByUserID(ctx, userID)
 	if err != nil || cred == nil {
 		log.WarnMap("[AttemptLoginStep2] Nie znaleziono aktywnego poświadczenia w DB", map[string]any{
@@ -144,8 +154,8 @@ func (s *authService) AttemptLoginStep2(ctx context.Context, userID uuid.UUID, s
 		return nil, errors.ErrInvalidSignature
 	}
 
-	// 2. Weryfikacja challenge, podpisu i usunięcie z Redisa w jednej funkcji
-	if err := s.verifyChallengeSession(ctx, sessionID, signature, pubKeyBytes); err != nil {
+	// 3. Weryfikacja challenge i podpisu
+	if err := s.verifyChallengeSession(setupSess.Challenge, signature, pubKeyBytes); err != nil {
 		log.WarnMap("SECURITY ALERT: Nieprawidłowy podpis pracownika lub wygasłe wyzwanie", map[string]any{
 			"user_id": userID,
 			"card_sn": cred.CardSerialNumber,
@@ -154,7 +164,10 @@ func (s *authService) AttemptLoginStep2(ctx context.Context, userID uuid.UUID, s
 		return nil, errors.ErrInvalidSignature
 	}
 
-	// 3. Pobranie użytkownika
+	// Posprzątaj sesję wyzwania po użyciu
+	_ = s.cache.DeleteSetupSession(ctx, sessionID)
+
+	// 4. Pobranie użytkownika
 	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil || user == nil {
 		log.WarnMap("[AttemptLoginStep2] Nie znaleziono konta użytkownika", map[string]any{
@@ -172,7 +185,7 @@ func (s *authService) AttemptLoginStep2(ctx context.Context, userID uuid.UUID, s
 		return nil, err
 	}
 
-	// 4. Metadane profilu pracownika - przypisujemy pobrany profil do struktury usera
+	// 5. Metadane profilu pracownika - przypisujemy pobrany profil do struktury usera
 	if user.Role != model.RoleCitizen && user.Role != model.RoleUser {
 		empProfile, err := s.employeeRepo.GetProfileByUserID(ctx, user.ID)
 		if err == nil && empProfile != nil {
@@ -180,19 +193,19 @@ func (s *authService) AttemptLoginStep2(ctx context.Context, userID uuid.UUID, s
 		}
 	}
 
-	// 5. Generowanie tokenów i sesji
-	accessToken, newSessionID, err := s.CreateAccessToken(ctx, user.ID, fingerprint)
+	// 6. Generowanie tokenów i sesji
+	accessToken, newSessionID, err := s.CreateAccessToken(ctx, user.ID, deviceID)
 	if err != nil {
 		return nil, errors.ErrInternal
 	}
 
-	refreshToken, err := s.CreateRefreshToken(user.ID, fingerprint, nil)
+	refreshToken, err := s.CreateRefreshToken(user.ID, deviceID, nil)
 	if err != nil {
 		return nil, errors.ErrInternal
 	}
 
 	// Korzystamy z ujednoliconej budowy sesji
-	sessionData := s.buildUserSession(user, fingerprint, cred.PublicKey, false)
+	sessionData := s.buildUserSession(user, deviceID, cred.PublicKey, false)
 
 	if err := s.cache.SetSession(ctx, newSessionID, &sessionData, s.cfg.Session.TTL); err != nil {
 		return nil, errors.ErrInternal
@@ -369,6 +382,7 @@ func (s *authService) prepareEmployeeLogin(ctx context.Context, user *model.User
 		Fingerprint: fingerprint,
 		PublicKey:   credential.PublicKey,
 		Role:        string(user.Role),
+		Challenge:   challenge,
 	}
 
 	if err := s.cache.SetSetupSession(ctx, sessionID, &sessionData, 15*time.Minute); err != nil {
@@ -565,4 +579,4 @@ func (s *authService) CreateTemporarySession(ctx context.Context, userID uuid.UU
 	}, nil
 }
 
-// #endregion
+

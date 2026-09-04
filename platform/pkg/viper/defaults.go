@@ -9,7 +9,7 @@ func SetBaseDefaults(serviceName string) {
 	viper.SetDefault("APP_NAME", serviceName)
 	viper.SetDefault("PORT", "8081")
 	viper.SetDefault("BODY_LIMIT_MB", 2)
-	viper.SetDefault("ENV", "development")
+	viper.SetDefault("APP_ENV", "development")
 	viper.SetDefault("IDLE_TIMEOUT", "30s")
 	viper.SetDefault("READ_TIMEOUT", "15s")
 	viper.SetDefault("WRITE_TIMEOUT", "15s")
@@ -22,7 +22,7 @@ func SetBaseDefaults(serviceName string) {
 
 //#region SetDBDefaults
 func SetDBDefaults() {
-	viper.SetDefault("DB_HOST", "127.0.0.1")
+	viper.SetDefault("DB_HOST", "xxxx")
 	viper.SetDefault("DB_PORT", 5432)
 	viper.SetDefault("DB_USER", "postgres")
 	viper.SetDefault("DB_PASSWORD", "secret")

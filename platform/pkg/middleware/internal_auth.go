@@ -30,7 +30,7 @@ func InternalAuthMiddleware(keyStore *httpserver.KeyStore) fiber.Handler {
 		// 2. Pobierz właściwy klucz HMAC z KeyStore
 		hmacKey, _, ok := keyStore.GetKey(senderID)
 		if !ok {
-			log.Warn("⚠️ Nie znaleziono klucza HMAC dla nadawcy", "sender", senderID)
+			log.Warn("Nie znaleziono klucza HMAC dla nadawcy", "sender", senderID)
 			return apperr.SendAppError(c, apperr.ErrInternalInvalidSignature)
 		}
 

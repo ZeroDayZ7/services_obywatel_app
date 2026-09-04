@@ -69,7 +69,6 @@ type ResetPasswordFinalRequest struct {
 type RegisterDeviceRequest struct {
 	PublicKey           string `json:"public_key" validate:"required"`
 	Signature           string `json:"signature" validate:"required"`
-	DeviceFingerprint   string `json:"fingerprint" validate:"required"`
 	DeviceNameEncrypted string `json:"encrypted_name" validate:"required"`
 	Platform            string `json:"platform" validate:"required"`
 }

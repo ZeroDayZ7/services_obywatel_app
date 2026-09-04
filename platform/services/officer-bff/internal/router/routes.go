@@ -25,7 +25,7 @@ func applyGlobalMiddleware(handler http.Handler, c *di.Container) http.Handler {
 
 	gwSecret, _, ok := c.KeyStore.GetKey("gateway-service")
 	if !ok {
-		log.Warn("⚠️ Brak klucza HMAC dla gateway-service w KeyStore!")
+		log.Warn("Brak klucza HMAC dla gateway-service w KeyStore!")
 	}
 
 	hmacMiddleware := httpserver.InternalAuthMiddleware(gwSecret)
