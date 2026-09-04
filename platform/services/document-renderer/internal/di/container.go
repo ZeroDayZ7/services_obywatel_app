@@ -2,6 +2,7 @@ package di
 
 import (
 	"document-renderer/config"
+	"document-renderer/internal/handler"
 	"document-renderer/internal/renderer"
 	"document-renderer/internal/router"
 	"net/http"
@@ -13,10 +14,12 @@ type Container struct {
 
 func NewContainer(cfg *config.Config, pdfRenderer renderer.PDFRenderer) *Container {
 	renderService := NewServiceContainer(pdfRenderer, cfg.TemplatesDir)
-	renderHandler := NewHandlerContainer(renderService)
-	r := router.NewRenderRouter(renderHandler)
+	renderHandler := NewHandlerContainer(renderService, cfg.MaxRequestBodyBytes)
+	healthHandler := handler.NewHealthHandler(pdfRenderer)
+
+	mainRouter := router.NewRouter(cfg, renderHandler, healthHandler)
 
 	return &Container{
-		Router: r,
+		Router: mainRouter,
 	}
 }

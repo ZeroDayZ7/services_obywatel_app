@@ -5,6 +5,6 @@ import (
 	"document-renderer/internal/service"
 )
 
-func NewHandlerContainer(renderService service.RenderService) handler.RenderHandler {
-	return handler.NewRenderHandler(renderService)
+func NewHandlerContainer(renderService service.RenderService, maxRequestBodyBytes int64) handler.RenderHandler {
+	return handler.NewRenderHandler(renderService, maxRequestBodyBytes)
 }

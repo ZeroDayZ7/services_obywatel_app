@@ -8,8 +8,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 	"github.com/zerodayz7/platform/pkg/httpserver"
 )
 
@@ -23,26 +21,12 @@ func main() {
 	}
 	defer browser.Close()
 
-	pdfRenderer := renderer.NewRodPDFRenderer(browser)
+	pdfRenderer := renderer.NewRodPDFRenderer(browser, cfg.PDFMaxConcurrency, cfg.PDFRenderTimeout)
 	container := di.NewContainer(&cfg, pdfRenderer)
-
-	r := chi.NewRouter()
-	r.Use(middleware.Logger)
-	r.Use(middleware.Recoverer)
-
-	fileServer := http.FileServer(http.Dir(cfg.AssetsDir))
-	r.Handle("/assets/*", http.StripPrefix("/assets/", fileServer))
-
-	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("OK"))
-	})
-
-	r.Mount("/api/v1", container.Router)
 
 	server := &http.Server{
 		Addr:         ":" + cfg.Port,
-		Handler:      r,
+		Handler:      container.Router,
 		ReadTimeout:  cfg.ReadTimeout,
 		WriteTimeout: cfg.WriteTimeout,
 	}

@@ -13,38 +13,38 @@ type RenderHandler interface {
 }
 
 type renderHandler struct {
-	renderService service.RenderService
+	renderService       service.RenderService
+	maxRequestBodyBytes int64
 }
 
-func NewRenderHandler(renderService service.RenderService) RenderHandler {
+func NewRenderHandler(renderService service.RenderService, maxRequestBodyBytes int64) RenderHandler {
 	return &renderHandler{
-		renderService: renderService,
+		renderService:       renderService,
+		maxRequestBodyBytes: maxRequestBodyBytes,
 	}
 }
 
 func (h *renderHandler) RenderPDF(w http.ResponseWriter, r *http.Request) {
+	if h.maxRequestBodyBytes > 0 {
+		r.Body = http.MaxBytesReader(w, r.Body, h.maxRequestBodyBytes)
+	}
+
 	var req model.RenderDocumentRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		log.Printf("[ERROR] Failed to decode request payload: %v", err)
-		http.Error(w, "invalid request payload: "+err.Error(), http.StatusBadRequest)
+		h.writeError(w, http.StatusBadRequest, "INVALID_PAYLOAD", "invalid request payload")
 		return
 	}
 
 	if req.Template == "" {
-		log.Printf("[WARN] Validation failed: field 'template' is required")
-		http.Error(w, "field 'template' is required", http.StatusBadRequest)
+		h.writeError(w, http.StatusBadRequest, "VALIDATION_FAILED", "field 'template' is required")
 		return
-	}
-
-	// PODGLĄD PRZYCHODZĄCYCH DANYCH W LOGACH
-	if rawData, err := json.MarshalIndent(req.Data, "", "  "); err == nil {
-		log.Printf("[DEBUG] Incoming payload for template %s:\n%s", req.Template, string(rawData))
 	}
 
 	pdfBytes, err := h.renderService.RenderPDF(r.Context(), req.Template, req.Data, req.Options)
 	if err != nil {
-		log.Printf("[ERROR] PDF generation error (%s): %v", req.Template, err)
-		http.Error(w, "pdf generation error: "+err.Error(), http.StatusInternalServerError)
+		log.Printf("[ERROR] PDF generation failed for template '%s': %v", req.Template, err)
+		h.writeError(w, http.StatusInternalServerError, "RENDER_FAILED", "failed to generate document")
 		return
 	}
 
@@ -52,4 +52,13 @@ func (h *renderHandler) RenderPDF(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", "inline; filename=\"document.pdf\"")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(pdfBytes)
+}
+
+func (h *renderHandler) writeError(w http.ResponseWriter, statusCode int, code, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	_ = json.NewEncoder(w).Encode(model.ErrorResponse{
+		Code:    code,
+		Message: message,
+	})
 }

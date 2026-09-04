@@ -2,26 +2,17 @@ package renderer
 
 import (
 	"context"
+	"document-renderer/internal/model"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/proto"
 )
 
-type PDFOptions struct {
-	Landscape          bool    `json:"landscape"`
-	PrintBackground    bool    `json:"print_background"`
-	MarginTopInches    float64 `json:"margin_top_inches"`
-	MarginBottomInches float64 `json:"margin_bottom_inches"`
-	MarginLeftInches   float64 `json:"margin_left_inches"`
-	MarginRightInches  float64 `json:"margin_right_inches"`
-	PaperWidthInches   float64 `json:"paper_width_inches"`
-	PaperHeightInches  float64 `json:"paper_height_inches"`
-}
-
-func DefaultPDFOptions() PDFOptions {
-	return PDFOptions{
+func DefaultPDFOptions() model.PDFOptions {
+	return model.PDFOptions{
 		Landscape:          false,
 		PrintBackground:    true,
 		MarginTopInches:    0.4,
@@ -32,20 +23,48 @@ func DefaultPDFOptions() PDFOptions {
 }
 
 type PDFRenderer interface {
-	RenderHTMLToPDF(ctx context.Context, htmlContent string, opts PDFOptions) ([]byte, error)
+	RenderHTMLToPDF(ctx context.Context, htmlContent string, opts model.PDFOptions) ([]byte, error)
+	Ping(ctx context.Context) error
 }
 
 type RodPDFRenderer struct {
-	browser *rod.Browser
+	browser       *rod.Browser
+	semaphore     chan struct{}
+	renderTimeout time.Duration
 }
 
-func NewRodPDFRenderer(browser *rod.Browser) PDFRenderer {
+func NewRodPDFRenderer(browser *rod.Browser, maxConcurrency int, renderTimeout time.Duration) PDFRenderer {
+	if maxConcurrency <= 0 {
+		maxConcurrency = 4
+	}
 	return &RodPDFRenderer{
-		browser: browser,
+		browser:       browser,
+		semaphore:     make(chan struct{}, maxConcurrency),
+		renderTimeout: renderTimeout,
 	}
 }
 
-func (r *RodPDFRenderer) RenderHTMLToPDF(ctx context.Context, htmlContent string, opts PDFOptions) ([]byte, error) {
+func (r *RodPDFRenderer) Ping(ctx context.Context) error {
+	page, err := r.browser.Page(proto.TargetCreateTarget{})
+	if err != nil {
+		return fmt.Errorf("chromium check failed: %w", err)
+	}
+	defer page.Close()
+	return nil
+}
+
+func (r *RodPDFRenderer) RenderHTMLToPDF(ctx context.Context, htmlContent string, opts model.PDFOptions) ([]byte, error) {
+	// Rezerwacja slotu w semaforze
+	select {
+	case r.semaphore <- struct{}{}:
+		defer func() { <-r.semaphore }()
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+
+	renderCtx, cancel := context.WithTimeout(ctx, r.renderTimeout)
+	defer cancel()
+
 	incognitoCtx, err := r.browser.Incognito()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create incognito context: %w", err)
@@ -58,7 +77,7 @@ func (r *RodPDFRenderer) RenderHTMLToPDF(ctx context.Context, htmlContent string
 	}
 	defer page.Close()
 
-	pageWithCtx := page.Context(ctx)
+	pageWithCtx := page.Context(renderCtx)
 
 	if err := pageWithCtx.SetDocumentContent(htmlContent); err != nil {
 		return nil, fmt.Errorf("failed to set content: %w", err)
