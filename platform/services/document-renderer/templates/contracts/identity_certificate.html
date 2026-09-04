@@ -27,6 +27,7 @@
         background-color: #ffffff;
         padding: 10px 15px;
         position: relative;
+        isolation: isolate;
       }
 
       .brand-bar {
@@ -278,11 +279,12 @@
         position: absolute;
         top: 42%;
         left: 12%;
-        opacity: 0.02;
-        font-size: 60pt;
+        opacity: 0.03;
+        font-size: 80pt;
         font-weight: 900;
         color: #0f172a;
         user-select: none;
+        -webkit-user-select: none;
         pointer-events: none;
         text-transform: uppercase;
         transform: rotate(-30deg);
@@ -292,7 +294,6 @@
   </head>
   <body>
     <div class="document-wrapper">
-      <div class="watermark">OBYWATEL+ DEEP-SEC</div>
       <div class="brand-bar"></div>
 
       <!-- Header Section -->
@@ -585,6 +586,7 @@
           </td>
         </tr>
       </table>
+      <div class="watermark">OBYWATEL PLUS</div>
     </div>
   </body>
 </html>
