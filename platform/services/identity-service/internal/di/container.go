@@ -62,7 +62,7 @@ func BuildContainer(
 	cryptor := envelope.NewEnvelopeCryptor(cfg.ToKMSServiceConfig())
 
 	// Generator PDF
-	pdfGen := service.NewPDFGenerator()
+	pdfGen := service.NewPDFGenerator(cfg.DocumentRenderer.URL)
 
 	// 2. Przekazanie generatora PDF oraz osobnych kluczy HMAC do serwisu obywatela
 	citizenSvc := service.NewCitizenService(

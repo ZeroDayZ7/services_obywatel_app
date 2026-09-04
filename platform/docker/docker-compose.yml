@@ -10,8 +10,8 @@ services:
   # --- GATEWAY ---
   gateway:
     build:
-      context: ../../
-      dockerfile: platform/services/gateway/Dockerfile.dev
+      context: ../
+      dockerfile: services/gateway/Dockerfile.dev
     image: gateway:dev
     container_name: app-gateway
     restart: ${DOCKER_RESTART_POLICY:-no}
@@ -42,8 +42,8 @@ services:
   # --- AUTHENTICATION SERVICE ---
   auth-service:
     build:
-      context: ../../
-      dockerfile: platform/services/auth-service/Dockerfile.dev
+      context: ../
+      dockerfile: services/auth-service/Dockerfile.dev
     image: auth-service:dev
     container_name: app-auth-service
     restart: ${DOCKER_RESTART_POLICY:-no}
@@ -79,8 +79,8 @@ services:
   # --- OFFICER BFF SERVICE ---
   officer-bff:
     build:
-      context: ../../
-      dockerfile: platform/services/officer-bff/Dockerfile.dev
+      context: ../
+      dockerfile: services/officer-bff/Dockerfile.dev
     image: officer-bff:dev
     container_name: app-officer-bff
     restart: ${DOCKER_RESTART_POLICY:-no}
@@ -112,8 +112,8 @@ services:
   # --- IDENTITY SERVICE ---
   identity-service:
     build:
-      context: ../../
-      dockerfile: platform/services/identity-service/Dockerfile.dev
+      context: ../
+      dockerfile: services/identity-service/Dockerfile.dev
     image: identity-service:dev
     container_name: app-identity-service
     restart: ${DOCKER_RESTART_POLICY:-no}
@@ -140,8 +140,41 @@ services:
       - identity-db-net
       - sec-net
       - cache-net
+      - document-render-net
     depends_on:
       db-identity:
+        condition: service_healthy
+    
+    # region SVC DOCUMENT-RENDERER
+  # --- DOCUMENT RENDERER SERVICE ---
+  document-renderer:
+    build:
+      context: ../
+      dockerfile: services/document-renderer/Dockerfile.dev
+    image: document-renderer:dev
+    container_name: app-document-renderer
+    restart: ${DOCKER_RESTART_POLICY:-no}
+    working_dir: /app/services/document-renderer
+    environment:
+      # - SECRET_AGENT_SOCKET_PATH=/var/run/agent-sockets/agent.sock
+      - GOCACHE=/root/.cache/go-build
+      - GOWORK=off
+    volumes:
+      - ../services/document-renderer:/app/services/document-renderer
+      - ../pkg:/app/pkg
+      - ../go.work:/app/go.work
+      - ../go.work.sum:/app/go.work.sum
+      - socket-data:/var/run/agent-sockets:ro
+      - go-build-cache:/root/.cache/go-build
+      - go-mod-cache:/go/pkg/mod
+    ports:
+      - "8095:8095"
+    env_file:
+      - ../services/document-renderer/.env.dev
+    networks:
+      - document-render-net
+    depends_on:
+      db-citizen-docs:
         condition: service_healthy
 
   # region db-auth
@@ -176,6 +209,7 @@ services:
   db-identity:
     image: postgres:18.3-alpine
     container_name: db-identity
+    restart: ${DOCKER_RESTART_POLICY:-no}
     environment:
       POSTGRES_USER: ${IDENTITY_DB_USER:-identity_user}
       POSTGRES_DB: ${IDENTITY_DB_NAME:-identity_database}
@@ -453,6 +487,10 @@ networks:
   target-admin-net:
     name: kms_target-admin-net
     external: true
+  document-render-net:
+    name: app_document_render_net
+    driver: bridge
+    internal: false
   sec-net:
     name: kms_sec-net
     external: true

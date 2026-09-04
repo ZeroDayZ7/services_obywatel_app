@@ -23,6 +23,10 @@ type RabbitMQConsumersConfig struct {
 	TrustedSenders map[string]KeyTarget `mapstructure:"RABBITMQ_TRUSTED_SENDERS"`
 }
 
+type DocumentRendererConfig struct {
+	URL string `mapstructure:"DOCUMENT_RENDERER_URL"`
+}
+
 type AuditWorkerConfig struct {
 	Enabled       bool          `mapstructure:"AUDIT_WORKER_ENABLED"`
 	BatchSize     int           `mapstructure:"AUDIT_WORKER_BATCH_SIZE" validate:"min=1"`
@@ -58,6 +62,7 @@ type Config struct {
 	OTEL               viper.OTELConfig         `mapstructure:",squash"`
 	AuditWorker        AuditWorkerConfig        `mapstructure:",squash"`
 	RegistrationWorker RegistrationWorkerConfig `mapstructure:",squash"`
+	DocumentRenderer   DocumentRendererConfig   `mapstructure:",squash"`
 	Shutdown           time.Duration            `mapstructure:"SHUTDOWN_TIMEOUT" validate:"required"`
 }
 
