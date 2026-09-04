@@ -23,10 +23,6 @@ type RabbitMQConsumersConfig struct {
 	TrustedSenders map[string]KeyTarget `mapstructure:"RABBITMQ_TRUSTED_SENDERS"`
 }
 
-type DocumentRendererConfig struct {
-	URL string `mapstructure:"DOCUMENT_RENDERER_URL"`
-}
-
 type AuditWorkerConfig struct {
 	Enabled       bool          `mapstructure:"AUDIT_WORKER_ENABLED"`
 	BatchSize     int           `mapstructure:"AUDIT_WORKER_BATCH_SIZE" validate:"min=1"`
@@ -51,19 +47,19 @@ type RegistrationWorkerConfig struct {
 }
 
 type Config struct {
-	Server             viper.ServerConfig       `mapstructure:",squash"`
-	Database           viper.DBConfig           `mapstructure:",squash"`
-	Redis              viper.RedisConfig        `mapstructure:",squash"`
-	RabbitMQ           viper.RabbitMQConfig     `mapstructure:",squash"`
-	S3                 viper.S3Config           `mapstructure:",squash"`
-	HMAC               IdentityHMACConfig       `mapstructure:",squash"`
-	RabbitConsumers    RabbitMQConsumersConfig  `mapstructure:",squash"`
-	KMS                viper.KMSConfig          `mapstructure:",squash"`
-	OTEL               viper.OTELConfig         `mapstructure:",squash"`
-	AuditWorker        AuditWorkerConfig        `mapstructure:",squash"`
-	RegistrationWorker RegistrationWorkerConfig `mapstructure:",squash"`
-	DocumentRenderer   DocumentRendererConfig   `mapstructure:",squash"`
-	Shutdown           time.Duration            `mapstructure:"SHUTDOWN_TIMEOUT" validate:"required"`
+	Server              viper.ServerConfig       `mapstructure:",squash"`
+	Database            viper.DBConfig           `mapstructure:",squash"`
+	Redis               viper.RedisConfig        `mapstructure:",squash"`
+	RabbitMQ            viper.RabbitMQConfig     `mapstructure:",squash"`
+	S3                  viper.S3Config           `mapstructure:",squash"`
+	HMAC                IdentityHMACConfig       `mapstructure:",squash"`
+	RabbitConsumers     RabbitMQConsumersConfig  `mapstructure:",squash"`
+	KMS                 viper.KMSConfig          `mapstructure:",squash"`
+	OTEL                viper.OTELConfig         `mapstructure:",squash"`
+	AuditWorker         AuditWorkerConfig        `mapstructure:",squash"`
+	RegistrationWorker  RegistrationWorkerConfig `mapstructure:",squash"`
+	DocumentRendererURL string                   `mapstructure:"DOCUMENT_RENDERER_URL"`
+	Shutdown            time.Duration            `mapstructure:"SHUTDOWN_TIMEOUT" validate:"required"`
 }
 
 //#region ToKMSServiceConfig

@@ -1,3 +1,5 @@
+// cmdr: internal\service\pdf_generator.go
+
 package service
 
 import (
@@ -53,14 +55,14 @@ type AgreementTemplateData struct {
 
 // Request wysyłany do mikroserwisu document-renderer
 type renderPDFRequest struct {
-	TemplateName string                `json:"template_name"`
-	Data         AgreementTemplateData `json:"data"`
+	Template string                `json:"template"`
+	Data     AgreementTemplateData `json:"data"`
 }
 
 func (c *documentRendererClient) GenerateAgreementPDF(ctx context.Context, data AgreementTemplateData) ([]byte, error) {
 	reqBody := renderPDFRequest{
-		TemplateName: "identity_certificate.html",
-		Data:         data,
+		Template: "contracts/identity_certificate.html",
+		Data:     data,
 	}
 
 	payload, err := json.Marshal(reqBody)

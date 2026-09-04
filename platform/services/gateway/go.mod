@@ -12,7 +12,7 @@ require (
 	github.com/redis/go-redis/v9 v9.21.0
 	github.com/spf13/viper v1.21.0
 	github.com/valyala/fasthttp v1.73.0
-	github.com/zerodayz7/platform/pkg v0.0.0-00010101000000-000000000000
+	github.com/zerodayz7/platform/pkg v0.0.0
 )
 
 require (

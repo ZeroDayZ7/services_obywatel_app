@@ -16,8 +16,8 @@ type PDFOptions struct {
 	MarginBottomInches float64 `json:"margin_bottom_inches"`
 	MarginLeftInches   float64 `json:"margin_left_inches"`
 	MarginRightInches  float64 `json:"margin_right_inches"`
-	PaperWidthInches   float64 `json:"paper_width_inches"`  // opcjonalnie
-	PaperHeightInches  float64 `json:"paper_height_inches"` // opcjonalnie
+	PaperWidthInches   float64 `json:"paper_width_inches"`
+	PaperHeightInches  float64 `json:"paper_height_inches"`
 }
 
 func DefaultPDFOptions() PDFOptions {
@@ -31,9 +31,22 @@ func DefaultPDFOptions() PDFOptions {
 	}
 }
 
-func RenderHTMLToPDF(ctx context.Context, browser *rod.Browser, htmlContent string, opts PDFOptions) ([]byte, error) {
-	// Tworzymy wyizolowany IncognitoContext dla bezpieczeństwa session storage/cookies
-	incognitoCtx, err := browser.Incognito()
+type PDFRenderer interface {
+	RenderHTMLToPDF(ctx context.Context, htmlContent string, opts PDFOptions) ([]byte, error)
+}
+
+type RodPDFRenderer struct {
+	browser *rod.Browser
+}
+
+func NewRodPDFRenderer(browser *rod.Browser) PDFRenderer {
+	return &RodPDFRenderer{
+		browser: browser,
+	}
+}
+
+func (r *RodPDFRenderer) RenderHTMLToPDF(ctx context.Context, htmlContent string, opts PDFOptions) ([]byte, error) {
+	incognitoCtx, err := r.browser.Incognito()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create incognito context: %w", err)
 	}
@@ -51,7 +64,6 @@ func RenderHTMLToPDF(ctx context.Context, browser *rod.Browser, htmlContent stri
 		return nil, fmt.Errorf("failed to set content: %w", err)
 	}
 
-	// Czekamy aż strona i ewentualne zasoby się ustabilizują
 	_ = pageWithCtx.WaitStable(200)
 
 	pdfRequest := &proto.PagePrintToPDF{

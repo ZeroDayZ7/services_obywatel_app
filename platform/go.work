@@ -11,4 +11,5 @@ use (
 	./services/version-service
 	./services/messaging-service
 	./services/identity-service
+	./services/document-renderer
 )

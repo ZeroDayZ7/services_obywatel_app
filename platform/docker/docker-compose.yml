@@ -145,7 +145,7 @@ services:
       db-identity:
         condition: service_healthy
     
-    # region SVC DOCUMENT-RENDERER
+  # region SVC DOCUMENT-RENDERER
   # --- DOCUMENT RENDERER SERVICE ---
   document-renderer:
     build:
