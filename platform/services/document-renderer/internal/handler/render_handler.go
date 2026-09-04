@@ -43,7 +43,6 @@ func (h *renderHandler) RenderPDF(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Walidacja czy po dekodowanym obiekcie JSON nie ma śmieci/drugiego obiektu
 	if err := decoder.Decode(&struct{}{}); err != io.EOF {
 		log.Warn("Request body contains trailing bytes after JSON object")
 		h.writeError(w, http.StatusBadRequest, "INVALID_PAYLOAD", "request body must contain exactly one JSON object")
