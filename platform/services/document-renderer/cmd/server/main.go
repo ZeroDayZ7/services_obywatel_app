@@ -4,20 +4,28 @@ import (
 	"document-renderer/config"
 	"document-renderer/internal/di"
 	"document-renderer/internal/renderer"
-	"log"
 	"net/http"
-	"time"
+	"os"
 
 	"github.com/zerodayz7/platform/pkg/httpserver"
+	"github.com/zerodayz7/platform/pkg/shared"
 )
 
 func main() {
-	cfg := config.Load()
+	bootLog := shared.InitBootstrapLogger(os.Getenv("ENV"), false)
 
-	log.Println("Launching Headless Chromium...")
+	cfg, err := config.Load()
+	if err != nil {
+		bootLog.Error("Configuration error", err)
+		os.Exit(1)
+	}
+
+	logger := shared.InitLogger(cfg.Env, false)
+
+	logger.Info("Launching Headless Chromium...", "bin", cfg.ChromeBin)
 	browser, err := renderer.NewBrowser(cfg.ChromeBin)
 	if err != nil {
-		log.Fatalf("failed to launch browser: %v", err)
+		logger.Fatal("Failed to launch browser", err)
 	}
 	defer browser.Close()
 
@@ -31,9 +39,9 @@ func main() {
 		WriteTimeout: cfg.WriteTimeout,
 	}
 
-	shutdownTimeout := 10 * time.Second
+	logger.Info("Starting HTTP server", "env", cfg.Env, "port", cfg.Port)
 
-	if err := httpserver.Run(server, shutdownTimeout); err != nil {
-		log.Fatalf("Server forced to shutdown with error: %v", err)
+	if err := httpserver.Run(server, cfg.ShutdownTimeout); err != nil {
+		logger.Fatal("Server forced to shutdown with error", err)
 	}
 }

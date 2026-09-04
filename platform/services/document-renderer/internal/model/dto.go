@@ -1,14 +1,14 @@
 package model
 
 type PDFOptions struct {
-	Landscape          bool    `json:"landscape"`
-	PrintBackground    bool    `json:"print_background"`
-	MarginTopInches    float64 `json:"margin_top_inches"`
-	MarginBottomInches float64 `json:"margin_bottom_inches"`
-	MarginLeftInches   float64 `json:"margin_left_inches"`
-	MarginRightInches  float64 `json:"margin_right_inches"`
-	PaperWidthInches   float64 `json:"paper_width_inches"`
-	PaperHeightInches  float64 `json:"paper_height_inches"`
+	Landscape          *bool    `json:"landscape,omitempty"`
+	PrintBackground    *bool    `json:"print_background,omitempty"`
+	MarginTopInches    *float64 `json:"margin_top_inches,omitempty"`
+	MarginBottomInches *float64 `json:"margin_bottom_inches,omitempty"`
+	MarginLeftInches   *float64 `json:"margin_left_inches,omitempty"`
+	MarginRightInches  *float64 `json:"margin_right_inches,omitempty"`
+	PaperWidthInches   *float64 `json:"paper_width_inches,omitempty"`
+	PaperHeightInches  *float64 `json:"paper_height_inches,omitempty"`
 }
 
 type RenderDocumentRequest struct {

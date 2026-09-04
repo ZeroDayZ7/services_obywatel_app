@@ -4,8 +4,10 @@ import (
 	"document-renderer/internal/model"
 	"document-renderer/internal/service"
 	"encoding/json"
-	"log"
+	"io"
 	"net/http"
+
+	"github.com/zerodayz7/platform/pkg/shared"
 )
 
 type RenderHandler interface {
@@ -25,25 +27,38 @@ func NewRenderHandler(renderService service.RenderService, maxRequestBodyBytes i
 }
 
 func (h *renderHandler) RenderPDF(w http.ResponseWriter, r *http.Request) {
+	log := shared.GetLogger()
+
 	if h.maxRequestBodyBytes > 0 {
 		r.Body = http.MaxBytesReader(w, r.Body, h.maxRequestBodyBytes)
 	}
 
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+
 	var req model.RenderDocumentRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		log.Printf("[ERROR] Failed to decode request payload: %v", err)
-		h.writeError(w, http.StatusBadRequest, "INVALID_PAYLOAD", "invalid request payload")
+	if err := decoder.Decode(&req); err != nil {
+		log.Error("Failed to decode request payload", err)
+		h.writeError(w, http.StatusBadRequest, "INVALID_PAYLOAD", "invalid request payload structure")
+		return
+	}
+
+	// Walidacja czy po dekodowanym obiekcie JSON nie ma śmieci/drugiego obiektu
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		log.Warn("Request body contains trailing bytes after JSON object")
+		h.writeError(w, http.StatusBadRequest, "INVALID_PAYLOAD", "request body must contain exactly one JSON object")
 		return
 	}
 
 	if req.Template == "" {
+		log.Warn("Validation failed: template field is required")
 		h.writeError(w, http.StatusBadRequest, "VALIDATION_FAILED", "field 'template' is required")
 		return
 	}
 
 	pdfBytes, err := h.renderService.RenderPDF(r.Context(), req.Template, req.Data, req.Options)
 	if err != nil {
-		log.Printf("[ERROR] PDF generation failed for template '%s': %v", req.Template, err)
+		log.Error("PDF generation failed", "template", req.Template, err)
 		h.writeError(w, http.StatusInternalServerError, "RENDER_FAILED", "failed to generate document")
 		return
 	}

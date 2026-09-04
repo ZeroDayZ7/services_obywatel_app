@@ -11,8 +11,19 @@ import (
 	"github.com/go-rod/rod/lib/proto"
 )
 
-func DefaultPDFOptions() model.PDFOptions {
-	return model.PDFOptions{
+type ResolvedPDFOptions struct {
+	Landscape          bool
+	PrintBackground    bool
+	MarginTopInches    float64
+	MarginBottomInches float64
+	MarginLeftInches   float64
+	MarginRightInches  float64
+	PaperWidthInches   float64
+	PaperHeightInches  float64
+}
+
+func ResolvePDFOptions(opts *model.PDFOptions) ResolvedPDFOptions {
+	res := ResolvedPDFOptions{
 		Landscape:          false,
 		PrintBackground:    true,
 		MarginTopInches:    0.4,
@@ -20,10 +31,41 @@ func DefaultPDFOptions() model.PDFOptions {
 		MarginLeftInches:   0.4,
 		MarginRightInches:  0.4,
 	}
+
+	if opts == nil {
+		return res
+	}
+
+	if opts.Landscape != nil {
+		res.Landscape = *opts.Landscape
+	}
+	if opts.PrintBackground != nil {
+		res.PrintBackground = *opts.PrintBackground
+	}
+	if opts.MarginTopInches != nil {
+		res.MarginTopInches = *opts.MarginTopInches
+	}
+	if opts.MarginBottomInches != nil {
+		res.MarginBottomInches = *opts.MarginBottomInches
+	}
+	if opts.MarginLeftInches != nil {
+		res.MarginLeftInches = *opts.MarginLeftInches
+	}
+	if opts.MarginRightInches != nil {
+		res.MarginRightInches = *opts.MarginRightInches
+	}
+	if opts.PaperWidthInches != nil {
+		res.PaperWidthInches = *opts.PaperWidthInches
+	}
+	if opts.PaperHeightInches != nil {
+		res.PaperHeightInches = *opts.PaperHeightInches
+	}
+
+	return res
 }
 
 type PDFRenderer interface {
-	RenderHTMLToPDF(ctx context.Context, htmlContent string, opts model.PDFOptions) ([]byte, error)
+	RenderHTMLToPDF(ctx context.Context, htmlContent string, opts *model.PDFOptions) ([]byte, error)
 	Ping(ctx context.Context) error
 }
 
@@ -53,14 +95,15 @@ func (r *RodPDFRenderer) Ping(ctx context.Context) error {
 	return nil
 }
 
-func (r *RodPDFRenderer) RenderHTMLToPDF(ctx context.Context, htmlContent string, opts model.PDFOptions) ([]byte, error) {
-	// Rezerwacja slotu w semaforze
+func (r *RodPDFRenderer) RenderHTMLToPDF(ctx context.Context, htmlContent string, opts *model.PDFOptions) ([]byte, error) {
 	select {
 	case r.semaphore <- struct{}{}:
 		defer func() { <-r.semaphore }()
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
+
+	resolvedOpts := ResolvePDFOptions(opts)
 
 	renderCtx, cancel := context.WithTimeout(ctx, r.renderTimeout)
 	defer cancel()
@@ -86,20 +129,20 @@ func (r *RodPDFRenderer) RenderHTMLToPDF(ctx context.Context, htmlContent string
 	_ = pageWithCtx.WaitStable(200)
 
 	pdfRequest := &proto.PagePrintToPDF{
-		Landscape:         opts.Landscape,
-		PrintBackground:   opts.PrintBackground,
-		MarginTop:         &opts.MarginTopInches,
-		MarginBottom:      &opts.MarginBottomInches,
-		MarginLeft:        &opts.MarginLeftInches,
-		MarginRight:       &opts.MarginRightInches,
+		Landscape:         resolvedOpts.Landscape,
+		PrintBackground:   resolvedOpts.PrintBackground,
+		MarginTop:         &resolvedOpts.MarginTopInches,
+		MarginBottom:      &resolvedOpts.MarginBottomInches,
+		MarginLeft:        &resolvedOpts.MarginLeftInches,
+		MarginRight:       &resolvedOpts.MarginRightInches,
 		PreferCSSPageSize: true,
 	}
 
-	if opts.PaperWidthInches > 0 {
-		pdfRequest.PaperWidth = &opts.PaperWidthInches
+	if resolvedOpts.PaperWidthInches > 0 {
+		pdfRequest.PaperWidth = &resolvedOpts.PaperWidthInches
 	}
-	if opts.PaperHeightInches > 0 {
-		pdfRequest.PaperHeight = &opts.PaperHeightInches
+	if resolvedOpts.PaperHeightInches > 0 {
+		pdfRequest.PaperHeight = &resolvedOpts.PaperHeightInches
 	}
 
 	res, err := pageWithCtx.PDF(pdfRequest)

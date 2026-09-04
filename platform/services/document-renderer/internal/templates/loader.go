@@ -14,7 +14,8 @@ type TemplateRenderer interface {
 }
 
 type Loader struct {
-	baseDir string
+	baseDir  string
+	registry map[string]string
 }
 
 func NewLoader(baseDir string) TemplateRenderer {
@@ -22,21 +23,36 @@ func NewLoader(baseDir string) TemplateRenderer {
 	if err != nil {
 		absBase = baseDir
 	}
-	return &Loader{baseDir: absBase}
+
+	// Template Registry – dopuszczone powiązania nazw szablonów ze ścieżkami plików
+	registry := map[string]string{
+		"identity.contract":    "identity/contract.html",
+		"identity.certificate": "identity/certificate.html",
+		"billing.invoice":      "billing/invoice.html",
+	}
+
+	return &Loader{
+		baseDir:  absBase,
+		registry: registry,
+	}
 }
 
 func (l *Loader) Render(templateName string, data any) ([]byte, error) {
-	// Zamienia alias 'identity.contract' na 'identity/contract.html'
-	relPath := strings.ReplaceAll(templateName, ".", "/")
-	if !strings.HasSuffix(relPath, ".html") {
-		relPath += ".html"
+	relPath, exists := l.registry[templateName]
+	if !exists {
+		// Fallback dla dynamicznych szablonów, jeśli są dozwolone (np. identity.contract -> identity/contract.html)
+		relPath = strings.ReplaceAll(templateName, ".", "/")
+		if !strings.HasSuffix(relPath, ".html") {
+			relPath += ".html"
+		}
 	}
 
 	cleanRelPath := filepath.Clean(relPath)
 	fullPath := filepath.Join(l.baseDir, cleanRelPath)
 
-	// Ochrona przed Path Traversal
-	if !strings.HasPrefix(fullPath, l.baseDir) {
+	// Bezpieczne sprawdzanie wyjścia poza BaseDir za pomocą filepath.Rel
+	rel, err := filepath.Rel(l.baseDir, fullPath)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return nil, fmt.Errorf("invalid template path: access denied")
 	}
 
