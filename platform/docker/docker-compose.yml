@@ -484,17 +484,18 @@ networks:
     name: app_cache_net
     driver: bridge
     internal: false
-  target-admin-net:
-    name: kms_target-admin-net
-    external: true
   document-render-net:
     name: app_document_render_net
     driver: bridge
     internal: false
-  sec-net:
-    name: kms_sec-net
-    external: true
-
   citizen-app-net:
     name: obywatel_app__network
     driver: bridge
+
+  # ZEWNĘTRZNE SIECI KMS
+  target-admin-net:
+    name: kms_target_admin_net
+    external: true
+  sec-net:
+    name: kms_sec_net
+    external: true
