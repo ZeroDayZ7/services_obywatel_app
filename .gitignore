@@ -17,4 +17,5 @@
 **/temp
 **/pgadmin_data/
 **/*.drawio.bkp
+**/tmp
 .$*.bkp

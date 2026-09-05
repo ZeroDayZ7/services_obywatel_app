@@ -6,7 +6,7 @@
     // "**/go.mod": true,
     "**/.gitattributes": true,
     "**/.github": true,
-    "**/.gitignore": true,
+    // "**/.gitignore": true,
     "**/bin/": true,
     // "**/dbgen/": true,
     "**/backup/": true,
@@ -16,7 +16,7 @@
     "**/LICENSE": true,
     "**/SECURITY.md": true,
 
-    "**/.dockerignore": true,
+    // "**/.dockerignore": true,
     "**/Dockerfile": true,
 
     "**/admin-bff": true,
