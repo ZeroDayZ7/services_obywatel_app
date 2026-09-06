@@ -340,7 +340,7 @@ services:
         user $${REDIS_KMS_ADMIN_USER} on >$${REDIS_KMS_ADMIN_PASS} ~* &* -@all +acl +ping
         EOF
 
-        exec redis-server --aclfile /tmp/users.acl --protected-mode yes
+        exec redis-server --aclfile /tmp/users.acl --protected-mode no
     healthcheck:
       test: ["CMD-SHELL", "redis-cli --user $${REDIS_KMS_ADMIN_USER} -a $${REDIS_KMS_ADMIN_PASS} ping | grep -q PONG || exit 1"]
       interval: 10s
