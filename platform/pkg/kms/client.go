@@ -1,5 +1,3 @@
-// cmdr: kms\client.go
-
 package kms
 
 import (
@@ -45,7 +43,6 @@ func executeRequest(ctx context.Context, cfg Config, method, path string, body [
 
 	url := fmt.Sprintf("%s%s", cfg.Endpoint, path)
 
-	// Normalizacja ciała żądania
 	var reqBody io.Reader
 	if len(body) > 0 {
 		reqBody = bytes.NewBuffer(body)
@@ -61,8 +58,15 @@ func executeRequest(ctx context.Context, cfg Config, method, path string, body [
 		req.Header.Set(HeaderContentType, MIMEApplicationJSON)
 	}
 
+	if len(body) == 0 {
+		body = []byte{}
+	}
+	bodyHash := sha256.Sum256(body)
+	bodyHashHex := hex.EncodeToString(bodyHash[:])
+	req.Header.Set(HeaderBodySHA256, bodyHashHex)
+
 	if sign {
-		signAndSetHeaders(req, method, path, body, cfg)
+		signAndSetHeaders(req, method, path, bodyHashHex, cfg)
 	}
 
 	res, err := getHTTPClient(cfg).Do(req)
@@ -84,20 +88,10 @@ func executeRequest(ctx context.Context, cfg Config, method, path string, body [
 }
 
 //#region signAndSetHeaders
-func signAndSetHeaders(req *http.Request, method, path string, body []byte, cfg Config) {
-	// 1. Obcinamy nanosekundy do pełnych sekund (eliminuje rozbieżności RFC3339 między Go a Rustem)
+func signAndSetHeaders(req *http.Request, method, path, bodyHashHex string, cfg Config) {
 	timestamp := time.Now().UTC().Truncate(time.Second).Format(time.RFC3339)
 	nonce := uuid.New().String()
 
-	// 2. Zagwarantowanie pustego plasterka bajtów dla SHA-256 (GET / puste body)
-	if len(body) == 0 {
-		body = []byte{}
-	}
-
-	bodyHash := sha256.Sum256(body)
-	bodyHashHex := hex.EncodeToString(bodyHash[:])
-
-	// 3. Ścisły format nagłówka podpisu zgodny z Axum AuthenticatedService
 	payloadToSign := fmt.Sprintf("%s:%s:%s:%s:%s", method, path, timestamp, nonce, bodyHashHex)
 
 	mac := hmac.New(sha256.New, []byte(cfg.ServiceSecret))
@@ -107,6 +101,5 @@ func signAndSetHeaders(req *http.Request, method, path string, body []byte, cfg 
 	req.Header.Set(HeaderServiceName, cfg.ServiceName)
 	req.Header.Set(HeaderTimestamp, timestamp)
 	req.Header.Set(HeaderNonce, nonce)
-	req.Header.Set(HeaderBodySHA256, bodyHashHex)
 	req.Header.Set(HeaderHMACSignature, signatureHex)
 }
