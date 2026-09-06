@@ -30,7 +30,9 @@
     "**/voting-service": true,
 
     "**/*.bkp": true,
-    "**/tmp": true
+    "**/tmp": true,
+    "**/compose": true
+
   },
 
   // (Search)
