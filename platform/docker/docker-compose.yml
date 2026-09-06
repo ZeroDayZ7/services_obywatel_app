@@ -320,17 +320,35 @@ services:
   # region cache-redis
   # --- SESSION & CACHING ---
   cache-redis:
-    <<: *common-settings
     image: redis:8.6-alpine
     container_name: cache-redis
-    secrets:
-      - redis_auth_pass
-    command: >
-      sh -c 'redis-server --requirepass $$(cat /run/secrets/redis_auth_pass)'
-    ports:
-      - "6379:6379"
+    restart: ${DOCKER_RESTART_POLICY:-no}
+    environment:
+      REDIS_ROOT_USER: ${REDIS_ROOT_USER:-redis_root}
+      REDIS_ROOT_PASS: ${REDIS_ROOT_PASS}
+      REDIS_KMS_ADMIN_USER: ${REDIS_KMS_ADMIN_USER:-redis_kms_admin}
+      REDIS_KMS_ADMIN_PASS: ${REDIS_KMS_ADMIN_PASS}
     volumes:
       - redis_data:/data
+    entrypoint:
+      - "sh"
+      - "-c"
+      - |
+        cat <<EOF > /tmp/users.acl
+        user default off nopass resetkeys -@all
+        user $${REDIS_ROOT_USER} on >$${REDIS_ROOT_PASS} ~* &* +@all
+        user $${REDIS_KMS_ADMIN_USER} on >$${REDIS_KMS_ADMIN_PASS} ~* &* -@all +acl +ping
+        EOF
+
+        exec redis-server --aclfile /tmp/users.acl --protected-mode yes
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli --user $${REDIS_KMS_ADMIN_USER} -a $${REDIS_KMS_ADMIN_PASS} ping | grep -q PONG || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    ports:
+      - "6379:6379"
     networks:
       - cache-net
 
@@ -430,14 +448,17 @@ secrets:
     file: ./secrets/.notify_db_password
   audit_db_pass:
     file: ./secrets/.audit_db_password
-  redis_auth_pass:
-    file: ./secrets/.redis_password
   pgadmin_root_pass:
     file: ./secrets/.pgadmin_admin_password
   messaging_db_pass:
     file: ./secrets/.messaging_db_password
   identity_db_pass:
     file: ./secrets/.identity_db_password
+
+  redis_root_pass:
+    file: ./secrets/.redis_root_pass
+  redis_kms_admin_pass:
+    file: ./secrets/.redis_kms_admin_pass
 
   minio_root_user:
     file: ./secrets/.minio_user
