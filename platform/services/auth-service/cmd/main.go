@@ -20,7 +20,7 @@ import (
 	"github.com/zerodayz7/platform/services/auth-service/internal/security"
 )
 
-//#region main
+// #region main
 func main() {
 	// 0. Bootstrap Logger
 	bootLog := shared.InitBootstrapLogger(os.Getenv("ENV"), false)
@@ -93,25 +93,23 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Przypisanie poświadczeń do konfiguracji aplikacji przed wyczyszczeniem z pamięci
+	// Runtime bootstrap credentials are materialized locally and kept separate from
+	// static config. This avoids mutating AppConfig with secrets while still allowing
+	// client initialization to consume the resolved credentials.
+	runtimeDB, runtimeRedis, runtimeRabbit, err := config.BuildRuntimeConfigs(config.AppConfig, bootResp)
+	if err != nil {
+		log.Error("❌ Nie udało się zmapować runtime credentials z bootstrapu", "error", err)
+		os.Exit(1)
+	}
+
 	if bootResp.Postgres != nil {
 		log.Info("✅ Pomyślnie pobrano poświadczenia Postgres", "user", bootResp.Postgres.Username)
-		config.AppConfig.Database.User = bootResp.Postgres.Username
-		config.AppConfig.Database.Password = string(bootResp.Postgres.Password)
 	}
-
 	if bootResp.Redis != nil {
 		log.Info("✅ Pomyślnie pobrano poświadczenia Redis", bootResp.Redis.Username)
-		if bootResp.Redis.Username != "" {
-			config.AppConfig.Redis.Username = bootResp.Redis.Username
-		}
-		config.AppConfig.Redis.Password = string(bootResp.Redis.Password)
 	}
-
 	if bootResp.RabbitMQ != nil {
 		log.Info("✅ Pomyślnie pobrano poświadczenia RabbitMQ", "user", bootResp.RabbitMQ.Username)
-		config.AppConfig.RabbitMQ.User = bootResp.RabbitMQ.Username
-		config.AppConfig.RabbitMQ.Password = string(bootResp.RabbitMQ.Password)
 	}
 
 	// -------------------------------------------------------------------------
@@ -121,7 +119,7 @@ func main() {
 	// A. Redis Client Init
 	var redisClient *redis.Client
 	if bootResp.Redis != nil {
-		redisClient, err = redis.New(redis.Config(config.AppConfig.Redis))
+		redisClient, err = redis.New(redis.Config(runtimeRedis))
 		if err != nil || redisClient == nil {
 			log.Error("❌ Inicjalizacja Redisa nie powiodła się po pobraniu poświadczeń", "error", err)
 			os.Exit(1)
@@ -137,7 +135,7 @@ func main() {
 	}
 
 	// B. Database Init
-	db, closeDB := config.MustInitDB(config.AppConfig.Database)
+	db, closeDB := config.MustInitDB(runtimeDB)
 	defer closeDB()
 
 	// CZYŚCIMY PAMIĘĆ Z SUROWYCH BAJTÓW HASEŁ NATYCHMIAST PO POŁĄCZENIU Z USŁUGAMI
