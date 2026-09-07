@@ -175,9 +175,6 @@ services:
       - ../services/document-renderer/.env.dev
     networks:
       - document-render-net
-    depends_on:
-      db-citizen-docs:
-        condition: service_healthy
 
   # region db-auth
   # --- AUTHENTICATION DATABASE ---
