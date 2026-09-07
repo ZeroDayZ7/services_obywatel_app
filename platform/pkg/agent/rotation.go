@@ -15,8 +15,8 @@ type RedisRotatable interface {
 	UpdateCredentials(password []byte) error
 }
 
-// StartAutoRotation inicjalizuje goroutines rotacji na podstawie wczytanego manifestu.
-func StartAutoRotation(ctx context.Context, manifest *Manifest, db PostgresRotatable) error {
+// StartAutoRotation inicjalizuje goroutines rotacji dla bazy danych oraz opcjonalnie dla Redisa.
+func StartAutoRotation(ctx context.Context, manifest *Manifest, db PostgresRotatable, rdb RedisRotatable) error {
 	log := shared.GetLogger()
 
 	for _, spec := range manifest.Credentials {
@@ -31,6 +31,12 @@ func StartAutoRotation(ctx context.Context, manifest *Manifest, db PostgresRotat
 				continue
 			}
 			go runPostgresRotationLoop(ctx, manifest.SocketPath, manifest.Timeout, spec, db)
+
+		case "redis":
+			if rdb == nil {
+				continue
+			}
+			go runRedisRotationLoop(ctx, manifest.SocketPath, manifest.Timeout, spec, rdb)
 
 		default:
 			log.WarnObj("Brak obsługi rotacji dla typu zasobu", map[string]any{"type": spec.Type})
@@ -81,7 +87,53 @@ func runPostgresRotationLoop(ctx context.Context, socketPath string, timeout tim
 				log.InfoMap("✅ Pomyślnie zaktualizowano poświadczenia w puli DB", map[string]any{"resource": spec.Name})
 			}
 
-			// Czyszczenie bajtów pamięci RAM po rotacji
+			clear(creds.Password)
+			cleanup()
+		}
+	}
+}
+
+func runRedisRotationLoop(ctx context.Context, socketPath string, timeout time.Duration, spec ResourceSpec, rdb RedisRotatable) {
+	log := shared.GetLogger()
+
+	ticker := time.NewTicker(spec.RotationInterval)
+	defer ticker.Stop()
+
+	log.InfoMap("Uruchomiono automatyczną pętlę rotacji Redis", map[string]any{
+		"resource": spec.Name,
+		"interval": spec.RotationInterval.String(),
+	})
+
+	for {
+		select {
+		case <-ctx.Done():
+			log.InfoMap("🛑 Zatrzymano pętlę rotacji Redis", map[string]any{"resource": spec.Name})
+			return
+
+		case <-ticker.C:
+			log.InfoMap("🔄 Odświeżanie poświadczeń Redisa z Agenta...", map[string]any{"resource": spec.Name})
+
+			fetchCtx, cancel := context.WithTimeout(ctx, timeout)
+			creds, cleanup, err := FetchAgentSecret[RedisCredentials](fetchCtx, socketPath, timeout, spec.Name)
+			cancel()
+
+			if err != nil {
+				log.WarnObj("Nie udało się pobrać nowych poświadczeń Redisa", map[string]any{
+					"resource": spec.Name,
+					"err":      err.Error(),
+				})
+				continue
+			}
+
+			if err := rdb.UpdateCredentials(creds.Password); err != nil {
+				log.WarnObj("❌ Błąd aktualizacji klienta Redis", map[string]any{
+					"resource": spec.Name,
+					"err":      err.Error(),
+				})
+			} else {
+				log.InfoMap("✅ Pomyślnie zaktualizowano poświadczenia Redisa", map[string]any{"resource": spec.Name})
+			}
+
 			clear(creds.Password)
 			cleanup()
 		}

@@ -49,7 +49,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// 4. Telemetry (Tracer)
+	// 3. Telemetry (Tracer)
 	if config.AppConfig.OTEL.Enabled {
 		cleanup := telemetry.InitTracer(
 			config.AppConfig.Server.AppName,
@@ -58,20 +58,8 @@ func main() {
 		defer cleanup()
 	}
 
-	// 5. Redis
-	redisClient, err := redis.New(redis.Config(config.AppConfig.Redis))
-	if err != nil || redisClient == nil {
-		log.Error("Redis initialization failed", "error", err)
-		os.Exit(1)
-	}
-	defer func() {
-		if err := redisClient.Close(); err != nil {
-			log.Error("Failed to close Redis client", "error", err)
-		}
-	}()
-
 	// =========================================================================
-	// 6a. ZBIORCZY BOOTSTRAP POŚWIADCZEŃ Z SIDECARA NA PODSTAWIE MANIFESTU
+	// 4. ZBIORCZY BOOTSTRAP POŚWIADCZEŃ Z SIDECARA NA PODSTAWIE MANIFESTU
 	// =========================================================================
 	agentManifest, err := agent.LoadManifest("secrets.yaml")
 	if err != nil {
@@ -79,7 +67,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Filtrujemy manifest – pobieramy tylko zasoby z enabled: true (np. ["postgres"])
 	requiredServices := agentManifest.GetEnabledResourceNames()
 	if len(requiredServices) == 0 {
 		log.Warn("Brak aktywnych zasobów w manifeście do pobrania podczas bootstrapu")
@@ -105,43 +92,79 @@ func main() {
 		log.Error("❌ Zbiorczy bootstrap poświadczeń z sidecara nie powiódł się", "error", err)
 		os.Exit(1)
 	}
-	// Pamiętamy o wyczyszczeniu czystych bajtów haseł z RAM po zakończeniu bootstrapu
-	defer cleanupSecrets()
 
-	// Podpinamy pobrane dane pod konfig (jeśli dany zasób został zwrócony):
+	// Przypisanie poświadczeń do konfiguracji aplikacji przed wyczyszczeniem z pamięci
 	if bootResp.Postgres != nil {
-		log.Info("✅ Pomyślnie pobrano poświadczenia Postgres w zbiorczym paczce", "user", bootResp.Postgres.Username)
+		log.Info("✅ Pomyślnie pobrano poświadczenia Postgres", "user", bootResp.Postgres.Username)
 		config.AppConfig.Database.User = bootResp.Postgres.Username
 		config.AppConfig.Database.Password = string(bootResp.Postgres.Password)
 	}
 
 	if bootResp.Redis != nil {
-		log.Info("✅ Pomyślnie pobrano poświadczenia Redis w zbiorczym paczce")
+		log.Info("✅ Pomyślnie pobrano poświadczenia Redis", bootResp.Redis.Username)
+		if bootResp.Redis.Username != "" {
+			config.AppConfig.Redis.Username = bootResp.Redis.Username
+		}
 		config.AppConfig.Redis.Password = string(bootResp.Redis.Password)
 	}
 
 	if bootResp.RabbitMQ != nil {
-		log.Info("✅ Pomyślnie pobrano poświadczenia RabbitMQ w zbiorczym paczce", "user", bootResp.RabbitMQ.Username)
+		log.Info("✅ Pomyślnie pobrano poświadczenia RabbitMQ", "user", bootResp.RabbitMQ.Username)
 		config.AppConfig.RabbitMQ.User = bootResp.RabbitMQ.Username
 		config.AppConfig.RabbitMQ.Password = string(bootResp.RabbitMQ.Password)
 	}
 
-	// 6b. Database Init (łączenie z bazą przy użyciu pobranych poświadczeń)
+	// -------------------------------------------------------------------------
+	// INICJALIZACJA USŁUG Z POBRANYMI POŚWIADCZENIAMI
+	// -------------------------------------------------------------------------
+
+	// A. Redis Client Init
+	var redisClient *redis.Client
+	if bootResp.Redis != nil {
+		redisClient, err = redis.New(redis.Config(config.AppConfig.Redis))
+		if err != nil || redisClient == nil {
+			log.Error("❌ Inicjalizacja Redisa nie powiodła się po pobraniu poświadczeń", "error", err)
+			os.Exit(1)
+		}
+		defer func() {
+			if err := redisClient.Close(); err != nil {
+				log.Error("Failed to close Redis client", "error", err)
+			}
+		}()
+		log.Info("✅ Połączenie z Redisem nawiązane")
+	} else {
+		log.Warn("⚠️ Brak poświadczeń Redisa w paczce bootstrap – pomijam inicjalizację Redisa")
+	}
+
+	// B. Database Init
 	db, closeDB := config.MustInitDB(config.AppConfig.Database)
 	defer closeDB()
 
+	// CZYŚCIMY PAMIĘĆ Z SUROWYCH BAJTÓW HASEŁ NATYCHMIAST PO POŁĄCZENIU Z USŁUGAMI
+	cleanupSecrets()
+
 	// =========================================================================
-	// 6c. START LICZNIKA / PĘTLI ROTACJI W TLE (Dopiero PO udanym bootstrapie)
+	// 5. START LICZNIKA / PĘTLI ROTACJI W TLE (Zero-Downtime Credential Rotation)
 	// =========================================================================
+	// Kontekst dla goroutines rotacji w tle – anulowany dopiero przy zamknięciu aplikacji
 	ctxApp, cancelApp := context.WithCancel(context.Background())
 	defer cancelApp()
 
+	// Adapter bazy danych Postgres (GORM)
 	gormAdapter := database.NewGormAdapter(db)
-	if err := agent.StartAutoRotation(ctxApp, agentManifest, gormAdapter); err != nil {
+
+	// Opcjonalny adapter dla Redisa (jeśli Redis jest włączony)
+	var redisAdapter agent.RedisRotatable
+	if redisClient != nil {
+		redisAdapter = redis.NewAdapter(redisClient)
+	}
+
+	// Uruchomienie pętli rotacji w goroutines
+	if err := agent.StartAutoRotation(ctxApp, agentManifest, gormAdapter, redisAdapter); err != nil {
 		log.Error("❌ Nie udało się uruchomić automatycznej rotacji poświadczeń", "error", err)
 	}
 	// =========================================================================
-	// 7. RabbitMQ Publisher Setup
+	// 6. RabbitMQ Publisher Setup
 	// =========================================================================
 	var eventPublisher rabbitmq.EventPublisher
 	if config.AppConfig.RabbitMQ.Enabled {
@@ -166,12 +189,14 @@ func main() {
 		}
 	}()
 
-	// 8. DI Container & App Setup (Przekazujemy keyStore)
+	// =========================================================================
+	// 7. DI Container & App Setup
+	// =========================================================================
 	container := di.NewContainer(db, redisClient, eventPublisher, &config.AppConfig, keyStore)
 	authApp := app.NewAuthApp(container)
 
 	// =========================================================================
-	// 8a. RABBITMQ CONSUMERS / WORKERS
+	// 8. RABBITMQ CONSUMERS / WORKERS
 	// =========================================================================
 	consumerCtx, cancelConsumers := context.WithCancel(context.Background())
 	defer cancelConsumers()
@@ -200,7 +225,9 @@ func main() {
 
 	router.SetupRoutes(authApp, container)
 
-	// 9. Run server
+	// =========================================================================
+	// 9. Run HTTP Server
+	// =========================================================================
 	server.Run(
 		authApp,
 		server.Config{
