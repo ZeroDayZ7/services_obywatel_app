@@ -43,6 +43,7 @@ type DBConfig struct {
 type RedisConfig struct {
 	Host         string        `mapstructure:"REDIS_HOST" validate:"required"`
 	Port         string        `mapstructure:"REDIS_PORT" validate:"required,numeric"`
+	Username     string        `mapstructure:"REDIS_USERNAME"`
 	Password     string        `mapstructure:"REDIS_PASSWORD"`
 	DB           int           `mapstructure:"REDIS_DB" validate:"min=0"`
 	PoolSize     int           `mapstructure:"REDIS_POOL_SIZE" validate:"min=1"`
@@ -118,8 +119,6 @@ type ServicesConfig struct {
 	WS         string `mapstructure:"SERVICE_WS_URL" validate:"required"`
 	OfficerBFF string `mapstructure:"SERVICE_OFFICER_BFF_URL" validate:"required,url"`
 }
-
-
 
 // #region GetURL
 //#region GetURL

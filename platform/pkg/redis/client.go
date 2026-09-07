@@ -1,5 +1,3 @@
-// cmdr: redis/client.go
-
 package redis
 
 import (
@@ -17,6 +15,7 @@ import (
 type Config struct {
 	Host         string
 	Port         string
+	Username     string
 	Password     string
 	DB           int
 	PoolSize     int
@@ -33,6 +32,7 @@ type Client struct {
 func New(cfg Config) (*Client, error) {
 	rdb := goredis.NewClient(&goredis.Options{
 		Addr:         fmt.Sprintf("%s:%s", cfg.Host, cfg.Port),
+		Username:     cfg.Username,
 		Password:     cfg.Password,
 		DB:           cfg.DB,
 		PoolSize:     cfg.PoolSize,
