@@ -338,7 +338,7 @@ services:
         cat <<EOF > /tmp/users.acl
         user default off nopass resetkeys -@all
         user $${REDIS_ROOT_USER} on >$${REDIS_ROOT_PASS} ~* &* +@all
-        user $${REDIS_KMS_ADMIN_USER} on >$${REDIS_KMS_ADMIN_PASS} ~* &* -@all +acl +ping
+        user $${REDIS_KMS_ADMIN_USER} on >$${REDIS_KMS_ADMIN_PASS} ~* &* -@all +acl +ping +select +info
         EOF
 
         exec redis-server --aclfile /tmp/users.acl --protected-mode no
