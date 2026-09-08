@@ -109,7 +109,7 @@ func main() {
 		log.Info("✅ Pomyślnie pobrano poświadczenia Redis", bootResp.Redis.Username)
 	}
 	if bootResp.RabbitMQ != nil {
-		log.Info("✅ Pomyślnie pobrano poświadczenia RabbitMQ", "user", bootResp.RabbitMQ.Username)
+		log.Info("✅ Pomyślnie pobrano poświadczenia RabbitMQ", "user", bootResp.RabbitMQ.Username, runtimeRabbit)
 	}
 
 	// -------------------------------------------------------------------------

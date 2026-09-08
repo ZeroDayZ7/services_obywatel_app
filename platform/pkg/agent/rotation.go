@@ -1,7 +1,9 @@
 package agent
 
 import (
+	"bytes"
 	"context"
+	"strings"
 	"time"
 
 	"github.com/zerodayz7/platform/pkg/shared"
@@ -78,7 +80,10 @@ func runPostgresRotationLoop(ctx context.Context, socketPath string, timeout tim
 				continue
 			}
 
-			if err := db.UpdateCredentials(creds.Username, creds.Password); err != nil {
+			// Oczyszczenie bajtów hasła z ewentualnych znaki nowej linii / NUL
+			cleanPass := bytes.Trim(creds.Password, "\x00\r\n\t ")
+
+			if err := db.UpdateCredentials(strings.TrimSpace(creds.Username), cleanPass); err != nil {
 				log.WarnObj("❌ Błąd aktualizacji puli DB", map[string]any{
 					"resource": spec.Name,
 					"err":      err.Error(),

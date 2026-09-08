@@ -1,15 +1,19 @@
 package config
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/zerodayz7/platform/pkg/agent"
 	"github.com/zerodayz7/platform/pkg/viper"
 )
 
-// RuntimeCredentials keeps bootstrap credentials separate from static AppConfig values.
-// The configuration object itself stays static, while runtime secrets are resolved only
-// for the exact resources that need them during bootstrap and client initialization.
+var (
+	ErrInvalidCredentials = errors.New("runtime credentials validation failed")
+)
+
 type RuntimeCredentials struct {
 	resources map[string]any
 }
@@ -47,8 +51,13 @@ func (r *RuntimeCredentials) Apply(handlers map[string]func(any) error) error {
 	return nil
 }
 
-// BuildRuntimeConfigs materializes runtime-specific configuration from bootstrap response
-// without mutating the statically loaded AppConfig values.
+// sanitizeSecret ucina białe znaki, NUL-bajty (\x00) i znaki nowej linii (\r, \n) z bajtów haseł.
+func sanitizeSecret(b []byte) string {
+	cleanBytes := bytes.Trim(b, "\x00\r\n\t ")
+	return strings.TrimSpace(string(cleanBytes))
+}
+
+// BuildRuntimeConfigs tworzy konfiguracje uruchomieniowe, wykonuje sanitację haseł oraz waliduje poprawność danych.
 func BuildRuntimeConfigs(base Config, resp *agent.FullBootstrapResponse) (viper.DBConfig, viper.RedisConfig, viper.RabbitMQConfig, error) {
 	dbCfg := base.Database
 	redisCfg := base.Redis
@@ -61,8 +70,16 @@ func BuildRuntimeConfigs(base Config, resp *agent.FullBootstrapResponse) (viper.
 			if !ok {
 				return fmt.Errorf("invalid postgres credentials type %T", value)
 			}
-			dbCfg.User = creds.Username
-			dbCfg.Password = string(creds.Password)
+
+			user := strings.TrimSpace(creds.Username)
+			pass := sanitizeSecret(creds.Password)
+
+			if user == "" || pass == "" {
+				return fmt.Errorf("%w: postgres username or password is empty after sanitization", ErrInvalidCredentials)
+			}
+
+			dbCfg.User = user
+			dbCfg.Password = pass
 			return nil
 		},
 		"redis": func(value any) error {
@@ -70,10 +87,16 @@ func BuildRuntimeConfigs(base Config, resp *agent.FullBootstrapResponse) (viper.
 			if !ok {
 				return fmt.Errorf("invalid redis credentials type %T", value)
 			}
-			if creds.Username != "" {
-				redisCfg.Username = creds.Username
+
+			pass := sanitizeSecret(creds.Password)
+			if pass == "" {
+				return fmt.Errorf("%w: redis password is empty after sanitization", ErrInvalidCredentials)
 			}
-			redisCfg.Password = string(creds.Password)
+
+			if creds.Username != "" {
+				redisCfg.Username = strings.TrimSpace(creds.Username)
+			}
+			redisCfg.Password = pass
 			return nil
 		},
 		"rabbitmq": func(value any) error {
@@ -81,8 +104,16 @@ func BuildRuntimeConfigs(base Config, resp *agent.FullBootstrapResponse) (viper.
 			if !ok {
 				return fmt.Errorf("invalid rabbitmq credentials type %T", value)
 			}
-			rabbitCfg.User = creds.Username
-			rabbitCfg.Password = string(creds.Password)
+
+			user := strings.TrimSpace(creds.Username)
+			pass := sanitizeSecret(creds.Password)
+
+			if user == "" || pass == "" {
+				return fmt.Errorf("%w: rabbitmq username or password is empty after sanitization", ErrInvalidCredentials)
+			}
+
+			rabbitCfg.User = user
+			rabbitCfg.Password = pass
 			return nil
 		},
 	}
