@@ -24,7 +24,6 @@ func NewLoader(baseDir string) TemplateRenderer {
 		absBase = baseDir
 	}
 
-	// Template Registry – dopuszczone powiązania nazw szablonów ze ścieżkami plików
 	registry := map[string]string{
 		"identity.contract":    "identity/contract.html",
 		"identity.certificate": "identity/certificate.html",
@@ -40,7 +39,6 @@ func NewLoader(baseDir string) TemplateRenderer {
 func (l *Loader) Render(templateName string, data any) ([]byte, error) {
 	relPath, exists := l.registry[templateName]
 	if !exists {
-		// Fallback dla dynamicznych szablonów, jeśli są dozwolone (np. identity.contract -> identity/contract.html)
 		relPath = strings.ReplaceAll(templateName, ".", "/")
 		if !strings.HasSuffix(relPath, ".html") {
 			relPath += ".html"
@@ -50,7 +48,6 @@ func (l *Loader) Render(templateName string, data any) ([]byte, error) {
 	cleanRelPath := filepath.Clean(relPath)
 	fullPath := filepath.Join(l.baseDir, cleanRelPath)
 
-	// Bezpieczne sprawdzanie wyjścia poza BaseDir za pomocą filepath.Rel
 	rel, err := filepath.Rel(l.baseDir, fullPath)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return nil, fmt.Errorf("invalid template path: access denied")

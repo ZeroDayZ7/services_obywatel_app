@@ -71,6 +71,7 @@ services:
       - auth-db-net
       - sec-net
       - cache-net
+      - events-net
     depends_on:
       db-auth:
         condition: service_healthy
@@ -141,6 +142,7 @@ services:
       - sec-net
       - cache-net
       - document-render-net
+      - events-net
     depends_on:
       db-identity:
         condition: service_healthy
@@ -173,9 +175,6 @@ services:
       - ../services/document-renderer/.env.dev
     networks:
       - document-render-net
-    depends_on:
-      db-citizen-docs:
-        condition: service_healthy
 
   # region db-auth
   # --- AUTHENTICATION DATABASE ---
@@ -196,6 +195,7 @@ services:
     networks:
       - target-admin-net
       - auth-db-net
+      - events-net
     volumes:
       - pg_auth_data:/var/lib/postgresql
       - ./scripts/init-kms-admin.sh:/docker-entrypoint-initdb.d/01-init-kms-admin.sh:ro
@@ -221,6 +221,7 @@ services:
     networks:
       - target-admin-net
       - identity-db-net
+      - events-net
     volumes:
       - pg_identity_data:/var/lib/postgresql
     healthcheck:
@@ -320,36 +321,54 @@ services:
   # region cache-redis
   # --- SESSION & CACHING ---
   cache-redis:
-    <<: *common-settings
     image: redis:8.6-alpine
     container_name: cache-redis
-    secrets:
-      - redis_auth_pass
-    command: >
-      sh -c 'redis-server --requirepass $$(cat /run/secrets/redis_auth_pass)'
-    ports:
-      - "6379:6379"
+    restart: ${DOCKER_RESTART_POLICY:-no}
+    environment:
+      REDIS_ROOT_USER: ${REDIS_ROOT_USER:-redis_root}
+      REDIS_ROOT_PASS: ${REDIS_ROOT_PASS}
+      REDIS_KMS_ADMIN_USER: ${REDIS_KMS_ADMIN_USER:-redis_kms_admin}
+      REDIS_KMS_ADMIN_PASS: ${REDIS_KMS_ADMIN_PASS}
     volumes:
       - redis_data:/data
+    entrypoint:
+      - "sh"
+      - "-c"
+      - |
+        cat <<EOF > /tmp/users.acl
+        user default off nopass resetkeys -@all
+        user $${REDIS_ROOT_USER} on >$${REDIS_ROOT_PASS} ~* &* +@all
+        user $${REDIS_KMS_ADMIN_USER} on >$${REDIS_KMS_ADMIN_PASS} ~* &* -@all +acl +ping +select +info
+        EOF
+
+        exec redis-server --aclfile /tmp/users.acl --protected-mode no
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli --user $${REDIS_KMS_ADMIN_USER} -a $${REDIS_KMS_ADMIN_PASS} ping | grep -q PONG || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    ports:
+      - "6379:6379"
     networks:
       - cache-net
+      - target-admin-net
 
     # region rabbitmq
   rabbitmq:
-    <<: *common-settings
     image: rabbitmq:4.3.1-management
     container_name: rabbitmq_server
+    restart: ${DOCKER_RESTART_POLICY:-no}
     ports:
       - "5672:5672"
       - "15672:15672"
     environment:
-      RABBITMQ_DEFAULT_USER_FILE: /run/secrets/rabbitmq_root_user
-      RABBITMQ_DEFAULT_PASS_FILE: /run/secrets/rabbitmq_root_pass
-    secrets:
-      - rabbitmq_root_user
-      - rabbitmq_root_pass
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - events-net
 
   # region STORAGE S3
   minio:
@@ -430,14 +449,17 @@ secrets:
     file: ./secrets/.notify_db_password
   audit_db_pass:
     file: ./secrets/.audit_db_password
-  redis_auth_pass:
-    file: ./secrets/.redis_password
   pgadmin_root_pass:
     file: ./secrets/.pgadmin_admin_password
   messaging_db_pass:
     file: ./secrets/.messaging_db_password
   identity_db_pass:
     file: ./secrets/.identity_db_password
+
+  redis_root_pass:
+    file: ./secrets/.redis_root_pass
+  redis_kms_admin_pass:
+    file: ./secrets/.redis_kms_admin_pass
 
   minio_root_user:
     file: ./secrets/.minio_user
@@ -484,17 +506,22 @@ networks:
     name: app_cache_net
     driver: bridge
     internal: false
-  target-admin-net:
-    name: kms_target-admin-net
-    external: true
   document-render-net:
     name: app_document_render_net
     driver: bridge
     internal: false
-  sec-net:
-    name: kms_sec-net
-    external: true
-
+  events-net:
+    name: app_events_net
+    driver: bridge
+    internal: false
   citizen-app-net:
     name: obywatel_app__network
     driver: bridge
+
+  # ZEWNĘTRZNE SIECI KMS
+  target-admin-net:
+    name: kms_target_admin_net
+    external: true
+  sec-net:
+    name: kms_sec_net
+    external: true

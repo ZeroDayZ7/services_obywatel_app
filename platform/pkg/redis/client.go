@@ -1,5 +1,3 @@
-// cmdr: redis/client.go
-
 package redis
 
 import (
@@ -7,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -17,6 +16,7 @@ import (
 type Config struct {
 	Host         string
 	Port         string
+	Username     string
 	Password     string
 	DB           int
 	PoolSize     int
@@ -29,10 +29,56 @@ type Client struct {
 	*goredis.Client
 }
 
+// Dopisz do pliku redis/client.go
+
+type Adapter struct {
+	client *Client
+	mu     sync.RWMutex
+}
+
+func NewAdapter(client *Client) *Adapter {
+	return &Adapter{
+		client: client,
+	}
+}
+
+// UpdateCredentials realizuje interfejs agent.RedisRotatable.
+// Przepina nowe hasło w opcjach klienta go-redis bez zrywania połączeń.
+func (c *Client) UpdateCredentials(password []byte) error {
+	if c == nil || c.Client == nil {
+		return errors.New("redis client jest niestworzony")
+	}
+
+	opts := c.Client.Options()
+	opts.Password = string(password)
+
+	// Próba wykonania PING na nowych poświadczeniach przed ostatecznym zatwierdzeniem
+	testClient := goredis.NewClient(opts)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	if err := testClient.Ping(ctx).Err(); err != nil {
+		_ = testClient.Close()
+		return fmt.Errorf("weryfikacja nowego hasła redis nie powiodła się: %w", err)
+	}
+	_ = testClient.Close()
+
+	// Podmiana haseł w opcjach istniejącego klienta
+	c.Client.Options().Password = string(password)
+	return nil
+}
+
+func (a *Adapter) UpdateCredentials(password []byte) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.client.UpdateCredentials(password)
+}
+
 //#region New
 func New(cfg Config) (*Client, error) {
 	rdb := goredis.NewClient(&goredis.Options{
 		Addr:         fmt.Sprintf("%s:%s", cfg.Host, cfg.Port),
+		Username:     cfg.Username,
 		Password:     cfg.Password,
 		DB:           cfg.DB,
 		PoolSize:     cfg.PoolSize,

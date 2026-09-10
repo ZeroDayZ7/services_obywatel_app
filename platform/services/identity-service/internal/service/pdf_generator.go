@@ -53,7 +53,6 @@ type AgreementTemplateData struct {
 	InstitutionID string `json:"institution_id,omitempty"`
 }
 
-// Request wysyłany do mikroserwisu document-renderer
 type renderPDFRequest struct {
 	Template string                `json:"template"`
 	Data     AgreementTemplateData `json:"data"`
@@ -61,7 +60,7 @@ type renderPDFRequest struct {
 
 func (c *documentRendererClient) GenerateAgreementPDF(ctx context.Context, data AgreementTemplateData) ([]byte, error) {
 	reqBody := renderPDFRequest{
-		Template: "contracts/identity_certificate.html",
+		Template: "identity.certificate",
 		Data:     data,
 	}
 
@@ -88,7 +87,6 @@ func (c *documentRendererClient) GenerateAgreementPDF(ctx context.Context, data 
 		return nil, fmt.Errorf("pdf_gen: renderer returned status %d", resp.StatusCode)
 	}
 
-	// Odbieramy czysty bufor bajtów pliku PDF
 	var buf bytes.Buffer
 	if _, err := buf.ReadFrom(resp.Body); err != nil {
 		return nil, fmt.Errorf("pdf_gen: failed to read response body: %w", err)

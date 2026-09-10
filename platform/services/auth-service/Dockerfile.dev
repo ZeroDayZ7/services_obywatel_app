@@ -1,9 +1,5 @@
 FROM golang:1.27-alpine
 
-# Instalujemy air do hot-reloadu
-RUN go install github.com/air-verse/air@latest
-
 WORKDIR /app/services/auth-service
 
-# Domyślny komend uruchomieniowa air
-CMD ["air", "--build.cmd", "go build -o /tmp/auth-service ./cmd/main.go", "--build.bin", "/tmp/auth-service"]
+CMD ["go", "run", "./cmd/main.go"]
