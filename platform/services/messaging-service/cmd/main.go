@@ -14,6 +14,7 @@ import (
 	"github.com/zerodayz7/platform/services/messaging-service/config"
 	"github.com/zerodayz7/platform/services/messaging-service/internal/di"
 	"github.com/zerodayz7/platform/services/messaging-service/internal/router"
+	"github.com/zerodayz7/platform/services/messaging-service/internal/security"
 	"github.com/zerodayz7/platform/services/messaging-service/internal/websocket"
 )
 
@@ -38,8 +39,19 @@ func main() {
 	securityCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	// 3. Ładowanie Kluczy z KMS do KeyStore
-	LoadSecurityKeys(securityCtx, &config.AppConfig, keyStore)
+	// 3. Ładowanie Kluczy z KMS do KeyStore (użycie funkcji z internal/security)
+	rabbitHMACKey, err := security.LoadSecurityKeys(securityCtx, &config.AppConfig, keyStore)
+	if err != nil {
+		log.Error("❌ Nie udało się załadować kluczy bezpieczeństwa z KMS", "error", err)
+		os.Exit(1)
+	}
+	if config.AppConfig.RabbitMQEnabled && len(rabbitHMACKey) == 0 {
+		log.Error("❌ Brak klucza RabbitMQ po załadowaniu z KMS, mimo że RabbitMQ jest włączone")
+		os.Exit(1)
+	}
+	if !config.AppConfig.RabbitMQEnabled && rabbitHMACKey != nil {
+		log.Warn("RabbitMQ jest wyłączony, więc zwrócony klucz HMAC powinien być pusty.")
+	}
 
 	// 4. Database
 	db, closeDB := config.MustInitDB(config.AppConfig.Database)
@@ -48,8 +60,8 @@ func main() {
 	wsHub := websocket.NewHub()
 	go wsHub.Run()
 
-	// 6. DI Container & App Setup (zgodnie z obecną sygnaturą NewContainer - 4 argumenty)
-	container := di.NewContainer(db, log, &config.AppConfig, wsHub)
+	// 6. DI Container & App Setup
+	container := di.NewContainer(db, log, &config.AppConfig, wsHub, keyStore)
 	messagingApp := app.NewApp(container)
 
 	router.SetupMessagingRoutes(messagingApp, container)

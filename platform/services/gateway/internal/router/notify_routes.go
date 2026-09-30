@@ -5,7 +5,7 @@ import (
 	"github.com/zerodayz7/platform/services/gateway/internal/di"
 )
 
-const ServiceNotify = "notify-service"
+const ServiceNotify = "notification-service"
 
 //#region RegisterNotifyRoutes
 func RegisterNotifyRoutes(app *fiber.App, container *di.Container) {

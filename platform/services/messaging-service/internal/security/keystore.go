@@ -1,8 +1,7 @@
-package main
+package security
 
 import (
 	"context"
-	"os"
 
 	"github.com/zerodayz7/platform/pkg/httpserver"
 	"github.com/zerodayz7/platform/pkg/kms"
@@ -10,17 +9,16 @@ import (
 	"github.com/zerodayz7/platform/services/messaging-service/config"
 )
 
-func LoadSecurityKeys(ctx context.Context, app *config.Config, keyStore *httpserver.KeyStore) {
+func LoadSecurityKeys(ctx context.Context, app *config.Config, keyStore *httpserver.KeyStore) ([]byte, error) {
 	log := shared.GetLogger()
 	kmsCfg := app.ToKMSServiceConfig()
 
 	log.Info("🔍 Sprawdzanie stanu serwisu KMS...")
 	if err := kms.HealthCheck(ctx, kmsCfg); err != nil {
-		log.Error("❌ KMS jest niedostępny podczas inicjalizacji", "error", err)
-		os.Exit(1)
+		return nil, err
 	}
 
-	loadKey := func(alias string, target config.KeyTarget) {
+	loadKey := func(alias string, target config.KeyTarget) error {
 		keyBytes, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, target.TargetKey, 1, target.Algorithm)
 		if err != nil {
 			log.Error("❌ Nie udało się pobrać klucza z KMS",
@@ -29,7 +27,7 @@ func LoadSecurityKeys(ctx context.Context, app *config.Config, keyStore *httpser
 				"algorithm", target.Algorithm,
 				"error", err,
 			)
-			os.Exit(1)
+			return err
 		}
 
 		keyStore.SetKey(alias, keyBytes, uint32(version))
@@ -39,10 +37,26 @@ func LoadSecurityKeys(ctx context.Context, app *config.Config, keyStore *httpser
 			"algorithm", target.Algorithm,
 			"version", version,
 		)
+		return nil
 	}
 
-	// 1. Zewnętrzni nadawcy (API Gateway)
 	for senderID, keyTarget := range app.HMAC.TargetKeys {
-		loadKey(senderID, keyTarget)
+		if err := loadKey(senderID, keyTarget); err != nil {
+			return nil, err
+		}
 	}
+
+	if !app.RabbitMQEnabled {
+		log.Warn("RabbitMQ jest wyłączony. Pomijam pobieranie klucza RabbitMQ z KMS.")
+		return nil, nil
+	}
+
+	rabbitTarget := app.HMAC.RabbitMQKey
+	rabbitHMACKey, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, rabbitTarget.TargetKey, 1, rabbitTarget.Algorithm)
+	if err != nil {
+		return nil, err
+	}
+	log.Info("✅ Klucz HMAC dla RabbitMQ pobrany pomyślnie z KMS", "target", rabbitTarget.TargetKey, "version", version)
+
+	return rabbitHMACKey, nil
 }

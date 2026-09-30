@@ -1,3 +1,5 @@
+// cmdr: config\config.go
+
 package config
 
 import (
@@ -16,16 +18,18 @@ type KeyTarget struct {
 }
 
 type MessagingHMACConfig struct {
-	TargetKeys map[string]KeyTarget `mapstructure:"HMAC_TARGET_KEYS"`
+	TargetKeys  map[string]KeyTarget `mapstructure:"HMAC_TARGET_KEYS"`
+	RabbitMQKey KeyTarget            `mapstructure:"HMAC_RABBITMQ_KEY"`
 }
 
 type Config struct {
-	Server   viper.ServerConfig  `mapstructure:",squash"`
-	Database viper.DBConfig      `mapstructure:",squash"`
-	OTEL     viper.OTELConfig    `mapstructure:",squash"`
-	KMS      viper.KMSConfig     `mapstructure:",squash"`
-	HMAC     MessagingHMACConfig `mapstructure:",squash"`
-	Shutdown time.Duration       `mapstructure:"SHUTDOWN_TIMEOUT" validate:"required"`
+	Server          viper.ServerConfig  `mapstructure:",squash"`
+	Database        viper.DBConfig      `mapstructure:",squash"`
+	OTEL            viper.OTELConfig    `mapstructure:",squash"`
+	KMS             viper.KMSConfig     `mapstructure:",squash"`
+	HMAC            MessagingHMACConfig `mapstructure:",squash"`
+	RabbitMQEnabled bool                `mapstructure:"RABBITMQ_ENABLED"`
+	Shutdown        time.Duration       `mapstructure:"SHUTDOWN_TIMEOUT" validate:"required"`
 }
 
 var AppConfig Config
@@ -49,6 +53,12 @@ func LoadConfigGlobal() error {
 			Algorithm: "HmacSha256",
 		},
 	})
+
+	spfViper.SetDefault("HMAC_RABBITMQ_KEY", KeyTarget{
+		TargetKey: "hmac-messaging-rabbitmq",
+		Algorithm: "HmacSha256",
+	})
+	spfViper.SetDefault("RABBITMQ_ENABLED", false)
 
 	if err := viper.InitConfig(&AppConfig, "messaging-service"); err != nil {
 		return fmt.Errorf("failed to initialize messaging-service config: %w", err)

@@ -18,20 +18,41 @@ const (
 )
 
 type NotificationWorker struct {
-	redis  *redis.Client
-	svc    *service.NotificationService
-	logger *shared.Logger
+	redis   *redis.Client
+	svc     *service.NotificationService
+	logger  *shared.Logger
+	enabled bool
 }
 
 func NewNotificationWorker(r *redis.Client, s *service.NotificationService, l *shared.Logger) *NotificationWorker {
 	return &NotificationWorker{
-		redis:  r,
-		svc:    s,
-		logger: l,
+		redis:   r,
+		svc:     s,
+		logger:  l,
+		enabled: r != nil,
 	}
 }
 
+func (w *NotificationWorker) SetEnabled(enabled bool) {
+	w.enabled = enabled
+}
+
+func (w *NotificationWorker) isEnabled() bool {
+	return w.enabled && w.redis != nil
+}
+
+func (w *NotificationWorker) shouldSkipRedis() bool {
+	return !w.isEnabled()
+}
+
 func (w *NotificationWorker) Start() {
+	if w.shouldSkipRedis() {
+		if w.logger != nil {
+			w.logger.Warn("NotificationWorker: disabled or redis unavailable, skipping stream consumer")
+		}
+		return
+	}
+
 	ctx := context.Background()
 
 	if err := w.ensureRedisInfrastructure(ctx); err != nil {

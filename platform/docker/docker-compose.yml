@@ -76,6 +76,73 @@ services:
       db-auth:
         condition: service_healthy
     
+  # region SVC MESSAGE
+  # --- MESSAGING SERVICE ---
+  messaging-service:
+    build:
+      context: ../
+      dockerfile: services/messaging-service/Dockerfile.dev
+    image: messaging-service:dev
+    container_name: app-messaging-service
+    restart: ${DOCKER_RESTART_POLICY:-no}
+    working_dir: /app/services/messaging-service
+    environment:
+      - GOCACHE=/root/.cache/go-build
+      - GOWORK=off
+    volumes:
+      - ../services/messaging-service:/app/services/messaging-service
+      - ../pkg:/app/pkg
+      - ../go.work:/app/go.work
+      - ../go.work.sum:/app/go.work.sum
+      - go-build-cache:/root/.cache/go-build
+      - go-mod-cache:/go/pkg/mod
+    ports:
+      - "8086:8086"
+    env_file:
+      - ../services/messaging-service/.env.dev
+    networks:
+      - gateway-net
+      - messaging-db-net
+      - cache-net
+      - events-net
+      - target-admin-net
+    depends_on:
+      db-messaging:
+        condition: service_healthy
+
+  # region SVC NOTIFICATION
+  # --- NOTIFICATION SERVICE ---
+  notification-service:
+    build:
+      context: ../
+      dockerfile: services/notification-service/Dockerfile.dev
+    image: notification-service:dev
+    container_name: app-notification-service
+    restart: ${DOCKER_RESTART_POLICY:-no}
+    working_dir: /app/services/notification-service
+    environment:
+      - GOCACHE=/root/.cache/go-build
+      - GOWORK=off
+    volumes:
+      - ../services/notification-service:/app/services/notification-service
+      - ../pkg:/app/pkg
+      - ../go.work:/app/go.work
+      - ../go.work.sum:/app/go.work.sum
+      - go-build-cache:/root/.cache/go-build
+      - go-mod-cache:/go/pkg/mod
+    ports:
+      - "8085:8085"
+    env_file:
+      - ../services/notification-service/.env.dev
+    networks:
+      - gateway-net
+      - db-notification
+      - cache-net
+      - target-admin-net
+    depends_on:
+      db-notification:
+        condition: service_healthy
+    
     # region SVC OFFICER-BFF
   # --- OFFICER BFF SERVICE ---
   officer-bff:
@@ -233,9 +300,9 @@ services:
   # region db-notification
   # --- NOTIFICATION DATABASE ---
   db-notification:
-    <<: *common-settings
     image: postgres:18.3-alpine
     container_name: db-notification
+    restart: ${DOCKER_RESTART_POLICY:-no}
     environment:
       POSTGRES_USER: ${NOTIFY_DB_USER:-notification_user}
       POSTGRES_DB: ${NOTIFY_DB_NAME:-notification_database}
@@ -246,6 +313,10 @@ services:
       - "5434:5432"
     volumes:
       - pg_notification_data:/var/lib/postgresql
+    networks:
+      - target-admin-net
+      - db-notification
+      - events-net
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 10s
@@ -299,9 +370,9 @@ services:
   # region db-messaging
   # --- MESSAGING DATABASE ---
   db-messaging:
-    <<: *common-settings
     image: postgres:18.3-alpine
     container_name: db-messaging
+    restart: ${DOCKER_RESTART_POLICY:-no}
     environment:
       POSTGRES_USER: ${MESSAGING_DB_USER:-messaging_user}
       POSTGRES_DB: ${MESSAGING_DB_NAME:-messaging_database}
@@ -312,6 +383,10 @@ services:
       - "5436:5432"
     volumes:
       - pg_messaging_data:/var/lib/postgresql
+    networks:
+      - target-admin-net
+      - messaging-db-net
+      - events-net
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 10s
@@ -512,6 +587,14 @@ networks:
     internal: false
   events-net:
     name: app_events_net
+    driver: bridge
+    internal: false
+  messaging-db-net:
+    name: app_messaging_db_net
+    driver: bridge
+    internal: false
+  db-notification:
+    name: app_notification_db_net
     driver: bridge
     internal: false
   citizen-app-net:

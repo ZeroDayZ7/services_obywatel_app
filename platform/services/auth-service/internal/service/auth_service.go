@@ -208,6 +208,11 @@ func (s *authService) AttemptLoginStep2(ctx context.Context, userID uuid.UUID, s
 	sessionData := s.buildUserSession(user, deviceID, cred.PublicKey, false)
 
 	if err := s.cache.SetSession(ctx, newSessionID, &sessionData, s.cfg.Session.TTL); err != nil {
+		log.ErrorMap("[AttemptLoginStep2] Failed to save user session in Redis", map[string]any{
+			"user_id":    user.ID,
+			"session_id": newSessionID,
+			"err":        err,
+		})
 		return nil, errors.ErrInternal
 	}
 
@@ -386,7 +391,11 @@ func (s *authService) prepareEmployeeLogin(ctx context.Context, user *model.User
 	}
 
 	if err := s.cache.SetSetupSession(ctx, sessionID, &sessionData, 15*time.Minute); err != nil {
-		log.ErrorObj("Failed to save employee setup session in Redis", err)
+		log.ErrorMap("Failed to save employee setup session in Redis", map[string]any{
+			"user_id":    user.ID,
+			"session_id": sessionID,
+			"err":        err,
+		})
 		return nil, errors.ErrInternal
 	}
 
@@ -578,5 +587,3 @@ func (s *authService) CreateTemporarySession(ctx context.Context, userID uuid.UU
 		},
 	}, nil
 }
-
-

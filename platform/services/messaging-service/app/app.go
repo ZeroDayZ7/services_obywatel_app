@@ -4,8 +4,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/gofiber/fiber/v2/middleware/requestid"
-
-	// pkgMiddleware "github.com/zerodayz7/platform/pkg/middleware"
+	"github.com/zerodayz7/platform/pkg/middleware"
 	"github.com/zerodayz7/platform/pkg/server"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/messaging-service/internal/di"
@@ -36,10 +35,7 @@ func NewApp(container *di.Container) *fiber.App {
 	app.Use(recover.New())
 
 	app.Use(shared.GetLimiter(shared.LimitGlobal, nil))
-	// app.Use(shared.RequestLoggerMiddleware())
-
-	// hmacSecret := []byte(container.Config.Internal.HMACSecret)
-	// app.Use(pkgMiddleware.InternalAuthMiddleware(hmacSecret))
+	app.Use(middleware.InternalAuthMiddleware(container.KeyStore))
 
 	return app
 }
