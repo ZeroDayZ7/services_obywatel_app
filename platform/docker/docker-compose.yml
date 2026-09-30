@@ -138,6 +138,7 @@ services:
       - gateway-net
       - db-notification
       - cache-net
+      - target-admin-net
     depends_on:
       db-notification:
         condition: service_healthy

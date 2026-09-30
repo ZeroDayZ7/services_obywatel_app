@@ -13,6 +13,7 @@ type Config struct {
 	Database viper.DBConfig               `mapstructure:",squash"`
 	Redis    viper.RedisConfig            `mapstructure:",squash"`
 	RabbitMQ viper.RabbitMQConfig         `mapstructure:",squash"`
+	KMS      viper.KMSConfig              `mapstructure:",squash"`
 	Internal viper.InternalSecurityConfig `mapstructure:",squash"`
 	OTEL     viper.OTELConfig             `mapstructure:",squash"`
 	Shutdown time.Duration                `mapstructure:"SHUTDOWN_TIMEOUT" validate:"required"`
@@ -26,6 +27,7 @@ func LoadConfigGlobal() error {
 	viper.SetBaseDefaults("notification-service")
 	viper.SetDBDefaults()
 	viper.SetRedisDefaults()
+	viper.SetKMSDefaults()
 
 	if err := viper.InitConfig(&AppConfig, "notification-service"); err != nil {
 		return fmt.Errorf("failed to initialize config: %w", err)
