@@ -40,9 +40,17 @@ func main() {
 	defer cancel()
 
 	// 3. Ładowanie Kluczy z KMS do KeyStore (użycie funkcji z internal/security)
-	if _, err := security.LoadSecurityKeys(securityCtx, &config.AppConfig, keyStore); err != nil {
+	rabbitHMACKey, err := security.LoadSecurityKeys(securityCtx, &config.AppConfig, keyStore)
+	if err != nil {
 		log.Error("❌ Nie udało się załadować kluczy bezpieczeństwa z KMS", "error", err)
 		os.Exit(1)
+	}
+	if config.AppConfig.RabbitMQEnabled && len(rabbitHMACKey) == 0 {
+		log.Error("❌ Brak klucza RabbitMQ po załadowaniu z KMS, mimo że RabbitMQ jest włączone")
+		os.Exit(1)
+	}
+	if !config.AppConfig.RabbitMQEnabled && rabbitHMACKey != nil {
+		log.Warn("RabbitMQ jest wyłączony, więc zwrócony klucz HMAC powinien być pusty.")
 	}
 
 	// 4. Database
