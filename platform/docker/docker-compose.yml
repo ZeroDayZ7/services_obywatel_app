@@ -76,6 +76,7 @@ services:
       db-auth:
         condition: service_healthy
     
+  # region SVC MESSAGE
   # --- MESSAGING SERVICE ---
   messaging-service:
     build:
@@ -108,6 +109,7 @@ services:
       db-messaging:
         condition: service_healthy
 
+  # region SVC NOTIFICATION
   # --- NOTIFICATION SERVICE ---
   notification-service:
     build:
@@ -296,9 +298,9 @@ services:
   # region db-notification
   # --- NOTIFICATION DATABASE ---
   db-notification:
-    <<: *common-settings
     image: postgres:18.3-alpine
     container_name: db-notification
+    restart: ${DOCKER_RESTART_POLICY:-no}
     environment:
       POSTGRES_USER: ${NOTIFY_DB_USER:-notification_user}
       POSTGRES_DB: ${NOTIFY_DB_NAME:-notification_database}
@@ -309,6 +311,10 @@ services:
       - "5434:5432"
     volumes:
       - pg_notification_data:/var/lib/postgresql
+    networks:
+      - target-admin-net
+      - db-notification
+      - events-net
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 10s
@@ -362,9 +368,9 @@ services:
   # region db-messaging
   # --- MESSAGING DATABASE ---
   db-messaging:
-    <<: *common-settings
     image: postgres:18.3-alpine
     container_name: db-messaging
+    restart: ${DOCKER_RESTART_POLICY:-no}
     environment:
       POSTGRES_USER: ${MESSAGING_DB_USER:-messaging_user}
       POSTGRES_DB: ${MESSAGING_DB_NAME:-messaging_database}
@@ -375,6 +381,10 @@ services:
       - "5436:5432"
     volumes:
       - pg_messaging_data:/var/lib/postgresql
+    networks:
+      - target-admin-net
+      - messaging-db-net
+      - events-net
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 10s
@@ -575,6 +585,14 @@ networks:
     internal: false
   events-net:
     name: app_events_net
+    driver: bridge
+    internal: false
+  messaging-db-net:
+    name: app_messaging_db_net
+    driver: bridge
+    internal: false
+  db-notification:
+    name: app_notification_db_net
     driver: bridge
     internal: false
   citizen-app-net:
