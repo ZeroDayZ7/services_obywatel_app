@@ -1,8 +1,7 @@
-package main
+package security
 
 import (
 	"context"
-	"os"
 
 	"github.com/zerodayz7/platform/pkg/httpserver"
 	"github.com/zerodayz7/platform/pkg/kms"
@@ -10,14 +9,13 @@ import (
 	"github.com/zerodayz7/platform/services/messaging-service/config"
 )
 
-func LoadSecurityKeys(ctx context.Context, app *config.Config, keyStore *httpserver.KeyStore) {
+func LoadSecurityKeys(ctx context.Context, app *config.Config, keyStore *httpserver.KeyStore) error {
 	log := shared.GetLogger()
 	kmsCfg := app.ToKMSServiceConfig()
 
 	log.Info("🔍 Sprawdzanie stanu serwisu KMS...")
 	if err := kms.HealthCheck(ctx, kmsCfg); err != nil {
-		log.Error("❌ KMS jest niedostępny podczas inicjalizacji", "error", err)
-		os.Exit(1)
+		return err
 	}
 
 	loadKey := func(alias string, target config.KeyTarget) {
@@ -29,7 +27,7 @@ func LoadSecurityKeys(ctx context.Context, app *config.Config, keyStore *httpser
 				"algorithm", target.Algorithm,
 				"error", err,
 			)
-			os.Exit(1)
+			return
 		}
 
 		keyStore.SetKey(alias, keyBytes, uint32(version))
@@ -41,8 +39,10 @@ func LoadSecurityKeys(ctx context.Context, app *config.Config, keyStore *httpser
 		)
 	}
 
-	// 1. Zewnętrzni nadawcy (API Gateway)
+	// Klucze dla nadawców zewnętrznych/wewnętrznych HTTP (np. Gateway)
 	for senderID, keyTarget := range app.HMAC.TargetKeys {
 		loadKey(senderID, keyTarget)
 	}
+
+	return nil
 }
