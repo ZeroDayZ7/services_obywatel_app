@@ -105,6 +105,7 @@ services:
       - messaging-db-net
       - cache-net
       - events-net
+      - target-admin-net
     depends_on:
       db-messaging:
         condition: service_healthy
