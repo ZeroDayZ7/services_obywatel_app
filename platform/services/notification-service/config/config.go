@@ -20,15 +20,17 @@ type KeyTarget struct {
 }
 
 type Config struct {
-	Server   viper.ServerConfig           `mapstructure:",squash"`
-	Database viper.DBConfig               `mapstructure:",squash"`
-	Redis    viper.RedisConfig            `mapstructure:",squash"`
-	RabbitMQ viper.RabbitMQConfig         `mapstructure:",squash"`
-	KMS      viper.KMSConfig              `mapstructure:",squash"`
-	HMAC     NotificationHMACConfig       `mapstructure:",squash"`
-	Internal viper.InternalSecurityConfig `mapstructure:",squash"`
-	OTEL     viper.OTELConfig             `mapstructure:",squash"`
-	Shutdown time.Duration                `mapstructure:"SHUTDOWN_TIMEOUT" validate:"required"`
+	Server                    viper.ServerConfig           `mapstructure:",squash"`
+	Database                  viper.DBConfig               `mapstructure:",squash"`
+	Redis                     viper.RedisConfig            `mapstructure:",squash"`
+	RedisEnabled              bool                        `mapstructure:"REDIS_ENABLED"`
+	NotificationWorkerEnabled bool                        `mapstructure:"NOTIFICATION_WORKER_ENABLED"`
+	RabbitMQ                  viper.RabbitMQConfig         `mapstructure:",squash"`
+	KMS                       viper.KMSConfig              `mapstructure:",squash"`
+	HMAC                      NotificationHMACConfig       `mapstructure:",squash"`
+	Internal                  viper.InternalSecurityConfig `mapstructure:",squash"`
+	OTEL                      viper.OTELConfig             `mapstructure:",squash"`
+	Shutdown                  time.Duration                `mapstructure:"SHUTDOWN_TIMEOUT" validate:"required"`
 }
 
 var AppConfig Config
@@ -44,6 +46,8 @@ func LoadConfigGlobal() error {
 	viper.SetDBDefaults()
 	viper.SetRedisDefaults()
 	viper.SetKMSDefaults()
+	spfViper.SetDefault("REDIS_ENABLED", false)
+	spfViper.SetDefault("NOTIFICATION_WORKER_ENABLED", false)
 	spfViper.SetDefault("HMAC_TARGET_KEYS", map[string]KeyTarget{
 		"gateway": {
 			TargetKey: "hmac-gateway-notification",
