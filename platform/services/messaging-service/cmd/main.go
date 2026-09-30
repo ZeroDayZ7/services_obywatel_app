@@ -61,7 +61,7 @@ func main() {
 	go wsHub.Run()
 
 	// 6. DI Container & App Setup
-	container := di.NewContainer(db, log, &config.AppConfig, wsHub)
+	container := di.NewContainer(db, log, &config.AppConfig, wsHub, keyStore)
 	messagingApp := app.NewApp(container)
 
 	router.SetupMessagingRoutes(messagingApp, container)

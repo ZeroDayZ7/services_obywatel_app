@@ -82,6 +82,10 @@ func SetGatewayDefaults() {
 			TargetKey: "hmac-gateway-officer-bff",
 			Algorithm: "HmacSha256",
 		},
+		"notification-service": {
+			TargetKey: "hmac-gateway-notification",
+			Algorithm: "HmacSha256",
+		},
 	})
 
 	spfViper.SetDefault("HMAC_RABBITMQ_KEY", KeyTarget{

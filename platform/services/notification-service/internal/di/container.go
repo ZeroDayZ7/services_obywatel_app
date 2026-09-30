@@ -1,6 +1,7 @@
 package di
 
 import (
+	"github.com/zerodayz7/platform/pkg/httpserver"
 	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/notification-service/config"
@@ -12,10 +13,11 @@ type Container struct {
 	Workers  *Workers
 	Redis    *redis.Client
 	Logger   *shared.Logger
+	KeyStore *httpserver.KeyStore
 	Config   *config.Config
 }
 
-func NewContainer(db *gorm.DB, redisClient *redis.Client, log *shared.Logger, cfg *config.Config) *Container {
+func NewContainer(db *gorm.DB, redisClient *redis.Client, log *shared.Logger, cfg *config.Config, keyStore *httpserver.KeyStore) *Container {
 	repos := NewRepositories(db)
 	services := NewServices(repos)
 
@@ -27,6 +29,7 @@ func NewContainer(db *gorm.DB, redisClient *redis.Client, log *shared.Logger, cf
 		Workers:  workers,
 		Redis:    redisClient,
 		Logger:   log,
+		KeyStore: keyStore,
 		Config:   cfg,
 	}
 }

@@ -1,8 +1,13 @@
 package main
 
 import (
+	"context"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
+	"github.com/zerodayz7/platform/pkg/httpserver"
 	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/server"
 	"github.com/zerodayz7/platform/pkg/shared"
@@ -11,6 +16,7 @@ import (
 	"github.com/zerodayz7/platform/services/notification-service/config"
 	"github.com/zerodayz7/platform/services/notification-service/internal/di"
 	"github.com/zerodayz7/platform/services/notification-service/internal/router"
+	"github.com/zerodayz7/platform/services/notification-service/internal/security"
 	// "github.com/zerodayz7/platform/pkg/telemetry" // Uncomment when telemetry is used
 )
 
@@ -43,12 +49,24 @@ func main() {
 	}
 	defer redisClient.Close()
 
+	keyStore := httpserver.NewKeyStore()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	securityCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	if _, err := security.LoadSecurityKeys(securityCtx, &config.AppConfig, keyStore); err != nil {
+		log.Error("❌ Nie udało się załadować kluczy bezpieczeństwa z KMS", "error", err)
+		os.Exit(1)
+	}
+
 	// Initialize Database
 	db, closeDB := config.MustInitDB(config.AppConfig.Database)
 	defer closeDB()
 
 	// Dependency Injection setup
-	container := di.NewContainer(db, redisClient, log, &config.AppConfig)
+	container := di.NewContainer(db, redisClient, log, &config.AppConfig, keyStore)
 
 	// Start background workers
 	utils.SafeGo(log, container.Workers.NotificationWorker.Start)

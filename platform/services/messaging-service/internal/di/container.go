@@ -1,6 +1,7 @@
 package di
 
 import (
+	"github.com/zerodayz7/platform/pkg/httpserver"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/messaging-service/config"
 	"github.com/zerodayz7/platform/services/messaging-service/internal/handler"
@@ -15,13 +16,14 @@ type Container struct {
 	Config           *config.Config
 	Logger           *shared.Logger
 	WsHub            *internalWs.Hub
+	KeyStore         *httpserver.KeyStore
 	MessagingSvc     service.MessagingService
 	ContactsSvc      service.ContactsService
 	MessagingHandler *handler.MessagingHandler
 	ContactsHandler  *handler.ContactsHandler
 }
 
-func NewContainer(db *gorm.DB, logger *shared.Logger, cfg *config.Config, wsHub *internalWs.Hub) *Container {
+func NewContainer(db *gorm.DB, logger *shared.Logger, cfg *config.Config, wsHub *internalWs.Hub, keyStore *httpserver.KeyStore) *Container {
 	messagingRepo := repository.NewMessagingRepository(db)
 	contactsRepo := repository.NewContactsRepository(db) // Nowy repozytorium
 
@@ -36,6 +38,7 @@ func NewContainer(db *gorm.DB, logger *shared.Logger, cfg *config.Config, wsHub 
 		Config:           cfg,
 		Logger:           logger,
 		WsHub:            wsHub,
+		KeyStore:         keyStore,
 		MessagingSvc:     messagingSvc,
 		ContactsSvc:      contactsSvc,
 		MessagingHandler: messagingHandler,

@@ -4,6 +4,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/gofiber/fiber/v2/middleware/requestid"
+	"github.com/zerodayz7/platform/pkg/middleware"
 	"github.com/zerodayz7/platform/pkg/server"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/notification-service/internal/di"
@@ -40,9 +41,7 @@ func NewNotificationApp(container *di.Container) *fiber.App {
 	app.Use(recover.New())
 	app.Use(shared.GetLimiter(shared.LimitGlobal, nil))
 	app.Use(shared.RequestLoggerMiddleware())
-
-	// Jeśli potrzebujesz InternalAuthMiddleware w powiadomieniach:
-	// app.Use(middleware.InternalAuthMiddleware(container.Config.Internal.InternalSecret))
+	app.Use(middleware.InternalAuthMiddleware(container.KeyStore))
 
 	return app
 }
