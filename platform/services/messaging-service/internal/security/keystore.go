@@ -9,13 +9,13 @@ import (
 	"github.com/zerodayz7/platform/services/messaging-service/config"
 )
 
-func LoadSecurityKeys(ctx context.Context, app *config.Config, keyStore *httpserver.KeyStore) error {
+func LoadSecurityKeys(ctx context.Context, app *config.Config, keyStore *httpserver.KeyStore) ([]byte, error) {
 	log := shared.GetLogger()
 	kmsCfg := app.ToKMSServiceConfig()
 
 	log.Info("🔍 Sprawdzanie stanu serwisu KMS...")
 	if err := kms.HealthCheck(ctx, kmsCfg); err != nil {
-		return err
+		return nil, err
 	}
 
 	loadKey := func(alias string, target config.KeyTarget) {
@@ -44,5 +44,13 @@ func LoadSecurityKeys(ctx context.Context, app *config.Config, keyStore *httpser
 		loadKey(senderID, keyTarget)
 	}
 
-	return nil
+	// 3. Wewnętrzny klucz RabbitMQ dla tego serwisu
+	rabbitTarget := app.HMAC.RabbitMQKey
+	rabbitHMACKey, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, rabbitTarget.TargetKey, 1, rabbitTarget.Algorithm)
+	if err != nil {
+		return nil, err
+	}
+	log.Info("✅ Klucz HMAC dla RabbitMQ pobrany pomyślnie z KMS", "target", rabbitTarget.TargetKey, "version", version)
+
+	return rabbitHMACKey, nil
 }

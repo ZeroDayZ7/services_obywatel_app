@@ -76,6 +76,69 @@ services:
       db-auth:
         condition: service_healthy
     
+  # --- MESSAGING SERVICE ---
+  messaging-service:
+    build:
+      context: ../
+      dockerfile: services/messaging-service/Dockerfile.dev
+    image: messaging-service:dev
+    container_name: app-messaging-service
+    restart: ${DOCKER_RESTART_POLICY:-no}
+    working_dir: /app/services/messaging-service
+    environment:
+      - GOCACHE=/root/.cache/go-build
+      - GOWORK=off
+    volumes:
+      - ../services/messaging-service:/app/services/messaging-service
+      - ../pkg:/app/pkg
+      - ../go.work:/app/go.work
+      - ../go.work.sum:/app/go.work.sum
+      - go-build-cache:/root/.cache/go-build
+      - go-mod-cache:/go/pkg/mod
+    ports:
+      - "8086:8086"
+    env_file:
+      - ../services/messaging-service/.env.dev
+    networks:
+      - gateway-net
+      - messaging-db-net
+      - cache-net
+      - events-net
+    depends_on:
+      db-messaging:
+        condition: service_healthy
+
+  # --- NOTIFICATION SERVICE ---
+  notification-service:
+    build:
+      context: ../
+      dockerfile: services/notification-service/Dockerfile.dev
+    image: notification-service:dev
+    container_name: app-notification-service
+    restart: ${DOCKER_RESTART_POLICY:-no}
+    working_dir: /app/services/notification-service
+    environment:
+      - GOCACHE=/root/.cache/go-build
+      - GOWORK=off
+    volumes:
+      - ../services/notification-service:/app/services/notification-service
+      - ../pkg:/app/pkg
+      - ../go.work:/app/go.work
+      - ../go.work.sum:/app/go.work.sum
+      - go-build-cache:/root/.cache/go-build
+      - go-mod-cache:/go/pkg/mod
+    ports:
+      - "8085:8085"
+    env_file:
+      - ../services/notification-service/.env.dev
+    networks:
+      - gateway-net
+      - db-notification
+      - cache-net
+    depends_on:
+      db-notification:
+        condition: service_healthy
+    
     # region SVC OFFICER-BFF
   # --- OFFICER BFF SERVICE ---
   officer-bff:

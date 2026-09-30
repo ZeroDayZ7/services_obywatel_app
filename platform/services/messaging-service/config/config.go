@@ -19,6 +19,7 @@ type KeyTarget struct {
 
 type MessagingHMACConfig struct {
 	TargetKeys map[string]KeyTarget `mapstructure:"HMAC_TARGET_KEYS"`
+	RabbitMQKey KeyTarget            `mapstructure:"HMAC_RABBITMQ_KEY"`
 }
 
 type Config struct {
@@ -50,6 +51,11 @@ func LoadConfigGlobal() error {
 			TargetKey: "hmac-gateway-messaging",
 			Algorithm: "HmacSha256",
 		},
+	})
+
+	spfViper.SetDefault("HMAC_RABBITMQ_KEY", KeyTarget{
+		TargetKey: "hmac-messaging-rabbitmq",
+		Algorithm: "HmacSha256",
 	})
 
 	if err := viper.InitConfig(&AppConfig, "messaging-service"); err != nil {
