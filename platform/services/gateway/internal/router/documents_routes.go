@@ -11,7 +11,7 @@ const ServiceDocuments = "citizen-docs-service"
 
 //#region RegisterDocumentRoutes
 func RegisterDocumentRoutes(app *fiber.App, container *di.Container) {
-	target := container.Config.Services.Documents
+	target := container.Config.Services.CitizenDocs
 
 	docs := app.Group("/documents")
 

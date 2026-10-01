@@ -36,7 +36,8 @@ func NewDocsApp(container *di.Container) *fiber.App {
 	app.Use(recover.New())
 
 	app.Use(shared.GetLimiter(shared.LimitGlobal, nil))
-	// app.Use(shared.RequestLoggerMiddleware())
+	// Structured HTTP request logging
+	app.Use(shared.RequestLoggerMiddleware())
 
 	// hmacSecret := []byte(container.Config.Internal.HMACSecret)
 	// app.Use(pkgMiddleware.InternalAuthMiddleware(hmacSecret))
