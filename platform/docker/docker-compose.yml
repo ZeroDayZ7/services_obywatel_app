@@ -34,6 +34,7 @@ services:
       - gateway-net
       - target-admin-net
       - cache-net
+      - document-render-net
     depends_on:
       cache-redis:
         condition: service_started
@@ -143,7 +144,7 @@ services:
       db-notification:
         condition: service_healthy
     
-    # region SVC OFFICER-BFF
+  # region SVC OFFICER-BFF
   # --- OFFICER BFF SERVICE ---
   officer-bff:
     build:
@@ -235,7 +236,7 @@ services:
       - go-build-cache:/root/.cache/go-build
       - go-mod-cache:/go/pkg/mod
     ports:
-      - "8082:8082"
+      - "8090:8090"
     env_file:
       - ../services/citizen-docs/.env.dev
     networks:
@@ -306,7 +307,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-   # region db-identity
+  # region db-identity
   # --- IDENTITY DATABASE ---
   db-identity:
     image: postgres:18.3-alpine
@@ -359,7 +360,7 @@ services:
       retries: 5
 
   # region db-citizen-docs
-  # # --- CITIZEN DOCUMENTS DATABASE ---
+  # --- CITIZEN DOCUMENTS DATABASE ---
   db-citizen-docs:
     image: postgres:18.3-alpine
     container_name: db-citizen-docs
@@ -386,25 +387,25 @@ services:
 
   # region db-audit
   # --- AUDIT DATABASE ---
-  db-audit:
-    <<: *common-settings
-    image: postgres:18.3-alpine
-    container_name: db-audit
-    environment:
-      POSTGRES_USER: ${AUDIT_DB_USER:-audit_user}
-      POSTGRES_DB: ${AUDIT_DB_NAME:-audit_database}
-      POSTGRES_PASSWORD_FILE: /run/secrets/audit_db_pass
-    secrets:
-      - audit_db_pass
-    ports:
-      - "5435:5432"
-    volumes:
-      - pg_audit_data:/var/lib/postgresql
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+  # db-audit:
+  #   <<: *common-settings
+  #   image: postgres:18.3-alpine
+  #   container_name: db-audit
+  #   environment:
+  #     POSTGRES_USER: ${AUDIT_DB_USER:-audit_user}
+  #     POSTGRES_DB: ${AUDIT_DB_NAME:-audit_database}
+  #     POSTGRES_PASSWORD_FILE: /run/secrets/audit_db_pass
+  #   secrets:
+  #     - audit_db_pass
+  #   ports:
+  #     - "5435:5432"
+  #   volumes:
+  #     - pg_audit_data:/var/lib/postgresql
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
 
   # region db-messaging
   # --- MESSAGING DATABASE ---

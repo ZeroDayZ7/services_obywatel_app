@@ -17,9 +17,9 @@ type KeyTarget struct {
 }
 
 type HMACConfig struct {
-	TargetKeys  map[string]KeyTarget `mapstructure:"HMAC_TARGET_KEYS"`
+	TargetKeys   map[string]KeyTarget `mapstructure:"HMAC_TARGET_KEYS"`
 	InternalKeys map[string]KeyTarget `mapstructure:"HMAC_INTERNAL_KEYS"`
-	PeselKey    KeyTarget            `mapstructure:"HMAC_PESEL_KEY"`
+	PeselKey     KeyTarget            `mapstructure:"HMAC_PESEL_KEY"`
 }
 
 type SecurityConfig struct {
@@ -62,9 +62,9 @@ func LoadConfigGlobal() error {
 	spfViper.SetDefault("DOCUMENT_ENCRYPTION_KEY", "change-me-document-encryption-key")
 	spfViper.SetDefault("HMAC_TARGET_KEYS", map[string]KeyTarget{})
 	spfViper.SetDefault("HMAC_INTERNAL_KEYS", map[string]KeyTarget{
-		"pesel": {TargetKey: "citizen-docs-pesel-key", Algorithm: "HmacSha256"},
+		"pesel": {TargetKey: "hmac-docs-pesel-index", Algorithm: "HmacSha256"},
 	})
-	spfViper.SetDefault("HMAC_PESEL_KEY", KeyTarget{TargetKey: "citizen-docs-pesel-key", Algorithm: "HmacSha256"})
+	spfViper.SetDefault("HMAC_PESEL_KEY", KeyTarget{TargetKey: "hmac-docs-pesel-index", Algorithm: "HmacSha256"})
 
 	if err := viper.InitConfig(&AppConfig, "citizen-docs"); err != nil {
 		return fmt.Errorf("failed to initialize citizen-docs config: %w", err)
