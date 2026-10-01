@@ -192,7 +192,10 @@ func (s *authService) verifyChallengeSession(challenge string, signatureB64 stri
 func (s *authService) buildUserSession(user *model.User, fingerprint, pubKey string, isReadOnly bool) redis.UserSession {
 	var permissions []string
 
-	if user.EmployeeProfile != nil && user.EmployeeProfile.Permissions != nil {
+	// Prefer explicit user-level permissions if present
+	if user.Permissions != nil && len(user.Permissions) > 0 {
+		permissions = user.Permissions
+	} else if user.EmployeeProfile != nil && user.EmployeeProfile.Permissions != nil {
 		permissions = user.EmployeeProfile.Permissions
 	}
 

@@ -72,6 +72,7 @@ func SeedUsers(db *gorm.DB) error {
 			Password:         hashedPassword,
 			Role:             model.RoleCitizen,
 			TwoFactorEnabled: true,
+			Permissions:      permissions.DefaultCitizenPermissions,
 		},
 		{
 			ID:               citizenUserID2,
@@ -80,21 +81,12 @@ func SeedUsers(db *gorm.DB) error {
 			Password:         hashedPassword,
 			Role:             model.RoleCitizen,
 			TwoFactorEnabled: true,
+			Permissions:      permissions.DefaultCitizenPermissions,
 		},
 	}
 
 	// 2. Uprawnienia pracownicze dla Urzędnika
-	officerPermissions := datatypes.JSONSlice[string]{
-		permissions.UsersRead,
-		permissions.UsersWrite,
-		permissions.MessagesRead,
-		permissions.MessagesWrite,
-		permissions.MessagingAccess,
-		permissions.DocumentsRead,
-		permissions.DocumentsWrite,
-		permissions.ReportsView,
-		permissions.ReportsExport,
-	}
+	officerPermissions := datatypes.JSONSlice[string](permissions.DefaultOfficerPermissions)
 
 	// 3. Profil pracowniczy powiązany z kontem Urzędnika
 	employeeProfile := model.EmployeeProfile{
