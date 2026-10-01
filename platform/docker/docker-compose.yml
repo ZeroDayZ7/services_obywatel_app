@@ -214,6 +214,41 @@ services:
       db-identity:
         condition: service_healthy
     
+  # region SVC CITIZEN-DOCS
+  # --- CITIZEN DOCUMENTS SERVICE ---
+  citizen-docs:
+    build:
+      context: ../
+      dockerfile: services/citizen-docs/Dockerfile.dev
+    image: citizen-docs:dev
+    container_name: app-citizen-docs
+    restart: ${DOCKER_RESTART_POLICY:-no}
+    working_dir: /app/services/citizen-docs
+    environment:
+      - GOCACHE=/root/.cache/go-build
+      - GOWORK=off
+    volumes:
+      - ../services/citizen-docs:/app/services/citizen-docs
+      - ../pkg:/app/pkg
+      - ../go.work:/app/go.work
+      - ../go.work.sum:/app/go.work.sum
+      - go-build-cache:/root/.cache/go-build
+      - go-mod-cache:/go/pkg/mod
+    ports:
+      - "8082:8082"
+    env_file:
+      - ../services/citizen-docs/.env.dev
+    networks:
+      - gateway-net
+      - db-citizen-docs
+      - cache-net
+      - target-admin-net
+    depends_on:
+      db-citizen-docs:
+        condition: service_healthy
+      cache-redis:
+        condition: service_started
+
   # region SVC DOCUMENT-RENDERER
   # --- DOCUMENT RENDERER SERVICE ---
   document-renderer:
@@ -326,9 +361,9 @@ services:
   # region db-citizen-docs
   # # --- CITIZEN DOCUMENTS DATABASE ---
   db-citizen-docs:
-    <<: *common-settings
     image: postgres:18.3-alpine
     container_name: db-citizen-docs
+    restart: ${DOCKER_RESTART_POLICY:-no}
     environment:
       POSTGRES_USER: ${CITIZEN_DB_USER:-citizen_user}
       POSTGRES_DB: ${CITIZEN_DB_NAME:-citizen_docs_database}
@@ -337,6 +372,10 @@ services:
       - citizen_db_pass
     ports:
       - "5433:5432"
+    networks:
+      - target-admin-net
+      - db-citizen-docs
+      - events-net
     volumes:
       - pg_citizen_docs_data:/var/lib/postgresql
     healthcheck:
@@ -595,6 +634,10 @@ networks:
     internal: false
   db-notification:
     name: app_notification_db_net
+    driver: bridge
+    internal: false
+  db-citizen-docs:
+    name: app_citizen_docs_db_net
     driver: bridge
     internal: false
   citizen-app-net:

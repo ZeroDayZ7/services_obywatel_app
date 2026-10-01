@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"maps"
 	"time"
 
 	spfViper "github.com/spf13/viper"
@@ -16,8 +17,9 @@ type KeyTarget struct {
 }
 
 type HMACConfig struct {
-	TargetKeys map[string]KeyTarget `mapstructure:"HMAC_TARGET_KEYS"`
-	PeselKey   KeyTarget            `mapstructure:"HMAC_PESEL_KEY"`
+	TargetKeys  map[string]KeyTarget `mapstructure:"HMAC_TARGET_KEYS"`
+	InternalKeys map[string]KeyTarget `mapstructure:"HMAC_INTERNAL_KEYS"`
+	PeselKey    KeyTarget            `mapstructure:"HMAC_PESEL_KEY"`
 }
 
 type SecurityConfig struct {
@@ -42,6 +44,13 @@ func (c *Config) ToKMSServiceConfig() kms.Config {
 	return c.KMS.ToKMSServiceConfig()
 }
 
+func (c *Config) GetAllSecurityKeys() map[string]KeyTarget {
+	allKeys := make(map[string]KeyTarget)
+	maps.Copy(allKeys, c.HMAC.TargetKeys)
+	maps.Copy(allKeys, c.HMAC.InternalKeys)
+	return allKeys
+}
+
 func LoadConfigGlobal() error {
 	log := shared.GetLogger()
 
@@ -52,6 +61,9 @@ func LoadConfigGlobal() error {
 	viper.SetKMSDefaults()
 	spfViper.SetDefault("DOCUMENT_ENCRYPTION_KEY", "change-me-document-encryption-key")
 	spfViper.SetDefault("HMAC_TARGET_KEYS", map[string]KeyTarget{})
+	spfViper.SetDefault("HMAC_INTERNAL_KEYS", map[string]KeyTarget{
+		"pesel": {TargetKey: "citizen-docs-pesel-key", Algorithm: "HmacSha256"},
+	})
 	spfViper.SetDefault("HMAC_PESEL_KEY", KeyTarget{TargetKey: "citizen-docs-pesel-key", Algorithm: "HmacSha256"})
 
 	if err := viper.InitConfig(&AppConfig, "citizen-docs"); err != nil {

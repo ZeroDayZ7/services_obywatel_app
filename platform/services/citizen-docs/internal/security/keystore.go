@@ -1,8 +1,8 @@
-package main
+package security
 
 import (
 	"context"
-	"os"
+	"fmt"
 
 	"github.com/zerodayz7/platform/pkg/httpserver"
 	"github.com/zerodayz7/platform/pkg/kms"
@@ -10,18 +10,25 @@ import (
 	"github.com/zerodayz7/platform/services/citizen-docs/config"
 )
 
-// LoadSecurityKeys ładuje wszystkie klucze kryptograficzne z KMS do KeyStore
-func LoadSecurityKeys(ctx context.Context, app *config.Config, keyStore *httpserver.KeyStore) {
+// LoadSecurityKeys loads all symmetric keys required by the service from KMS into the provided KeyStore.
+func LoadSecurityKeys(ctx context.Context, cfg *config.Config, keyStore *httpserver.KeyStore) error {
+	if cfg == nil {
+		return fmt.Errorf("config is nil")
+	}
+	if keyStore == nil {
+		return fmt.Errorf("keystore is nil")
+	}
+
 	log := shared.GetLogger()
-	kmsCfg := app.ToKMSServiceConfig()
+	kmsCfg := cfg.ToKMSServiceConfig()
 
 	log.Info("🔍 Sprawdzanie stanu serwisu KMS...")
 	if err := kms.HealthCheck(ctx, kmsCfg); err != nil {
 		log.Error("❌ KMS jest niedostępny podczas inicjalizacji", "error", err)
-		os.Exit(1)
+		return fmt.Errorf("kms health check: %w", err)
 	}
 
-	loadKey := func(alias string, target config.KeyTarget) {
+	for alias, target := range cfg.GetAllSecurityKeys() {
 		keyBytes, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, target.TargetKey, 1, target.Algorithm)
 		if err != nil {
 			log.Error("❌ Nie udało się pobrać klucza z KMS",
@@ -30,7 +37,7 @@ func LoadSecurityKeys(ctx context.Context, app *config.Config, keyStore *httpser
 				"algorithm", target.Algorithm,
 				"error", err,
 			)
-			os.Exit(1)
+			return fmt.Errorf("fetch key %s (%s): %w", alias, target.TargetKey, err)
 		}
 
 		keyStore.SetKey(alias, keyBytes, uint32(version))
@@ -42,17 +49,5 @@ func LoadSecurityKeys(ctx context.Context, app *config.Config, keyStore *httpser
 		)
 	}
 
-	// 1. Zewnętrzni nadawcy (API Gateway, BFF)
-	for senderID, keyTarget := range app.HMAC.TargetKeys {
-		loadKey(senderID, keyTarget)
-	}
-
-	// 2. Wewnętrzne klucze domenowe serwisu
-	internalKeys := map[string]config.KeyTarget{
-		"pesel": app.HMAC.PeselKey,
-	}
-
-	for alias, keyTarget := range internalKeys {
-		loadKey(alias, keyTarget)
-	}
+	return nil
 }
