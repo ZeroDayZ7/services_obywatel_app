@@ -37,11 +37,11 @@ const (
 
 // region User
 type User struct {
-	ID       uuid.UUID `gorm:"type:uuid;primaryKey;default:uuidv7()"`
-	Username string    `gorm:"size:30;not null;unique"`
-	Email    string    `gorm:"size:100;not null;unique"`
-	Password string    `gorm:"size:128;not null"`
-	Role     UserRole  `gorm:"type:varchar(20);not null;default:'CITIZEN'"`
+	ID                  uuid.UUID  `gorm:"type:uuid;primaryKey;default:uuidv7()"`
+	Username            string     `gorm:"size:30;not null;unique"`
+	Email               string     `gorm:"size:100;not null;unique"`
+	Password            string     `gorm:"size:128;not null"`
+	Role                UserRole   `gorm:"type:varchar(20);not null;default:'CITIZEN'"`
 	Permissions         []string   `gorm:"type:jsonb;serializer:json"`
 	Status              UserStatus `gorm:"type:varchar(20);not null;default:'ACTIVE'"`
 	FailedLoginAttempts int8       `gorm:"not null;default:0"`

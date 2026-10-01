@@ -5,6 +5,9 @@ import (
 	"context"
 	"time"
 
+	"crypto/sha256"
+	"encoding/hex"
+
 	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/services/auth-service/internal/model"
 	repository "github.com/zerodayz7/platform/services/auth-service/internal/repository"
@@ -25,6 +28,12 @@ func NewRefreshTokenRepository(db *gorm.DB) *RefreshTokenRepository {
 // region Save
 //#region Save
 func (r *RefreshTokenRepository) Save(rt *model.RefreshToken) error {
+	// Ensure token column stores hash (length check for hex-encoded SHA256 = 64)
+	if len(rt.Token) == 44 {
+		// Appears to be base64 raw token; convert to hash before saving
+		h := sha256.Sum256([]byte(rt.Token))
+		rt.Token = hex.EncodeToString(h[:])
+	}
 	return r.DB.Create(rt).Error
 }
 
