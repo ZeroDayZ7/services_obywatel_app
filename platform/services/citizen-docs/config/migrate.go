@@ -6,8 +6,5 @@ import (
 )
 
 func AutoMigrate(db *gorm.DB) error {
-	return db.AutoMigrate(
-		&model.CitizenProfile{},
-		&model.UserDocument{},
-	)
+	return db.AutoMigrate(&model.CitizenDocument{})
 }

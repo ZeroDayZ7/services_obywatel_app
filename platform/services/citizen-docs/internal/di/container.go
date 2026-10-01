@@ -15,7 +15,6 @@ type Container struct {
 	Logger          *shared.Logger
 	Cryptor         *envelope.EnvelopeCryptor
 	UserDocumentSvc service.UserDocumentService
-	CitizenSvc      service.CitizenService
 }
 
 func NewContainer(
@@ -25,10 +24,7 @@ func NewContainer(
 	cryptor *envelope.EnvelopeCryptor,
 ) *Container {
 	docRepo := repository.NewUserDocumentRepository(db)
-	citizenRepo := repository.NewCitizenRepository(db)
-
-	docSvc := service.NewUserDocumentService(docRepo, citizenRepo, cfg, logger, cryptor)
-	citizenSvc := service.NewCitizenService(citizenRepo, cfg, logger, cryptor)
+	docSvc := service.NewUserDocumentService(docRepo, docRepo, cfg, logger, cryptor)
 
 	return &Container{
 		DB:              db,
@@ -36,6 +32,5 @@ func NewContainer(
 		Logger:          logger,
 		Cryptor:         cryptor,
 		UserDocumentSvc: docSvc,
-		CitizenSvc:      citizenSvc,
 	}
 }

@@ -7,22 +7,10 @@ import (
 	"github.com/zerodayz7/platform/services/citizen-docs/internal/model"
 )
 
-type CitizenService interface {
-	CreateProfile(ctx context.Context, userID uuid.UUID, data *model.CitizenData) error
-}
-
 type UserDocumentService interface {
-	CreateDocument(
-		ctx context.Context,
-		profileID uuid.UUID,
-		typeCode string,
-		meta *model.DocumentMeta,
-		front []byte,
-		back []byte,
-		issuerSignature []byte,
-		signingKeyID string,
-		revocationSerial string,
-	) error
-	GetDocumentsByUserID(ctx context.Context, userID uuid.UUID) ([]model.UserDocument, error)
-	GetDocumentsSinceVersion(ctx context.Context, profileID uuid.UUID, sinceVersion uint64) ([]model.UserDocument, error)
+	CreateDocument(ctx context.Context, payload model.CreateDocumentPayload) (*model.CitizenDocument, error)
+	GetDocumentByID(ctx context.Context, id uuid.UUID) (*model.CitizenDocument, error)
+	GetDocumentsByUserID(ctx context.Context, userID uuid.UUID) ([]model.CitizenDocument, error)
+	UpdateDocumentStatus(ctx context.Context, id uuid.UUID, status model.DocumentStatus) (*model.CitizenDocument, error)
+	GetDocumentPDF(ctx context.Context, id uuid.UUID) ([]byte, string, error)
 }

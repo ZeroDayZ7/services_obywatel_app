@@ -11,10 +11,22 @@ func SetupDocsRoutes(app *fiber.App, container *di.Container) {
 
 	SetupHealthRoutes(app)
 
-	docs := app.Group("/documents")
+	api := app.Group("/api/v1")
+	docs := api.Group("/documents")
+	users := api.Group("/users")
 
-	docs.Post("/", h.CreateDocument)
+	docs.Post("", h.CreateDocument)
+	docs.Get("/:id", h.GetDocumentByID)
+	docs.Get("/:id/pdf", h.GetDocumentPDF)
 	docs.Get("/me", h.GetDocumentsMe)
+
+	users.Get("/:user_id/documents", h.GetDocumentsByUserID)
+
+	legacyDocs := app.Group("/documents")
+	legacyDocs.Post("", h.CreateDocument)
+	legacyDocs.Get("/:id", h.GetDocumentByID)
+	legacyDocs.Get("/:id/pdf", h.GetDocumentPDF)
+	legacyDocs.Get("/me", h.GetDocumentsMe)
 
 	SetupFallbackHandlers(app)
 }
