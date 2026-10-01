@@ -1,3 +1,5 @@
+// cmdr: config\migrate.go
+
 package config
 
 import (

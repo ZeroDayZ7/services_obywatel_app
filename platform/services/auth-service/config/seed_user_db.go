@@ -1,3 +1,5 @@
+// cmdr: config\seed_user_db.go
+
 package config
 
 import (
@@ -24,7 +26,7 @@ var (
 	testDepartmentID  = uuid.MustParse("22222222-2222-2222-2222-222222222222")
 )
 
-//#region SeedUsers
+// #region SeedUsers
 func SeedUsers(db *gorm.DB) error {
 	log := shared.GetLogger()
 
@@ -55,6 +57,7 @@ func SeedUsers(db *gorm.DB) error {
 			Email:            "root@plus.pl",
 			Password:         hashedPassword,
 			Role:             model.RoleRoot,
+			Permissions:      permissions.DefaultAdminPermissions,
 			TwoFactorEnabled: true,
 		},
 		{
@@ -63,6 +66,7 @@ func SeedUsers(db *gorm.DB) error {
 			Email:            "officer@plus.pl",
 			Password:         hashedPassword,
 			Role:             model.RoleOfficer,
+			Permissions:      permissions.DefaultOfficerPermissions,
 			TwoFactorEnabled: true,
 		},
 		{
@@ -71,8 +75,8 @@ func SeedUsers(db *gorm.DB) error {
 			Email:            "anna@plus.pl",
 			Password:         hashedPassword,
 			Role:             model.RoleCitizen,
-			TwoFactorEnabled: true,
 			Permissions:      permissions.DefaultCitizenPermissions,
+			TwoFactorEnabled: true,
 		},
 		{
 			ID:               citizenUserID2,
@@ -80,8 +84,8 @@ func SeedUsers(db *gorm.DB) error {
 			Email:            "piotr@plus.pl",
 			Password:         hashedPassword,
 			Role:             model.RoleCitizen,
-			TwoFactorEnabled: true,
 			Permissions:      permissions.DefaultCitizenPermissions,
+			TwoFactorEnabled: true,
 		},
 	}
 

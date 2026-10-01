@@ -74,8 +74,8 @@ services:
         condition: service_healthy
       cache-redis:
         condition: service_healthy
-      secret-agent:
-        condition: service_started
+      # secret-agent:
+      #   condition: service_started
     
   # region SVC MESSAGE
   # --- MESSAGING SERVICE ---

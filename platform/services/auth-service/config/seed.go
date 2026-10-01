@@ -1,3 +1,5 @@
+// cmdr: config\seed.go
+
 package config
 
 import (
