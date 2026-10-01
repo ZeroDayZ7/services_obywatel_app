@@ -1,9 +1,5 @@
-x-common-settings: &common-settings
-  restart: ${DOCKER_RESTART_POLICY:-no}
-  environment:
-    - ENV=${APP_ENV:-development}
-  networks:
-    - citizen-app-net
+include:
+  - path: C:/Users/Neo/Desktop/WWW/rust/secret-agent/docker-compose.yml
 
 services:
   # region SVC GATEWAY
@@ -76,6 +72,10 @@ services:
     depends_on:
       db-auth:
         condition: service_healthy
+      cache-redis:
+        condition: service_healthy
+      secret-agent:
+        condition: service_started
     
   # region SVC MESSAGE
   # --- MESSAGING SERVICE ---
