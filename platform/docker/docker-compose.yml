@@ -1,9 +1,5 @@
-x-common-settings: &common-settings
-  restart: ${DOCKER_RESTART_POLICY:-no}
-  environment:
-    - ENV=${APP_ENV:-development}
-  networks:
-    - citizen-app-net
+# include:
+#   - path: C:/Users/Neo/Desktop/WWW/rust/secret-agent/docker-compose.yml
 
 services:
   # region SVC GATEWAY
@@ -34,6 +30,7 @@ services:
       - gateway-net
       - target-admin-net
       - cache-net
+      - document-render-net
     depends_on:
       cache-redis:
         condition: service_started
@@ -75,6 +72,10 @@ services:
     depends_on:
       db-auth:
         condition: service_healthy
+      cache-redis:
+        condition: service_healthy
+      # secret-agent:
+      #   condition: service_started
     
   # region SVC MESSAGE
   # --- MESSAGING SERVICE ---
@@ -143,7 +144,7 @@ services:
       db-notification:
         condition: service_healthy
     
-    # region SVC OFFICER-BFF
+  # region SVC OFFICER-BFF
   # --- OFFICER BFF SERVICE ---
   officer-bff:
     build:
@@ -213,7 +214,44 @@ services:
     depends_on:
       db-identity:
         condition: service_healthy
+      rabbitmq:
+        condition: service_started
     
+  # region SVC CITIZEN-DOCS
+  # --- CITIZEN DOCUMENTS SERVICE ---
+  citizen-docs:
+    build:
+      context: ../
+      dockerfile: services/citizen-docs/Dockerfile.dev
+    image: citizen-docs:dev
+    container_name: app-citizen-docs
+    restart: ${DOCKER_RESTART_POLICY:-no}
+    working_dir: /app/services/citizen-docs
+    environment:
+      - GOCACHE=/root/.cache/go-build
+      - GOWORK=off
+    volumes:
+      - ../services/citizen-docs:/app/services/citizen-docs
+      - ../pkg:/app/pkg
+      - ../go.work:/app/go.work
+      - ../go.work.sum:/app/go.work.sum
+      - go-build-cache:/root/.cache/go-build
+      - go-mod-cache:/go/pkg/mod
+    ports:
+      - "8090:8090"
+    env_file:
+      - ../services/citizen-docs/.env.dev
+    networks:
+      - gateway-net
+      - db-citizen-docs
+      - cache-net
+      - target-admin-net
+    depends_on:
+      db-citizen-docs:
+        condition: service_healthy
+      cache-redis:
+        condition: service_started
+
   # region SVC DOCUMENT-RENDERER
   # --- DOCUMENT RENDERER SERVICE ---
   document-renderer:
@@ -271,7 +309,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-   # region db-identity
+  # region db-identity
   # --- IDENTITY DATABASE ---
   db-identity:
     image: postgres:18.3-alpine
@@ -324,11 +362,11 @@ services:
       retries: 5
 
   # region db-citizen-docs
-  # # --- CITIZEN DOCUMENTS DATABASE ---
+  # --- CITIZEN DOCUMENTS DATABASE ---
   db-citizen-docs:
-    <<: *common-settings
     image: postgres:18.3-alpine
     container_name: db-citizen-docs
+    restart: ${DOCKER_RESTART_POLICY:-no}
     environment:
       POSTGRES_USER: ${CITIZEN_DB_USER:-citizen_user}
       POSTGRES_DB: ${CITIZEN_DB_NAME:-citizen_docs_database}
@@ -337,6 +375,10 @@ services:
       - citizen_db_pass
     ports:
       - "5433:5432"
+    networks:
+      - target-admin-net
+      - db-citizen-docs
+      - events-net
     volumes:
       - pg_citizen_docs_data:/var/lib/postgresql
     healthcheck:
@@ -347,25 +389,25 @@ services:
 
   # region db-audit
   # --- AUDIT DATABASE ---
-  db-audit:
-    <<: *common-settings
-    image: postgres:18.3-alpine
-    container_name: db-audit
-    environment:
-      POSTGRES_USER: ${AUDIT_DB_USER:-audit_user}
-      POSTGRES_DB: ${AUDIT_DB_NAME:-audit_database}
-      POSTGRES_PASSWORD_FILE: /run/secrets/audit_db_pass
-    secrets:
-      - audit_db_pass
-    ports:
-      - "5435:5432"
-    volumes:
-      - pg_audit_data:/var/lib/postgresql
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+  # db-audit:
+  #   <<: *common-settings
+  #   image: postgres:18.3-alpine
+  #   container_name: db-audit
+  #   environment:
+  #     POSTGRES_USER: ${AUDIT_DB_USER:-audit_user}
+  #     POSTGRES_DB: ${AUDIT_DB_NAME:-audit_database}
+  #     POSTGRES_PASSWORD_FILE: /run/secrets/audit_db_pass
+  #   secrets:
+  #     - audit_db_pass
+  #   ports:
+  #     - "5435:5432"
+  #   volumes:
+  #     - pg_audit_data:/var/lib/postgresql
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
 
   # region db-messaging
   # --- MESSAGING DATABASE ---
@@ -595,6 +637,10 @@ networks:
     internal: false
   db-notification:
     name: app_notification_db_net
+    driver: bridge
+    internal: false
+  db-citizen-docs:
+    name: app_citizen_docs_db_net
     driver: bridge
     internal: false
   citizen-app-net:

@@ -15,6 +15,7 @@ import (
 	"github.com/zerodayz7/platform/services/citizen-docs/config"
 	"github.com/zerodayz7/platform/services/citizen-docs/internal/di"
 	"github.com/zerodayz7/platform/services/citizen-docs/internal/router"
+	"github.com/zerodayz7/platform/services/citizen-docs/internal/security"
 )
 
 func main() {
@@ -36,7 +37,10 @@ func main() {
 	defer cancel()
 
 	// 3. Ładowanie Kluczy z KMS
-	LoadSecurityKeys(securityCtx, &config.AppConfig, keyStore)
+	if err := security.LoadSecurityKeys(securityCtx, &config.AppConfig, keyStore); err != nil {
+		log.Error("Failed to load security keys", "error", err)
+		os.Exit(1)
+	}
 
 	// 4. Inicjalizacja Cryptor, Baza Danych i DI Container
 	cryptor := envelope.NewEnvelopeCryptor(config.AppConfig.ToKMSServiceConfig())
@@ -44,7 +48,7 @@ func main() {
 	db, closeDB := config.MustInitDB(config.AppConfig.Database)
 	defer closeDB()
 
-	container := di.NewContainer(db, log, &config.AppConfig, cryptor)
+	container := di.NewContainer(db, log, &config.AppConfig, cryptor, keyStore)
 
 	// 5. Aplikacja i Router
 	docsApp := app.NewDocsApp(container)

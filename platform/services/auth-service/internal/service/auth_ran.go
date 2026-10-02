@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/pkg/errors"
+	"github.com/zerodayz7/platform/pkg/permissions"
 	"github.com/zerodayz7/platform/pkg/security"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/auth-service/internal/model"
@@ -56,6 +57,9 @@ func (s *authService) Register(username, email, rawPassword string) (*model.User
 		Password:          hash,
 		PasswordChangedAt: &now,
 	}
+
+	// Assign default citizen permissions when registering through public API
+	u.Permissions = permissions.DefaultCitizenPermissions
 
 	if err := s.userRepo.CreateUser(u); err != nil {
 		return nil, err

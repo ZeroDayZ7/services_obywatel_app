@@ -25,13 +25,11 @@ func SetupAuthRoutes(
 		middleware.ValidateBody[schemas.LoginRequest](),
 		h.Login,
 	)
-	
 
 	auth.Post("/login/step2",
 		middleware.ValidateBody[schemas.LoginStep2Request](),
 		h.LoginStep2,
 	)
-	
 
 	auth.Post("/2fa-verify",
 		middleware.ValidateBody[schemas.TwoFARequest](),
@@ -42,7 +40,6 @@ func SetupAuthRoutes(
 		middleware.ValidateBody[schemas.ResendTwoFARequest](),
 		h.Resend2FA,
 	)
-	
 
 	auth.Post("/register",
 		middleware.ValidateBody[schemas.RegisterRequest](),
@@ -96,5 +93,5 @@ func SetupAuthRoutes(
 		middleware.ValidateBody[schemas.ResetPasswordFinalRequest](),
 		resetHandler.FinalizeReset,
 	)
-	
+
 }

@@ -1,3 +1,5 @@
+// cmdr: config\db.go
+
 package config
 
 import (
@@ -24,10 +26,10 @@ func MustInitDB(cfg viper.DBConfig) (*gorm.DB, func()) {
 	// 	panic(err)
 	// }
 
-	// // // 4. Uruchomienie seedera
-	// if err := SeedData(db); err != nil {
-	// 	panic(err)
-	// }
+	// // 4. Uruchomienie seedera
+	if err := SeedData(db); err != nil {
+		panic(err)
+	}
 
 	return db, closeDB
 }

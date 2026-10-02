@@ -18,3 +18,31 @@ const (
 	DocumentsRead  = "documents.read"
 	DocumentsWrite = "documents.write"
 )
+
+// Default permission sets
+var (
+	// DefaultCitizenPermissions is the baseline permission set assigned to typical citizens.
+	DefaultCitizenPermissions = []string{
+		DocumentsRead,
+		DocumentsWrite,
+		"identity.me.read",
+		"notifications.read",
+		"sessions.manage",
+	}
+
+	// DefaultOfficerPermissions extend citizen permissions with internal staff capabilities.
+	DefaultOfficerPermissions = append(DefaultCitizenPermissions, []string{
+		UsersRead,
+		UsersWrite,
+		"cases.manage",
+		"officer.actions",
+	}...)
+
+	// DefaultAdminPermissions grants broad system-level rights.
+	DefaultAdminPermissions = append(DefaultOfficerPermissions, []string{
+		SystemAdmin,
+		SystemManage,
+		ReportsView,
+		ReportsExport,
+	}...)
+)

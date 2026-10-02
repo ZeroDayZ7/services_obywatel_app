@@ -2,6 +2,7 @@ package di
 
 import (
 	"github.com/zerodayz7/platform/pkg/envelope"
+	"github.com/zerodayz7/platform/pkg/httpserver"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/citizen-docs/config"
 	"github.com/zerodayz7/platform/services/citizen-docs/internal/repository"
@@ -14,8 +15,8 @@ type Container struct {
 	Config          *config.Config
 	Logger          *shared.Logger
 	Cryptor         *envelope.EnvelopeCryptor
+	KeyStore        *httpserver.KeyStore
 	UserDocumentSvc service.UserDocumentService
-	CitizenSvc      service.CitizenService
 }
 
 func NewContainer(
@@ -23,19 +24,17 @@ func NewContainer(
 	logger *shared.Logger,
 	cfg *config.Config,
 	cryptor *envelope.EnvelopeCryptor,
+	keyStore *httpserver.KeyStore,
 ) *Container {
 	docRepo := repository.NewUserDocumentRepository(db)
-	citizenRepo := repository.NewCitizenRepository(db)
-
-	docSvc := service.NewUserDocumentService(docRepo, citizenRepo, cfg, logger, cryptor)
-	citizenSvc := service.NewCitizenService(citizenRepo, cfg, logger, cryptor)
+	docSvc := service.NewUserDocumentService(docRepo, docRepo, cfg, logger, cryptor)
 
 	return &Container{
 		DB:              db,
 		Config:          cfg,
 		Logger:          logger,
 		Cryptor:         cryptor,
+		KeyStore:        keyStore,
 		UserDocumentSvc: docSvc,
-		CitizenSvc:      citizenSvc,
 	}
 }

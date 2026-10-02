@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"time"
 
@@ -97,11 +99,15 @@ func (s *authService) CreateRefreshToken(userID uuid.UUID, fingerprint string, d
 		return nil, err
 	}
 
+	// Store only the SHA-256 hash of the refresh token in DB for security.
+	hash := sha256.Sum256([]byte(rawToken))
+	hashedTokenHex := hex.EncodeToString(hash[:])
+
 	rt := &model.RefreshToken{
 		UserID:            userID,
 		DeviceID:          deviceID,
 		DeviceFingerprint: fingerprint,
-		Token:             rawToken,
+		Token:             hashedTokenHex, // persist hash
 		ExpiresAt:         time.Now().Add(s.cfg.JWT.RefreshTTL),
 		Revoked:           false,
 	}
@@ -110,6 +116,7 @@ func (s *authService) CreateRefreshToken(userID uuid.UUID, fingerprint string, d
 		return nil, err
 	}
 
+	// Return raw token to caller (client) while DB keeps only the hash
 	rt.Token = rawToken
 	return rt, nil
 }
@@ -145,8 +152,6 @@ func (s *authService) handleFailedLogin(ctx context.Context, userID uuid.UUID) e
 
 	return errors.ErrInvalidCredentials
 }
-
-
 
 // #region createChallengeSession
 func (s *authService) createChallengeSession(ctx context.Context, userID uuid.UUID, deviceID string) (setupToken string, sessionID uuid.UUID, challenge string, err error) {
@@ -192,7 +197,10 @@ func (s *authService) verifyChallengeSession(challenge string, signatureB64 stri
 func (s *authService) buildUserSession(user *model.User, fingerprint, pubKey string, isReadOnly bool) redis.UserSession {
 	var permissions []string
 
-	if user.EmployeeProfile != nil && user.EmployeeProfile.Permissions != nil {
+	// Prefer explicit user-level permissions if present
+	if user.Permissions != nil && len(user.Permissions) > 0 {
+		permissions = user.Permissions
+	} else if user.EmployeeProfile != nil && user.EmployeeProfile.Permissions != nil {
 		permissions = user.EmployeeProfile.Permissions
 	}
 

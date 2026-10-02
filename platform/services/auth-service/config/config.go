@@ -1,3 +1,5 @@
+// cmdr: config\config.go
+
 package config
 
 import (
@@ -57,7 +59,7 @@ type Config struct {
 	Shutdown        time.Duration           `mapstructure:"SHUTDOWN_TIMEOUT" validate:"required"`
 }
 
-//#region ToKMSServiceConfig
+// #region ToKMSServiceConfig
 func (c *Config) ToKMSServiceConfig() kms.Config {
 	return c.KMS.ToKMSServiceConfig()
 }
@@ -68,7 +70,7 @@ func (c *Config) IsLocalDev() bool {
 
 var AppConfig Config
 
-//#region LoadConfigGlobal
+// #region LoadConfigGlobal
 func LoadConfigGlobal() error {
 	log := shared.GetLogger()
 

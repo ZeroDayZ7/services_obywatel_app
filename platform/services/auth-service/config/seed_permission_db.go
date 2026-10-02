@@ -9,7 +9,7 @@ import (
 	"gorm.io/gorm"
 )
 
-//#region SeedPermissions
+// #region SeedPermissions
 func SeedPermissions(db *gorm.DB) error {
 	log := shared.GetLogger()
 
@@ -70,6 +70,74 @@ func SeedPermissions(db *gorm.DB) error {
 			Key:         permissions.ReportsExport,
 			Department:  "REPORTS",
 			Description: "Eksport danych raportowych do plików zewnętrznych",
+			IsSpecial:   false,
+		},
+
+		// Moduł Wiadomości
+		{
+			Key:         permissions.MessagesRead,
+			Department:  "MESSAGES",
+			Description: "Odczyt wiadomości w systemie",
+			IsSpecial:   false,
+		},
+		{
+			Key:         permissions.MessagesWrite,
+			Department:  "MESSAGES",
+			Description: "Wysyłanie i edycja wiadomości",
+			IsSpecial:   false,
+		},
+		{
+			Key:         permissions.MessagingAccess,
+			Department:  "MESSAGES",
+			Description: "Dostęp do modułu komunikatora",
+			IsSpecial:   false,
+		},
+
+		// Moduł Dokumentów
+		{
+			Key:         permissions.DocumentsRead,
+			Department:  "DOCUMENTS",
+			Description: "Odczyt dokumentów obywatelskich i urzędowych",
+			IsSpecial:   false,
+		},
+		{
+			Key:         permissions.DocumentsWrite,
+			Department:  "DOCUMENTS",
+			Description: "Składanie i edycja wniosków/dokumentów",
+			IsSpecial:   false,
+		},
+
+		// Moduł Tożsamości, Powiadomień i Sesji
+		{
+			Key:         "identity.me.read",
+			Department:  "IDENTITY",
+			Description: "Odczyt własnego profilu tożsamości",
+			IsSpecial:   false,
+		},
+		{
+			Key:         "notifications.read",
+			Department:  "NOTIFICATIONS",
+			Description: "Odbiór i odczyt powiadomień push/systemowych",
+			IsSpecial:   false,
+		},
+		{
+			Key:         "sessions.manage",
+			Department:  "AUTH",
+			Description: "Zarządzanie aktywnymi sesjami i urządzeniami",
+			IsSpecial:   false,
+		},
+
+		// Moduł Urzędniczy / Spraw
+		{
+			Key:         "cases.manage",
+			Department:  "OFFICER",
+			Description: "Zarządzanie sprawami obywateli przez urzędnika",
+			IsSpecial:   false,
+		},
+		{
+			Key:         "officer.actions",
+			Department:  "OFFICER",
+			Description: "Wykonywanie akcji decyzyjnych w portalu urzędnika",
 			IsSpecial:   false,
 		},
 	}

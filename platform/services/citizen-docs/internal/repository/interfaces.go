@@ -7,14 +7,9 @@ import (
 	"github.com/zerodayz7/platform/services/citizen-docs/internal/model"
 )
 
-type CitizenRepo interface {
-	Create(ctx context.Context, profile *model.CitizenProfile) error
-	GetByUserID(ctx context.Context, userID uuid.UUID) (*model.CitizenProfile, error)
-	GetByPeselHash(ctx context.Context, hash string) (*model.CitizenProfile, error)
-}
-
 type UserDocumentRepo interface {
-	Create(ctx context.Context, doc *model.UserDocument) error
-	GetByProfileID(ctx context.Context, profileID uuid.UUID) ([]model.UserDocument, error)
-	GetSinceVersion(ctx context.Context, profileID uuid.UUID, sinceVersion uint64) ([]model.UserDocument, error)
+	CreateDocument(ctx context.Context, doc *model.CitizenDocument) error
+	GetDocumentByID(ctx context.Context, id uuid.UUID) (*model.CitizenDocument, error)
+	GetDocumentsByUserID(ctx context.Context, userID uuid.UUID) ([]model.CitizenDocument, error)
+	UpdateDocumentStatus(ctx context.Context, id uuid.UUID, status model.DocumentStatus) (*model.CitizenDocument, error)
 }

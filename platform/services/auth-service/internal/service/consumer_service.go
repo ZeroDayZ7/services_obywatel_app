@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/zerodayz7/platform/pkg/permissions"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/auth-service/internal/model"
 	repo "github.com/zerodayz7/platform/services/auth-service/internal/repository" // DODANE: import interfejsu repozytorium
@@ -50,6 +51,9 @@ func (s *consumerService) CreateCitizenAccountFromEvent(ctx context.Context, cit
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
+
+	// Ensure pending citizen accounts have default citizen permissions
+	user.Permissions = permissions.DefaultCitizenPermissions
 
 	if err := s.consumerRepo.CreatePendingCitizen(ctx, user); err != nil {
 		s.log.Error("❌ Nie udało się utworzyć konta PENDING dla obywatela w DB", "error", err, "citizen_id", citizenID)

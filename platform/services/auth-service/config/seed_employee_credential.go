@@ -22,7 +22,7 @@ type AngularDevCard struct {
 	UserID           string `json:"userId"`
 }
 
-//#region SeedInitialEmployeeCredential
+// #region SeedInitialEmployeeCredential
 func SeedInitialEmployeeCredential(db *gorm.DB) error {
 	log := shared.GetLogger()
 
@@ -52,12 +52,12 @@ func SeedInitialEmployeeCredential(db *gorm.DB) error {
 	pubKeyHex := hex.EncodeToString(pubKey)
 	privKeyHex := hex.EncodeToString(privKey)
 
-	adminUserID := uuid.MustParse("92b98b5a-d0c3-410f-828d-2b30a585dea6")
+	officerTargetUserID := uuid.MustParse("e1f2a3b4-5566-7788-9900-aabbccddeeff")
 	systemIssuerID := uuid.MustParse("707a8869-6867-4601-9337-e23fcb51b0ad")
 
 	credential := model.EmployeeCredential{
 		ID:               shared.NewUUIDv7(),
-		UserID:           adminUserID,
+		UserID:           officerTargetUserID,
 		CardSerialNumber: cardSerial,
 		PublicKey:        pubKeyHex,
 		KeyAlgorithm:     "ED25519",
@@ -76,7 +76,7 @@ func SeedInitialEmployeeCredential(db *gorm.DB) error {
 		CardSerialNumber: credential.CardSerialNumber,
 		PublicKey:        pubKeyHex,
 		PrivateKey:       privKeyHex,
-		UserID:           adminUserID.String(),
+		UserID:           officerTargetUserID.String(),
 	}
 
 	fileData, err := json.MarshalIndent(devCard, "", "  ")
