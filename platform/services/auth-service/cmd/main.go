@@ -13,6 +13,7 @@ import (
 	"github.com/zerodayz7/platform/pkg/server"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/pkg/telemetry"
+	"github.com/zerodayz7/platform/pkg/utils"
 	"github.com/zerodayz7/platform/services/auth-service/app"
 	"github.com/zerodayz7/platform/services/auth-service/config"
 	"github.com/zerodayz7/platform/services/auth-service/internal/di"
@@ -205,7 +206,8 @@ func main() {
 			"topic", rabbitmq.TopicCitizenCreated,
 		)
 
-		go func() {
+		// Run subscriber in SafeGo to protect against goroutine panics
+		utils.SafeGo(log, func() {
 			err := eventPublisher.SubscribeWithAuth(
 				consumerCtx,
 				rabbitmq.QueueAuthCitizen,
@@ -216,7 +218,7 @@ func main() {
 			if err != nil && consumerCtx.Err() == nil {
 				log.Error("❌ Error in citizen created consumer", "error", err)
 			}
-		}()
+		})
 	} else {
 		log.Warn("RabbitMQ jest wyłączony - konsumery w tle nie zostały uruchomione.")
 	}
