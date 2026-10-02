@@ -1,0 +1,4 @@
+- `docker compose up -d`
+- `docker compose --profile web up -d`
+- `docker compose --profile app up -d`
+- `docker compose --profile full up -d`
