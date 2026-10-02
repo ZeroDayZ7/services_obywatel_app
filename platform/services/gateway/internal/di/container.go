@@ -3,10 +3,10 @@ package di
 import (
 	"net/http"
 
+	"github.com/zerodayz7/platform/pkg/httpserver"
 	"github.com/zerodayz7/platform/pkg/rabbitmq"
 	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/services/gateway/config"
-	"github.com/zerodayz7/platform/services/gateway/internal/hmac"
 )
 
 type Container struct {
@@ -15,7 +15,7 @@ type Container struct {
 	EventPublisher rabbitmq.EventPublisher
 	HTTPClient     *http.Client
 	Config         *config.Config
-	KeyStore       *hmac.GatewayKeyStore
+	KeyStore       *httpserver.KeyStore
 }
 
 //#region NewContainer
@@ -23,7 +23,7 @@ func NewContainer(
 	redisClient *redis.Client,
 	eventPublisher rabbitmq.EventPublisher,
 	cfg *config.Config,
-	keyStore *hmac.GatewayKeyStore,
+	keyStore *httpserver.KeyStore,
 ) *Container {
 	cache := redis.NewCache(redisClient, cfg.Session.TTL)
 

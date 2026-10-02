@@ -5,6 +5,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/zerodayz7/platform/pkg/httpserver"
 	"github.com/zerodayz7/platform/pkg/rabbitmq"
 	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/server"
@@ -13,7 +14,6 @@ import (
 	"github.com/zerodayz7/platform/services/gateway/app"
 	"github.com/zerodayz7/platform/services/gateway/config"
 	"github.com/zerodayz7/platform/services/gateway/internal/di"
-	"github.com/zerodayz7/platform/services/gateway/internal/hmac"
 	"github.com/zerodayz7/platform/services/gateway/internal/router"
 	"github.com/zerodayz7/platform/services/gateway/internal/security"
 )
@@ -32,8 +32,8 @@ func main() {
 
 	log := shared.InitLogger(config.AppConfig.Server.Env, false)
 
-	// Instancjonujemy magazyn kluczy HMAC w pamięci RAM
-	keyStore := hmac.NewGatewayKeyStore()
+	// Instancja RAM KeyStore do przechowywania kluczy HMAC dla nadawców i proxy
+	keyStore := httpserver.NewKeyStore()
 
 	// =========================================================================
 	// 2. KMS SETUP & FETCH KEYS

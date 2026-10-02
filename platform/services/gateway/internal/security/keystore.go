@@ -4,15 +4,15 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/zerodayz7/platform/pkg/httpserver"
 	"github.com/zerodayz7/platform/pkg/kms"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/gateway/config"
-	"github.com/zerodayz7/platform/services/gateway/internal/hmac"
 )
 
 // LoadSecurityKeys obsługuje połączenie z KMS, health-check oraz pobieranie kluczy JWT, HMAC serwisów i opcjonalnie RabbitMQ.
 //#region LoadSecurityKeys
-func LoadSecurityKeys(ctx context.Context, appCfg *config.Config, keyStore *hmac.GatewayKeyStore) ([]byte, error) {
+func LoadSecurityKeys(ctx context.Context, appCfg *config.Config, keyStore *httpserver.KeyStore) ([]byte, error) {
 	log := shared.GetLogger()
 	kmsCfg := appCfg.ToKMSServiceConfig()
 
