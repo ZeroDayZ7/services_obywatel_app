@@ -105,7 +105,8 @@ func (h *UserDocumentHandler) GetDocumentsMe(c *fiber.Ctx) error {
 		return apperr.SendAppError(c, err)
 	}
 
-	return c.Status(fiber.StatusOK).JSON(mapper.ToDocumentResponses(docs))
+	responses := mapper.ToDocumentResponses(docs)
+	return c.Status(fiber.StatusOK).JSON(responses)
 }
 
 func (h *UserDocumentHandler) GetDocumentPDF(c *fiber.Ctx) error {

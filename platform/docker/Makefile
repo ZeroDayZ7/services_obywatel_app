@@ -1,5 +1,5 @@
 # --- DB TEST RESET ---
-.PHONY: reset-db-test rebuild-auth
+.PHONY: reset-db-test rebuild-auth redis-users rs
 
 rdt:
 	@echo "Resetowanie bazy i wolumenu db-test..."
@@ -14,3 +14,9 @@ rebuild-auth:
 	docker compose build --no-cache auth-service
 	docker compose up -d --force-recreate auth-service
 	@echo "Gotowe! auth-service został przebudowany od zera i uruchomiony."
+
+redis-users:
+	@echo "Lista użytkowników Redis ACL:"
+	@docker exec -it cache-redis redis-cli --user redis_root -a "TwojeSuperBazaHaslo123!" ACL USERS
+
+rs: redis-users

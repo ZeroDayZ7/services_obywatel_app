@@ -1,5 +1,5 @@
-include:
-  - path: C:/Users/Neo/Desktop/WWW/rust/secret-agent/docker-compose.yml
+# include:
+#   - path: C:/Users/Neo/Desktop/WWW/rust/secret-agent/docker-compose.yml
 
 services:
   # region SVC GATEWAY
@@ -214,6 +214,8 @@ services:
     depends_on:
       db-identity:
         condition: service_healthy
+      rabbitmq:
+        condition: service_started
     
   # region SVC CITIZEN-DOCS
   # --- CITIZEN DOCUMENTS SERVICE ---

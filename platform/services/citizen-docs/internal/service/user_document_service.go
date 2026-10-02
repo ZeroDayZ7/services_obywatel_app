@@ -83,6 +83,9 @@ func (s *userDocumentService) GetDocumentsByUserID(ctx context.Context, userID u
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch documents for user %s: %w", userID, err)
 	}
+	if docs == nil {
+		return make([]model.CitizenDocument, 0), nil
+	}
 	return docs, nil
 }
 
