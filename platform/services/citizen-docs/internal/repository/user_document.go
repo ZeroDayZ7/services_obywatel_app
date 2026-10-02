@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/citizen-docs/internal/model"
 	"gorm.io/gorm"
 )
@@ -33,13 +34,19 @@ func (r *userDocumentRepository) GetDocumentByID(ctx context.Context, id uuid.UU
 }
 
 func (r *userDocumentRepository) GetDocumentsByUserID(ctx context.Context, userID uuid.UUID) ([]model.CitizenDocument, error) {
+	log := shared.GetLogger()
+	log.InfoMap("[userDocumentRepository.GetDocumentsByUserID] 1. Executing document lookup query", map[string]any{"user_id": userID.String()})
+
 	var docs []model.CitizenDocument
 	if err := r.db.WithContext(ctx).
 		Where("user_id = ? AND deleted_at IS NULL", userID).
 		Order("issued_at DESC, created_at DESC").
 		Find(&docs).Error; err != nil {
+		log.ErrorMap("[userDocumentRepository.GetDocumentsByUserID] 2. DB query failed", map[string]any{"user_id": userID.String(), "err": err.Error()})
 		return nil, err
 	}
+
+	log.InfoMap("[userDocumentRepository.GetDocumentsByUserID] 3. Document query finished", map[string]any{"user_id": userID.String(), "count": len(docs)})
 	return docs, nil
 }
 

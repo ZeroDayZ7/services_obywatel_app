@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/citizen-docs/config"
 	"github.com/zerodayz7/platform/services/citizen-docs/internal/model"
 	"github.com/zerodayz7/platform/services/citizen-docs/internal/repository"
@@ -75,17 +76,25 @@ func (s *userDocumentService) GetDocumentByID(ctx context.Context, id uuid.UUID)
 }
 
 func (s *userDocumentService) GetDocumentsByUserID(ctx context.Context, userID uuid.UUID) ([]model.CitizenDocument, error) {
+	log := shared.GetLogger()
+	log.InfoMap("[userDocumentService.GetDocumentsByUserID] 1. Validating request", map[string]any{"user_id": userID.String()})
+
 	if userID == uuid.Nil {
+		log.Warn("[userDocumentService.GetDocumentsByUserID] 1.1. Missing user_id")
 		return nil, fmt.Errorf("user_id is required")
 	}
 
+	log.InfoMap("[userDocumentService.GetDocumentsByUserID] 2. Querying document repository", map[string]any{"user_id": userID.String()})
 	docs, err := s.docRepo.GetDocumentsByUserID(ctx, userID)
 	if err != nil {
+		log.ErrorMap("[userDocumentService.GetDocumentsByUserID] 3. Repository query failed", map[string]any{"user_id": userID.String(), "err": err.Error()})
 		return nil, fmt.Errorf("failed to fetch documents for user %s: %w", userID, err)
 	}
 	if docs == nil {
+		log.InfoMap("[userDocumentService.GetDocumentsByUserID] 4. Repository returned nil; normalizing to empty slice", map[string]any{"user_id": userID.String()})
 		return make([]model.CitizenDocument, 0), nil
 	}
+	log.InfoMap("[userDocumentService.GetDocumentsByUserID] 5. Documents loaded successfully", map[string]any{"user_id": userID.String(), "count": len(docs)})
 	return docs, nil
 }
 
