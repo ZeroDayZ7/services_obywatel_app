@@ -60,7 +60,16 @@ func LoadConfigGlobal() error {
 	viper.SetSessionDefaults()
 	viper.SetKMSDefaults()
 	spfViper.SetDefault("DOCUMENT_ENCRYPTION_KEY", "change-me-document-encryption-key")
-	spfViper.SetDefault("HMAC_TARGET_KEYS", map[string]KeyTarget{})
+	spfViper.SetDefault("HMAC_TARGET_KEYS", map[string]KeyTarget{
+		"gateway": {
+			TargetKey: "hmac-gateway-docs",
+			Algorithm: "HmacSha256",
+		},
+		"officer-bff": {
+			TargetKey: "hmac-bff-docs",
+			Algorithm: "HmacSha256",
+		},
+	})
 	spfViper.SetDefault("HMAC_INTERNAL_KEYS", map[string]KeyTarget{
 		"pesel": {TargetKey: "hmac-docs-pesel-index", Algorithm: "HmacSha256"},
 	})
