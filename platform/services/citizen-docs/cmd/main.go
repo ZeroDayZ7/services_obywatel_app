@@ -48,7 +48,7 @@ func main() {
 	db, closeDB := config.MustInitDB(config.AppConfig.Database)
 	defer closeDB()
 
-	container := di.NewContainer(db, log, &config.AppConfig, cryptor)
+	container := di.NewContainer(db, log, &config.AppConfig, cryptor, keyStore)
 
 	// 5. Aplikacja i Router
 	docsApp := app.NewDocsApp(container)

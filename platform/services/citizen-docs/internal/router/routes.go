@@ -19,17 +19,17 @@ func SetupDocsRoutes(app *fiber.App, container *di.Container) {
 	users := api.Group("/users")
 
 	docs.Post("", h.CreateDocument)
+	docs.Get("/me", h.GetDocumentsMe)
 	docs.Get("/:id", h.GetDocumentByID)
 	docs.Get("/:id/pdf", h.GetDocumentPDF)
-	docs.Get("/me", h.GetDocumentsMe)
 
 	users.Get("/:user_id/documents", h.GetDocumentsByUserID)
 
 	legacyDocs := app.Group("/documents")
 	legacyDocs.Post("", h.CreateDocument)
+	legacyDocs.Get("/me", h.GetDocumentsMe)
 	legacyDocs.Get("/:id", h.GetDocumentByID)
 	legacyDocs.Get("/:id/pdf", h.GetDocumentPDF)
-	legacyDocs.Get("/me", h.GetDocumentsMe)
 
 	SetupFallbackHandlers(app)
 	log.Info("[router.SetupDocsRoutes] 2. All routes and fallback handlers registered")

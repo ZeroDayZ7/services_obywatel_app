@@ -22,12 +22,20 @@ func NewUserDocumentHandler(s service.UserDocumentService) *UserDocumentHandler 
 	return &UserDocumentHandler{service: s}
 }
 
+func getRequestContextFromFiber(c *fiber.Ctx) (*reqctx.RequestContext, error) {
+	rc, ok := c.Locals(reqctx.FiberRequestContextKey).(*reqctx.RequestContext)
+	if !ok || rc == nil {
+		return nil, apperr.ErrUnauthorized
+	}
+	return rc, nil
+}
+
 func (h *UserDocumentHandler) CreateDocument(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(c.UserContext(), 5*time.Second)
 	defer cancel()
 
-	rc := reqctx.MustFromFiber(c)
-	if rc.UserID == nil {
+	rc, err := getRequestContextFromFiber(c)
+	if err != nil || rc.UserID == nil {
 		return apperr.SendAppError(c, apperr.ErrUnauthorized)
 	}
 
@@ -74,9 +82,9 @@ func (h *UserDocumentHandler) GetDocumentsByUserID(c *fiber.Ctx) error {
 
 	log.Info("[UserDocumentHandler.GetDocumentsByUserID] 1. Processing request for /users/:user_id/documents")
 
-	rc := reqctx.MustFromFiber(c)
-	if rc.UserID == nil {
-		log.WarnMap("[UserDocumentHandler.GetDocumentsByUserID] 2. Missing auth user context", map[string]any{"path": c.Path(), "role": rc.Role})
+	rc, err := getRequestContextFromFiber(c)
+	if err != nil || rc == nil || rc.UserID == nil {
+		log.WarnMap("[UserDocumentHandler.GetDocumentsByUserID] 2. Missing auth user context", map[string]any{"path": c.Path()})
 		return apperr.SendAppError(c, apperr.ErrUnauthorized)
 	}
 
@@ -109,8 +117,8 @@ func (h *UserDocumentHandler) GetDocumentsMe(c *fiber.Ctx) error {
 
 	log.Info("[UserDocumentHandler.GetDocumentsMe] 1. Processing request for /documents/me")
 
-	rc := reqctx.MustFromFiber(c)
-	if rc.UserID == nil {
+	rc, err := getRequestContextFromFiber(c)
+	if err != nil || rc == nil || rc.UserID == nil {
 		log.WarnMap("[UserDocumentHandler.GetDocumentsMe] 2. Missing authenticated user ID in request context", map[string]any{"path": c.Path(), "headers": map[string]string{"X-Device-Fingerprint": c.Get("X-Device-Fingerprint"), "X-Request-Id": c.Get("X-Request-Id")}})
 		return apperr.SendAppError(c, apperr.ErrUnauthorized)
 	}
