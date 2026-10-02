@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/zerodayz7/platform/pkg/errors"
-	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/auth-service/internal/http"
 )
@@ -79,13 +78,8 @@ func (s *authService) RefreshToken(ctx context.Context, tokenStr string, fingerp
 		return nil, errors.ErrInternal
 	}
 
-	// 8. Zapis sesji w Redis
-	sessionData := redis.UserSession{
-		UserID:      user.ID.String(),
-		Fingerprint: fingerprint,
-		PublicKey:   device.PublicKey,
-		Role:        string(user.Role),
-	}
+	// 8. Zapis pełnej sesji w Redis z wykorzystaniem wspólnej budowy sesji
+	sessionData := s.buildUserSession(user, fingerprint, device.PublicKey, false)
 
 	if err := s.cache.SetSession(ctx, newSessionID, &sessionData, s.cfg.Session.TTL); err != nil {
 		log.ErrorObj("Failed to save session in Redis", err)
