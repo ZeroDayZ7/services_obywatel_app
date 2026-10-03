@@ -5,6 +5,7 @@ go 1.27.0
 require (
 	github.com/gofiber/fiber/v2 v2.52.14
 	github.com/google/uuid v1.6.0
+	github.com/rabbitmq/amqp091-go v1.15.0
 	github.com/spf13/viper v1.21.0
 	github.com/zerodayz7/platform/pkg v0.0.0
 	gorm.io/gorm v1.31.2
@@ -36,7 +37,6 @@ require (
 	github.com/pelletier/go-toml/v2 v2.4.3 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
 	github.com/pressly/goose/v3 v3.27.3 // indirect
-	github.com/rabbitmq/amqp091-go v1.15.0 // indirect
 	github.com/redis/go-redis/v9 v9.21.0 // indirect
 	github.com/sagikazarmark/locafero v0.12.0 // indirect
 	github.com/sethvargo/go-retry v0.4.0 // indirect
