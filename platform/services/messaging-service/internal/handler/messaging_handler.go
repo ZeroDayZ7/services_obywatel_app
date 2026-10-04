@@ -262,6 +262,7 @@ func (h *MessagingHandler) UploadDeviceKeys(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return apperr.SendAppError(c, apperr.ErrInvalidRequestBody)
 	}
+	req.Normalize()
 
 	if err := h.service.UploadDeviceKeys(ctx, *rc.UserID, req); err != nil {
 		return apperr.SendAppError(c, err)
@@ -289,6 +290,23 @@ func (h *MessagingHandler) GetUserPreKeys(c *fiber.Ctx) error {
 	}
 
 	return c.Status(fiber.StatusOK).JSON(keys)
+}
+
+func (h *MessagingHandler) GetKeyBundle(c *fiber.Ctx) error {
+	ctx, cancel := context.WithTimeout(c.UserContext(), 3*time.Second)
+	defer cancel()
+
+	rc := reqctx.MustFromFiber(c)
+	if rc.UserID == nil {
+		return apperr.SendAppError(c, apperr.ErrUnauthorized)
+	}
+
+	targetUserID := c.Params("userId")
+	bundle, err := h.service.GetUserKeyBundle(ctx, targetUserID)
+	if err != nil {
+		return apperr.SendAppError(c, err)
+	}
+	return c.Status(fiber.StatusOK).JSON(bundle)
 }
 
 // #endregion

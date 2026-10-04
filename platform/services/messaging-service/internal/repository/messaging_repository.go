@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 
 	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/services/messaging-service/internal/model"
@@ -24,9 +25,10 @@ type MessagingRepository interface {
 
 	// E2EE Keys & Identity
 	GetDeviceIdentity(ctx context.Context, userID uuid.UUID, deviceID string) (*model.UserDeviceIdentity, error)
+	GetLatestDeviceIdentityForUser(ctx context.Context, userID uuid.UUID) (*model.UserDeviceIdentity, error)
 	SaveDeviceIdentity(ctx context.Context, identity *model.UserDeviceIdentity) error
 	SavePreKeys(ctx context.Context, keys []model.UserPreKey) error
-	PopPreKey(ctx context.Context, userID uuid.UUID) (*model.UserPreKey, error)
+	PopPreKey(ctx context.Context, userID uuid.UUID, deviceID string) (*model.UserPreKey, error)
 
 	// Contacts
 	UpsertContact(ctx context.Context, contact *model.Contact) error
@@ -139,20 +141,53 @@ func (r *messagingRepository) UpdateLastReadSequence(ctx context.Context, userID
 // #region E2EE
 func (r *messagingRepository) GetDeviceIdentity(ctx context.Context, userID uuid.UUID, deviceID string) (*model.UserDeviceIdentity, error) {
 	var identity model.UserDeviceIdentity
-	err := r.db.WithContext(ctx).
-		Where("user_id = ? AND device_id = ?", userID, deviceID).
-		First(&identity).Error
+	query := r.db.WithContext(ctx).Where("user_id = ?", userID)
+	if deviceID != "" {
+		query = query.Where("device_id = ?", deviceID)
+	}
+
+	err := query.Order("created_at DESC").First(&identity).Error
 	if err != nil {
 		return nil, err
 	}
 	return &identity, nil
 }
 
+func (r *messagingRepository) GetLatestDeviceIdentityForUser(ctx context.Context, userID uuid.UUID) (*model.UserDeviceIdentity, error) {
+	return r.GetDeviceIdentity(ctx, userID, "")
+}
+
 func (r *messagingRepository) SaveDeviceIdentity(ctx context.Context, identity *model.UserDeviceIdentity) error {
+	if identity == nil {
+		return nil
+	}
+
+	var existing model.UserDeviceIdentity
+	err := r.db.WithContext(ctx).
+		Where("user_id = ? AND device_id = ?", identity.UserID, identity.DeviceID).
+		First(&existing).Error
+	if err == nil {
+		identity.ID = existing.ID
+		existing.RegistrationID = identity.RegistrationID
+		existing.PublicKey = identity.PublicKey
+		existing.SignedPreKey = identity.SignedPreKey
+		existing.SignedPreKeySig = identity.SignedPreKeySig
+		existing.SignedPreKeyID = identity.SignedPreKeyID
+		identity.RegistrationID = existing.RegistrationID
+		identity.PublicKey = existing.PublicKey
+		identity.SignedPreKey = existing.SignedPreKey
+		identity.SignedPreKeySig = existing.SignedPreKeySig
+		identity.SignedPreKeyID = existing.SignedPreKeyID
+		return r.db.WithContext(ctx).Save(&existing).Error
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+
 	return r.db.WithContext(ctx).
 		Clauses(clause.OnConflict{
 			Columns:   []clause.Column{{Name: "user_id"}, {Name: "device_id"}},
-			DoUpdates: clause.AssignmentColumns([]string{"public_key", "signed_pre_key", "signed_pre_key_sig", "signed_pre_key_id", "updated_at"}),
+			DoUpdates: clause.AssignmentColumns([]string{"registration_id", "public_key", "signed_pre_key", "signed_pre_key_sig", "signed_pre_key_id", "updated_at"}),
 		}).
 		Create(identity).Error
 }
@@ -164,10 +199,15 @@ func (r *messagingRepository) SavePreKeys(ctx context.Context, keys []model.User
 	return r.db.WithContext(ctx).Create(&keys).Error
 }
 
-func (r *messagingRepository) PopPreKey(ctx context.Context, deviceID uuid.UUID) (*model.UserPreKey, error) {
+func (r *messagingRepository) PopPreKey(ctx context.Context, userID uuid.UUID, deviceID string) (*model.UserPreKey, error) {
+	identity, err := r.GetDeviceIdentity(ctx, userID, deviceID)
+	if err != nil {
+		return nil, err
+	}
+
 	var key model.UserPreKey
-	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("device_id = ?", deviceID).First(&key).Error; err != nil {
+	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("device_id = ?", identity.ID).Order("key_id ASC").First(&key).Error; err != nil {
 			return err
 		}
 		return tx.Delete(&key).Error

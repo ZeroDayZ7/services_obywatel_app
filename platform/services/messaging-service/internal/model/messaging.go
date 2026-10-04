@@ -39,10 +39,11 @@ const (
 // #region E2EE & Crypto Entities
 // UserDeviceIdentity – Przechowuje publiczne klucze urządzenia użytkownika potrzebne do nawiązania sesji E2EE
 type UserDeviceIdentity struct {
-	ID        uuid.UUID `gorm:"type:uuid;primaryKey;default:uuidv7()"`
-	UserID    uuid.UUID `gorm:"type:uuid;index;not null"`
-	DeviceID  string    `gorm:"type:varchar(64);not null;index"` // Identyfikator instalacji / sprzętu
-	PublicKey []byte    `gorm:"type:bytea;not null"`             // Długowieczny publiczny klucz tożsamości (Identity Key)
+	ID             uuid.UUID `gorm:"type:uuid;primaryKey;default:uuidv7()"`
+	UserID         uuid.UUID `gorm:"type:uuid;index;not null"`
+	DeviceID       string    `gorm:"type:varchar(64);not null;index"` // Identyfikator instalacji / sprzętu
+	RegistrationID uint32    `gorm:"not null;default:0"`
+	PublicKey      []byte    `gorm:"type:bytea;not null"` // Długowieczny publiczny klucz tożsamości (Identity Key)
 
 	// Klucze jednorazowe/okresowe do wymiany kluczy (X3DH Key Exchange)
 	SignedPreKey    []byte `gorm:"type:bytea;not null"`
@@ -169,26 +170,75 @@ type CreateConversationRequest struct {
 	RecipientIDs []uuid.UUID      `json:"recipient_ids"`
 }
 
-// UploadDeviceKeysRequest - Rejestracja kluczy E2EE dla urządzenia
+// UploadDeviceKeysRequest - Rejestracja kluczy E2EE dla urządzenia.
+// Akceptuje oba formaty pól: camelCase i snake_case, aby wspierać klienta Flutter i backendowy kontrakt Signal.
 type UploadDeviceKeysRequest struct {
-	DeviceID        string   `json:"device_id"`
-	PublicKey       []byte   `json:"public_key"`
-	SignedPreKey    []byte   `json:"signed_pre_key"`
-	SignedPreKeySig []byte   `json:"signed_pre_key_sig"`
-	SignedPreKeyID  uint32   `json:"signed_pre_key_id"`
-	OneTimePreKeys  [][]byte `json:"one_time_pre_keys,omitempty"`
+	DeviceID               string   `json:"deviceId,omitempty"`
+	DeviceIDSnake          string   `json:"device_id,omitempty"`
+	RegistrationID         uint32   `json:"registrationId,omitempty"`
+	RegistrationIDSnake    uint32   `json:"registration_id,omitempty"`
+	IdentityPublicKey      []byte   `json:"identityPublicKey,omitempty"`
+	IdentityPublicKeySnake []byte   `json:"identity_public_key,omitempty"`
+	PublicKey              []byte   `json:"publicKey,omitempty"`
+	SignedPreKey           []byte   `json:"signedPreKey,omitempty"`
+	SignedPreKeySnake      []byte   `json:"signed_pre_key,omitempty"`
+	SignedPreKeySig        []byte   `json:"signedPreKeySig,omitempty"`
+	SignedPreKeySigSnake   []byte   `json:"signed_pre_key_sig,omitempty"`
+	SignedPreKeyID         uint32   `json:"signedPreKeyId,omitempty"`
+	SignedPreKeyIDSnake    uint32   `json:"signed_pre_key_id,omitempty"`
+	OneTimePreKeys         [][]byte `json:"oneTimePreKeys,omitempty"`
+	OneTimePreKeysSnake    [][]byte `json:"one_time_pre_keys,omitempty"`
+}
+
+func (r *UploadDeviceKeysRequest) Normalize() {
+	if r.DeviceID == "" {
+		r.DeviceID = r.DeviceIDSnake
+	}
+	if r.RegistrationID == 0 {
+		r.RegistrationID = r.RegistrationIDSnake
+	}
+	if len(r.IdentityPublicKey) == 0 {
+		r.IdentityPublicKey = r.IdentityPublicKeySnake
+	}
+	if len(r.PublicKey) == 0 {
+		r.PublicKey = r.IdentityPublicKey
+	}
+	if len(r.SignedPreKey) == 0 {
+		r.SignedPreKey = r.SignedPreKeySnake
+	}
+	if len(r.SignedPreKeySig) == 0 {
+		r.SignedPreKeySig = r.SignedPreKeySigSnake
+	}
+	if r.SignedPreKeyID == 0 {
+		r.SignedPreKeyID = r.SignedPreKeyIDSnake
+	}
+	if len(r.OneTimePreKeys) == 0 {
+		r.OneTimePreKeys = r.OneTimePreKeysSnake
+	}
 }
 
 // UserPreKeysResponse - Klucze publiczne użytkownika do zestawienia sesji E2EE (X3DH)
 type UserPreKeysResponse struct {
-	UserID          uuid.UUID `json:"user_id"`
-	DeviceID        string    `json:"device_id"`
-	IdentityKey     []byte    `json:"identity_key"`
-	SignedPreKey    []byte    `json:"signed_pre_key"`
-	SignedPreKeySig []byte    `json:"signed_pre_key_sig"`
-	SignedPreKeyID  uint32    `json:"signed_pre_key_id"`
-	OneTimePreKey   []byte    `json:"one_time_pre_key,omitempty"`
-	OneTimePreKeyID uint32    `json:"one_time_pre_key_id,omitempty"`
+	UserID          uuid.UUID `json:"userId"`
+	DeviceID        string    `json:"deviceId"`
+	IdentityKey     []byte    `json:"identityKey"`
+	SignedPreKey    []byte    `json:"signedPreKey"`
+	SignedPreKeySig []byte    `json:"signedPreKeySig"`
+	SignedPreKeyID  uint32    `json:"signedPreKeyId"`
+	OneTimePreKey   []byte    `json:"oneTimePreKey,omitempty"`
+	OneTimePreKeyID uint32    `json:"oneTimePreKeyId,omitempty"`
+}
+
+// PreKeyBundleDto - Bundle X3DH wymagany przez Signal Protocol po stronie klienta.
+type PreKeyBundleDto struct {
+	RegistrationID        uint32  `json:"registrationId"`
+	DeviceID              string  `json:"deviceId"`
+	PreKeyID              *uint32 `json:"preKeyId,omitempty"`
+	PreKeyPublic          []byte  `json:"preKeyPublic,omitempty"`
+	SignedPreKeyID        uint32  `json:"signedPreKeyId"`
+	SignedPreKeyPublic    []byte  `json:"signedPreKeyPublic"`
+	SignedPreKeySignature []byte  `json:"signedPreKeySignature"`
+	IdentityKey           []byte  `json:"identityKey"`
 }
 
 // #endregion
