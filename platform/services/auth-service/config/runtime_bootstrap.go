@@ -38,6 +38,26 @@ func resolveRequiredSecret(provider secretprovider.SecretProvider, name string) 
 	return secret, nil
 }
 
+func resolveOptionalSecret(provider secretprovider.SecretProvider, name string) (string, bool, error) {
+	if provider == nil {
+		return "", false, fmt.Errorf("secret provider initialization failed: provider is nil")
+	}
+
+	secret, err := provider.Get(context.Background(), name)
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "not found") {
+			return "", false, nil
+		}
+		return "", false, fmt.Errorf("resolve secret %q: %w", name, err)
+	}
+
+	value := sanitizeSecret(secret)
+	if value == "" {
+		return "", false, nil
+	}
+	return value, true, nil
+}
+
 // BuildRuntimeConfigs resolves the credentials required to initialize runtime PostgreSQL and Redis clients.
 func BuildRuntimeConfigs(base Config, provider secretprovider.SecretProvider) (viper.DBConfig, viper.RedisConfig, viper.RabbitMQConfig, error) {
 	dbCfg := base.Database
@@ -83,22 +103,21 @@ func BuildRuntimeConfigs(base Config, provider secretprovider.SecretProvider) (v
 	redisCfg.Password = redisPassSanitized
 
 	if base.RabbitMQ.Enabled {
-		rabbitUser, err := resolveRequiredSecret(provider, secretprovider.RabbitMQUsernameSecret)
-		if err != nil {
+		if rabbitUser, ok, err := resolveOptionalSecret(provider, secretprovider.RabbitMQUsernameSecret); err != nil {
 			return viper.DBConfig{}, viper.RedisConfig{}, viper.RabbitMQConfig{}, fmt.Errorf("failed to resolve runtime credentials: %w", err)
+		} else if ok {
+			rabbitCfg.User = rabbitUser
+		} else if rabbitCfg.User == "" {
+			rabbitCfg.User = base.RabbitMQ.User
 		}
-		rabbitPass, err := resolveRequiredSecret(provider, secretprovider.RabbitMQPasswordSecret)
-		if err != nil {
+
+		if rabbitPass, ok, err := resolveOptionalSecret(provider, secretprovider.RabbitMQPasswordSecret); err != nil {
 			return viper.DBConfig{}, viper.RedisConfig{}, viper.RabbitMQConfig{}, fmt.Errorf("failed to resolve runtime credentials: %w", err)
+		} else if ok {
+			rabbitCfg.Password = rabbitPass
+		} else if rabbitCfg.Password == "" {
+			rabbitCfg.Password = base.RabbitMQ.Password
 		}
-		rabbitUserTrimmed := strings.TrimSpace(string(rabbitUser))
-		rabbitPassTrimmed := sanitizeSecret(rabbitPass)
-		if rabbitUserTrimmed == "" || rabbitPassTrimmed == "" {
-			return viper.DBConfig{}, viper.RedisConfig{}, viper.RabbitMQConfig{},
-				fmt.Errorf("%w: rabbitmq username or password is empty after sanitization", ErrInvalidCredentials)
-		}
-		rabbitCfg.User = rabbitUserTrimmed
-		rabbitCfg.Password = rabbitPassTrimmed
 	}
 
 	return dbCfg, redisCfg, rabbitCfg, nil

@@ -5,10 +5,12 @@ package config
 import (
 	"crypto/ed25519"
 	"fmt"
+	"strings"
 	"time"
 
 	spfViper "github.com/spf13/viper"
 	"github.com/zerodayz7/platform/pkg/kms"
+	"github.com/zerodayz7/platform/pkg/secretprovider"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/pkg/viper"
 )
@@ -82,6 +84,7 @@ func LoadConfigGlobal() error {
 	viper.SetDBDefaults()
 	viper.SetRedisDefaults()
 	viper.SetKMSDefaults()
+	spfViper.SetDefault("SECRET_PROVIDER", secretprovider.LocalProvider)
 
 	// Explicit secret provider selection must be configured per environment; no silent fallback.
 	spfViper.SetDefault("SECRET_AGENT_SOCKET_PATH", "/var/run/agent-sockets/agent.sock")
@@ -113,6 +116,11 @@ func LoadConfigGlobal() error {
 
 	if err := viper.InitConfig(&AppConfig, "auth-service"); err != nil {
 		return fmt.Errorf("failed to initialize auth-service config: %w", err)
+	}
+
+	if strings.TrimSpace(AppConfig.Secret.Provider) == "" {
+		AppConfig.Secret.Provider = secretprovider.LocalProvider
+		spfViper.Set("SECRET_PROVIDER", AppConfig.Secret.Provider)
 	}
 
 	log.Info("Auth-service configuration loaded successfully")
