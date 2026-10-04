@@ -127,6 +127,151 @@ type Message struct {
 
 // #endregion
 
+// #region Persistent Encrypted Vault Contracts
+// MessageEnvelope – transportowa i archiwalna koperta zaszyfrowanej wiadomości.
+// Serwer nie dekoduje treści, a jedynie przechowuje ciphertext i metadane retencji.
+type MessageEnvelope struct {
+	MessageID              string     `json:"messageId,omitempty"`
+	MessageIDSnake         string     `json:"message_id,omitempty"`
+	ConversationID         uuid.UUID  `json:"conversationId,omitempty"`
+	ConversationIDSnake    uuid.UUID  `json:"conversation_id,omitempty"`
+	SenderUserID           uuid.UUID  `json:"senderUserId,omitempty"`
+	SenderUserIDSnake      uuid.UUID  `json:"sender_user_id,omitempty"`
+	SenderDeviceID         string     `json:"senderDeviceId,omitempty"`
+	SenderDeviceIDSnake    string     `json:"sender_device_id,omitempty"`
+	RecipientUserID        uuid.UUID  `json:"recipientUserId,omitempty"`
+	RecipientUserIDSnake   uuid.UUID  `json:"recipient_user_id,omitempty"`
+	RecipientDeviceID      string     `json:"recipientDeviceId,omitempty"`
+	RecipientDeviceIDSnake string     `json:"recipient_device_id,omitempty"`
+	Ciphertext             []byte     `json:"ciphertext,omitempty"`
+	Type                   uint8      `json:"type,omitempty"`
+	TypeSnake              uint8      `json:"signal_message_type,omitempty"`
+	Nonce                  []byte     `json:"nonce,omitempty"`
+	CreatedAt              time.Time  `json:"createdAt,omitempty"`
+	ExpiresAt              *time.Time `json:"expiresAt,omitempty"`
+	Version                uint64     `json:"version,omitempty"`
+}
+
+func (r *MessageEnvelope) Normalize() {
+	if r.MessageID == "" {
+		r.MessageID = r.MessageIDSnake
+	}
+	if r.ConversationID == uuid.Nil {
+		r.ConversationID = r.ConversationIDSnake
+	}
+	if r.SenderUserID == uuid.Nil {
+		r.SenderUserID = r.SenderUserIDSnake
+	}
+	if r.SenderDeviceID == "" {
+		r.SenderDeviceID = r.SenderDeviceIDSnake
+	}
+	if r.RecipientUserID == uuid.Nil {
+		r.RecipientUserID = r.RecipientUserIDSnake
+	}
+	if r.RecipientDeviceID == "" {
+		r.RecipientDeviceID = r.RecipientDeviceIDSnake
+	}
+	if r.Type == 0 {
+		r.Type = r.TypeSnake
+	}
+}
+
+// MessageRecord – zapis chronologii wiadomości w przechowalni zaszyfrowanych kopert.
+type MessageRecord struct {
+	ID                     uuid.UUID   `json:"id,omitempty"`
+	MessageID              uuid.UUID   `json:"messageId,omitempty"`
+	MessageIDSnake         uuid.UUID   `json:"message_id,omitempty"`
+	ConversationID         uuid.UUID   `json:"conversationId,omitempty"`
+	ConversationIDSnake    uuid.UUID   `json:"conversation_id,omitempty"`
+	SenderUserID           uuid.UUID   `json:"senderUserId,omitempty"`
+	SenderUserIDSnake      uuid.UUID   `json:"sender_user_id,omitempty"`
+	SenderDeviceID         string      `json:"senderDeviceId,omitempty"`
+	SenderDeviceIDSnake    string      `json:"sender_device_id,omitempty"`
+	RecipientUserID        uuid.UUID   `json:"recipientUserId,omitempty"`
+	RecipientUserIDSnake   uuid.UUID   `json:"recipient_user_id,omitempty"`
+	RecipientDeviceID      string      `json:"recipientDeviceId,omitempty"`
+	RecipientDeviceIDSnake string      `json:"recipient_device_id,omitempty"`
+	Ciphertext             []byte      `json:"ciphertext,omitempty"`
+	Type                   MessageType `json:"type,omitempty"`
+	CreatedAt              time.Time   `json:"createdAt,omitempty"`
+	ExpiresAt              *time.Time  `json:"expiresAt,omitempty"`
+	IsDelivered            bool        `json:"isDelivered,omitempty"`
+	Version                uint64      `json:"version,omitempty"`
+}
+
+func (r *MessageRecord) Normalize() {
+	if r.MessageID == uuid.Nil {
+		r.MessageID = r.MessageIDSnake
+	}
+	if r.ConversationID == uuid.Nil {
+		r.ConversationID = r.ConversationIDSnake
+	}
+	if r.SenderUserID == uuid.Nil {
+		r.SenderUserID = r.SenderUserIDSnake
+	}
+	if r.SenderDeviceID == "" {
+		r.SenderDeviceID = r.SenderDeviceIDSnake
+	}
+	if r.RecipientUserID == uuid.Nil {
+		r.RecipientUserID = r.RecipientUserIDSnake
+	}
+	if r.RecipientDeviceID == "" {
+		r.RecipientDeviceID = r.RecipientDeviceIDSnake
+	}
+}
+
+// HistoryFetchRequest – żądanie pobrania historii wiadomości z szyfrowanego archiwum.
+type HistoryFetchRequest struct {
+	ConversationID      *uuid.UUID `json:"conversationId,omitempty"`
+	ConversationIDSnake *uuid.UUID `json:"conversation_id,omitempty"`
+	Since               uint64     `json:"since,omitempty"`
+	Limit               int        `json:"limit,omitempty"`
+}
+
+func (r *HistoryFetchRequest) Normalize() {
+	if r.ConversationID == nil {
+		r.ConversationID = r.ConversationIDSnake
+	}
+	if r.Limit <= 0 {
+		r.Limit = 50
+	}
+}
+
+// NewMessageNotification – lekkie powiadomienie WebSocket o nowej wiadomości z archiwum i message_id.
+type NewMessageNotification struct {
+	EventType           string    `json:"eventType,omitempty"`
+	EventTypeSnake      string    `json:"event_type,omitempty"`
+	ConversationID      uuid.UUID `json:"conversationId,omitempty"`
+	ConversationIDSnake uuid.UUID `json:"conversation_id,omitempty"`
+	MessageID           string    `json:"messageId,omitempty"`
+	MessageIDSnake      string    `json:"message_id,omitempty"`
+	SenderUserID        uuid.UUID `json:"senderUserId,omitempty"`
+	SenderUserIDSnake   uuid.UUID `json:"sender_user_id,omitempty"`
+	SenderDeviceID      string    `json:"senderDeviceId,omitempty"`
+	SenderDeviceIDSnake string    `json:"sender_device_id,omitempty"`
+	Timestamp           time.Time `json:"timestamp,omitempty"`
+}
+
+func (r *NewMessageNotification) Normalize() {
+	if r.EventType == "" {
+		r.EventType = r.EventTypeSnake
+	}
+	if r.ConversationID == uuid.Nil {
+		r.ConversationID = r.ConversationIDSnake
+	}
+	if r.MessageID == "" {
+		r.MessageID = r.MessageIDSnake
+	}
+	if r.SenderUserID == uuid.Nil {
+		r.SenderUserID = r.SenderUserIDSnake
+	}
+	if r.SenderDeviceID == "" {
+		r.SenderDeviceID = r.SenderDeviceIDSnake
+	}
+}
+
+// #endregion
+
 // #region Sync & Outbox DTOs
 // SyncDeltaRequest – Żądanie synchronizacji różnicowej wysyłane z aplikacji mobilnej
 type SyncDeltaRequest struct {
