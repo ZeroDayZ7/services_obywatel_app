@@ -194,7 +194,7 @@ func (s *authService) verifyChallengeSession(challenge string, signatureB64 stri
 }
 
 // #region buildUserSession
-func (s *authService) buildUserSession(user *model.User, fingerprint, pubKey string, isReadOnly bool) redis.UserSession {
+func (s *authService) buildUserSession(user *model.User, deviceID, fingerprint, pubKey string, isReadOnly bool) redis.UserSession {
 	var permissions []string
 
 	// Prefer explicit user-level permissions if present
@@ -204,8 +204,13 @@ func (s *authService) buildUserSession(user *model.User, fingerprint, pubKey str
 		permissions = user.EmployeeProfile.Permissions
 	}
 
+	if deviceID == "" {
+		deviceID = fingerprint
+	}
+
 	sess := redis.UserSession{
 		UserID:      user.ID.String(),
+		DeviceID:    deviceID,
 		Role:        string(user.Role),
 		Fingerprint: fingerprint,
 		Permissions: permissions,

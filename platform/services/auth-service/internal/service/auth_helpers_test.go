@@ -27,13 +27,16 @@ func TestBuildUserSessionIncludesFullProfileData(t *testing.T) {
 		},
 	}
 
-	session := (&authService{}).buildUserSession(user, "fp-123", "pub-key-1", true)
+	session := (&authService{}).buildUserSession(user, "device-42", "fp-123", "pub-key-1", true)
 
 	if session.UserID != userID.String() {
 		t.Fatalf("expected user id %s, got %s", userID, session.UserID)
 	}
 	if session.Role != string(user.Role) {
 		t.Fatalf("expected role %s, got %s", user.Role, session.Role)
+	}
+	if session.DeviceID != "device-42" {
+		t.Fatalf("expected device id device-42, got %s", session.DeviceID)
 	}
 	if session.Fingerprint != "fp-123" {
 		t.Fatalf("expected fingerprint fp-123, got %s", session.Fingerprint)

@@ -14,6 +14,7 @@ import (
 // BaseSession zawiera podstawowe metadane wymagane przy każdym typie połączenia
 type BaseSession struct {
 	UserID      string    `json:"user_id"`
+	DeviceID    string    `json:"device_id,omitempty"`
 	Role        string    `json:"role"`
 	Fingerprint string    `json:"fingerprint"`
 	IP          string    `json:"ip,omitempty"`

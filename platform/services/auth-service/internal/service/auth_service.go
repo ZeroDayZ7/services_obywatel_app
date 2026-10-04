@@ -205,7 +205,7 @@ func (s *authService) AttemptLoginStep2(ctx context.Context, userID uuid.UUID, s
 	}
 
 	// Korzystamy z ujednoliconej budowy sesji
-	sessionData := s.buildUserSession(user, deviceID, cred.PublicKey, false)
+	sessionData := s.buildUserSession(user, deviceID, deviceID, cred.PublicKey, false)
 
 	if err := s.cache.SetSession(ctx, newSessionID, &sessionData, s.cfg.Session.TTL); err != nil {
 		log.ErrorMap("[AttemptLoginStep2] Failed to save user session in Redis", map[string]any{
@@ -223,6 +223,7 @@ func (s *authService) AttemptLoginStep2(ctx context.Context, userID uuid.UUID, s
 		Success: &http.LoginSuccessData{
 			AccessToken:  accessToken,
 			RefreshToken: refreshToken.Token,
+			DeviceID:     deviceID,
 			UserID:       user.ID.String(),
 			ExpiresAt:    expiresAt,
 		},
@@ -290,6 +291,7 @@ func (s *authService) Verify2FA(ctx context.Context, token uuid.UUID, code []byt
 	// Zapisujemy sesję Setup/Challenge w Redis ściśle na 5 minut
 	err = s.cache.SetSetupSession(ctx, sessionID, &redis.SetupSession{
 		UserID:      session.UserID,
+		DeviceID:    fingerprint,
 		Challenge:   challenge,
 		Fingerprint: fingerprint,
 	}, 5*time.Minute)
@@ -384,6 +386,7 @@ func (s *authService) prepareEmployeeLogin(ctx context.Context, user *model.User
 	// 4. Konstruujemy dane sesji z kontekstem urzędnika i kluczem z KARTY
 	sessionData := redis.SetupSession{
 		UserID:      user.ID.String(),
+		DeviceID:    fingerprint,
 		Fingerprint: fingerprint,
 		PublicKey:   credential.PublicKey,
 		Role:        string(user.Role),
@@ -423,6 +426,7 @@ func (s *authService) prepare2FASession(ctx context.Context, user *model.User, f
 
 	session := redis.TwoFASession{
 		UserID:      user.ID.String(),
+		DeviceID:    fingerprint,
 		Token:       token.String(),
 		CodeHash:    hashedCode,
 		Fingerprint: fingerprint,
@@ -469,7 +473,7 @@ func (s *authService) finalizeLogin(ctx context.Context, user *model.User, finge
 	}
 
 	// 2. Budujemy dane sesji z flagą ReadOnly/Krótkim czasem życia
-	sessionData := s.buildUserSession(user, fingerprint, "", true)
+	sessionData := s.buildUserSession(user, fingerprint, fingerprint, "", true)
 	ttl := s.cfg.Session.TTL
 
 	if err := s.cache.SetSession(ctx, sessionID, &sessionData, ttl); err != nil {
@@ -487,6 +491,7 @@ func (s *authService) finalizeLogin(ctx context.Context, user *model.User, finge
 		Success: &http.LoginSuccessData{
 			AccessToken:  accessToken,
 			RefreshToken: "",
+			DeviceID:     fingerprint,
 			UserID:       user.ID.String(),
 			ExpiresAt:    expiresAt,
 		},
@@ -508,6 +513,7 @@ func (s *authService) preparePreTrustSession(ctx context.Context, user *model.Us
 	// 2. Dane sesji dla zaufanego urządzenia
 	sessionData := redis.SetupSession{
 		UserID:      user.ID.String(),
+		DeviceID:    fingerprint,
 		Fingerprint: fingerprint,
 		PublicKey:   publicKey,
 		Role:        string(user.Role),
@@ -565,7 +571,7 @@ func (s *authService) CreateTemporarySession(ctx context.Context, userID uuid.UU
 	}
 
 	// 5. Budujemy pełną sesję użytkownika (z flaga readOnly = false, aby umożliwić standardowe działanie)
-	sessionData := s.buildUserSession(user, setupSession.Fingerprint, "", false)
+	sessionData := s.buildUserSession(user, setupSession.DeviceID, setupSession.Fingerprint, "", false)
 
 	if err := s.cache.SetSession(ctx, newSessionID, &sessionData, s.cfg.Session.TTL); err != nil {
 		log.ErrorObj("[CreateTemporarySession] Błąd zapisu sesji w Redis", err)
@@ -583,6 +589,7 @@ func (s *authService) CreateTemporarySession(ctx context.Context, userID uuid.UU
 		Type: http.LoginResultTemporarySuccess,
 		Success: &http.LoginSuccessData{
 			AccessToken: accessToken,
+			DeviceID:    setupSession.DeviceID,
 			ExpiresAt:   expiresAt,
 		},
 	}, nil
