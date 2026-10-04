@@ -89,21 +89,40 @@ func (h *MessagingHandler) SendMessage(c *fiber.Ctx) error {
 		return apperr.SendAppError(c, apperr.ErrUnauthorized)
 	}
 
-	var msg model.Message
-	if err := c.BodyParser(&msg); err != nil {
+	var req model.SendMessageRequest
+	if err := c.BodyParser(&req); err != nil {
 		return apperr.SendAppError(c, apperr.ErrInvalidRequestBody)
+	}
+	req.Normalize()
+
+	if req.SenderDeviceID == "" {
+		req.SenderDeviceID = rc.DeviceID
 	}
 
 	conversationIDStr := c.Params("id")
-	if conversationIDStr != "" {
+	if req.ConversationID == nil && conversationIDStr != "" {
 		convID, err := uuid.Parse(conversationIDStr)
 		if err != nil {
 			return apperr.SendAppError(c, apperr.ErrInvalidRequestBody)
 		}
-		msg.ConversationID = convID
+		req.ConversationID = &convID
+	}
+	if req.ConversationID == nil {
+		return apperr.SendAppError(c, apperr.ErrInvalidRequestBody)
 	}
 
-	if err := h.service.SendMessage(ctx, *rc.UserID, &msg); err != nil {
+	msg := &model.Message{
+		ConversationID:   *req.ConversationID,
+		SenderID:         *rc.UserID,
+		SenderDeviceID:   req.SenderDeviceID,
+		Type:             model.MessageTypeText,
+		EncryptedPayload: req.Ciphertext,
+	}
+	if req.Content != "" {
+		msg.EncryptedPayload = []byte(req.Content)
+	}
+
+	if err := h.service.SendMessage(ctx, *rc.UserID, msg); err != nil {
 		return apperr.SendAppError(c, err)
 	}
 

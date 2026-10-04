@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/pkg/shared"
@@ -16,6 +17,8 @@ var (
 	ErrInvalidUUID          = errors.New("invalid uuid format")
 	ErrConversationNotFound = errors.New("conversation not found")
 	ErrDeviceNotFound       = errors.New("device identity not found")
+	ErrInvalidSession       = errors.New("invalid or untrusted device session")
+	ErrDeviceMismatch       = errors.New("sender device is not bound to the authenticated user")
 )
 
 type MessagingService interface {
@@ -96,6 +99,12 @@ func (s *messagingService) ProcessOutbox(ctx context.Context, userID uuid.UUID, 
 
 // #region MessagesAndContacts
 func (s *messagingService) SendMessage(ctx context.Context, senderID uuid.UUID, msg *model.Message) error {
+	if msg == nil {
+		return ErrInvalidSession
+	}
+	if err := s.ValidateSenderDeviceOwnership(ctx, senderID, msg.SenderDeviceID); err != nil {
+		return err
+	}
 	msg.SenderID = senderID
 	return s.repo.CreateMessage(ctx, msg)
 }
@@ -210,6 +219,33 @@ func BuildPreKeyBundle(identity *model.UserDeviceIdentity, oneTimePreKey *model.
 		bundle.PreKeyPublic = oneTimePreKey.PublicKey
 	}
 	return bundle
+}
+
+func ValidateSenderDeviceBinding(userID uuid.UUID, deviceID string, trustedDevices []string) error {
+	if userID == uuid.Nil {
+		return ErrInvalidSession
+	}
+	deviceID = strings.TrimSpace(deviceID)
+	if deviceID == "" {
+		return ErrInvalidSession
+	}
+	for _, trustedDeviceID := range trustedDevices {
+		if strings.EqualFold(strings.TrimSpace(trustedDeviceID), deviceID) {
+			return nil
+		}
+	}
+	return ErrDeviceMismatch
+}
+
+func (s *messagingService) ValidateSenderDeviceOwnership(ctx context.Context, userID uuid.UUID, deviceID string) error {
+	if userID == uuid.Nil || strings.TrimSpace(deviceID) == "" {
+		return ErrInvalidSession
+	}
+	identity, err := s.repo.GetDeviceIdentity(ctx, userID, deviceID)
+	if err != nil || identity == nil {
+		return ErrInvalidSession
+	}
+	return nil
 }
 
 func (s *messagingService) UploadDeviceKeys(ctx context.Context, userID uuid.UUID, req model.UploadDeviceKeysRequest) error {

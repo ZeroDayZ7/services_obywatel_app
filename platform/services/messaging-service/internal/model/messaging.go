@@ -241,4 +241,63 @@ type PreKeyBundleDto struct {
 	IdentityKey           []byte  `json:"identityKey"`
 }
 
+// SignalCiphertextEnvelope – transportowa koperta E2EE dla wiadomości wysyłanych do serwera.
+// Backend nie dekoduje jej treści; służy wyłącznie jako bezpieczny kanał przekazu i walidacji device binding.
+type SignalCiphertextEnvelope struct {
+	Type                   uint8     `json:"type,omitempty"`
+	TypeSnake              uint8     `json:"signal_message_type,omitempty"`
+	Ciphertext             []byte    `json:"ciphertext,omitempty"`
+	SenderDeviceID         string    `json:"senderDeviceId,omitempty"`
+	SenderDeviceIDSnake    string    `json:"sender_device_id,omitempty"`
+	RecipientUserID        uuid.UUID `json:"recipientUserId,omitempty"`
+	RecipientUserIDSnake   uuid.UUID `json:"recipient_user_id,omitempty"`
+	RecipientDeviceID      string    `json:"recipientDeviceId,omitempty"`
+	RecipientDeviceIDSnake string    `json:"recipient_device_id,omitempty"`
+}
+
+func (r *SignalCiphertextEnvelope) Normalize() {
+	if r.Type == 0 {
+		r.Type = r.TypeSnake
+	}
+	if r.SenderDeviceID == "" {
+		r.SenderDeviceID = r.SenderDeviceIDSnake
+	}
+	if r.RecipientUserID == uuid.Nil {
+		r.RecipientUserID = r.RecipientUserIDSnake
+	}
+	if r.RecipientDeviceID == "" {
+		r.RecipientDeviceID = r.RecipientDeviceIDSnake
+	}
+}
+
+// SendMessageRequest – request dla endpointu wysyłki wiadomości z obsługą zaszyfrowanych kopert Signal.
+type SendMessageRequest struct {
+	ConversationID         *uuid.UUID `json:"conversationId,omitempty"`
+	ConversationIDSnake    *uuid.UUID `json:"conversation_id,omitempty"`
+	SenderDeviceID         string     `json:"senderDeviceId,omitempty"`
+	SenderDeviceIDSnake    string     `json:"sender_device_id,omitempty"`
+	RecipientUserID        uuid.UUID  `json:"recipientUserId,omitempty"`
+	RecipientUserIDSnake   uuid.UUID  `json:"recipient_user_id,omitempty"`
+	RecipientDeviceID      string     `json:"recipientDeviceId,omitempty"`
+	RecipientDeviceIDSnake string     `json:"recipient_device_id,omitempty"`
+	Ciphertext             []byte     `json:"ciphertext,omitempty"`
+	Type                   uint8      `json:"type,omitempty"`
+	Content                string     `json:"content,omitempty"`
+}
+
+func (r *SendMessageRequest) Normalize() {
+	if r.ConversationID == nil {
+		r.ConversationID = r.ConversationIDSnake
+	}
+	if r.SenderDeviceID == "" {
+		r.SenderDeviceID = r.SenderDeviceIDSnake
+	}
+	if r.RecipientUserID == uuid.Nil {
+		r.RecipientUserID = r.RecipientUserIDSnake
+	}
+	if r.RecipientDeviceID == "" {
+		r.RecipientDeviceID = r.RecipientDeviceIDSnake
+	}
+}
+
 // #endregion

@@ -92,3 +92,17 @@ func TestBuildPreKeyBundleWithoutOneTimePreKey(t *testing.T) {
 		t.Fatalf("expected empty prekey public payload, got %q", string(bundle.PreKeyPublic))
 	}
 }
+
+func TestValidateSenderDeviceBindingAllowsRegisteredDevice(t *testing.T) {
+	userID := uuid.New()
+	if err := ValidateSenderDeviceBinding(userID, "device-42", []string{"device-42", "device-77"}); err != nil {
+		t.Fatalf("expected device to be accepted, got %v", err)
+	}
+}
+
+func TestValidateSenderDeviceBindingRejectsUnknownDevice(t *testing.T) {
+	userID := uuid.New()
+	if err := ValidateSenderDeviceBinding(userID, "device-999", []string{"device-42", "device-77"}); err == nil {
+		t.Fatal("expected mismatch to be rejected")
+	}
+}
