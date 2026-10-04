@@ -13,5 +13,6 @@ docker compose up -d messaging-service
 docker compose up --build messaging-service
 
 docker compose up -d --build messaging-service
+docker compose up -d --force-recreate
 
 find . -type f -name "combined.txt" -delete
