@@ -17,6 +17,10 @@ type AuthConfig struct {
 	Domain string `mapstructure:"AUTH_DOMAIN" validate:"required"`
 }
 
+type SecretConfig struct {
+	Provider string `mapstructure:"SECRET_PROVIDER"`
+}
+
 type AgentConfig struct {
 	SocketPath string `mapstructure:"SECRET_AGENT_SOCKET_PATH"`
 }
@@ -56,6 +60,7 @@ type Config struct {
 	KMS             viper.KMSConfig         `mapstructure:",squash"`
 	JWT             JWTConfig               `mapstructure:",squash"`
 	Agent           AgentConfig             `mapstructure:",squash"`
+	Secret          SecretConfig            `mapstructure:",squash"`
 	Shutdown        time.Duration           `mapstructure:"SHUTDOWN_TIMEOUT" validate:"required"`
 }
 
@@ -78,7 +83,7 @@ func LoadConfigGlobal() error {
 	viper.SetRedisDefaults()
 	viper.SetKMSDefaults()
 
-	// W LoadConfigGlobal() dopisz na początku:
+	// Explicit secret provider selection must be configured per environment; no silent fallback.
 	spfViper.SetDefault("SECRET_AGENT_SOCKET_PATH", "/var/run/agent-sockets/agent.sock")
 
 	spfViper.SetDefault("HMAC_TARGET_KEYS", map[string]KeyTarget{

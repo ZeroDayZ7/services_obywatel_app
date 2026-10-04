@@ -10,6 +10,7 @@ import (
 	"github.com/zerodayz7/platform/pkg/httpserver"
 	"github.com/zerodayz7/platform/pkg/rabbitmq"
 	"github.com/zerodayz7/platform/pkg/redis"
+	"github.com/zerodayz7/platform/pkg/secretprovider"
 	"github.com/zerodayz7/platform/pkg/server"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/pkg/telemetry"
@@ -60,66 +61,48 @@ func main() {
 	}
 
 	// =========================================================================
-	// 4. ZBIORCZY BOOTSTRAP POŚWIADCZEŃ Z SIDECARA NA PODSTAWIE MANIFESTU
+	// 4. SELECT SECRET PROVIDER BEFORE RESOLVING RUNTIME CREDENTIALS
 	// =========================================================================
-	agentManifest, err := agent.LoadManifest("secrets.yaml")
+	secretProvider, err := secretprovider.New(secretprovider.Config{
+		Provider:      config.AppConfig.Secret.Provider,
+		ManifestPath:  "secrets.yaml",
+		TargetService: config.AppConfig.Server.AppName,
+		Timeout:       5 * time.Second,
+	})
 	if err != nil {
-		log.Error("❌ Nie udało się wczytać manifestu agenta (secrets.yaml)", "error", err)
+		log.Error("❌ secret provider initialization failed", "error", err)
 		os.Exit(1)
 	}
-
-	requiredServices := agentManifest.GetEnabledResourceNames()
-	if len(requiredServices) == 0 {
-		log.Warn("Brak aktywnych zasobów w manifeście do pobrania podczas bootstrapu")
-	}
-
-	log.Info("🚀 Rozpoczynanie zbiorczego bootstrapu poświadczeń",
-		"service", agentManifest.Service,
-		"resources", requiredServices,
-		"socket_path", agentManifest.SocketPath,
-	)
-
-	agentCfg := agent.Config{
-		SocketPath:    agentManifest.SocketPath,
-		TargetService: agentManifest.Service,
-		Timeout:       agentManifest.Timeout,
-	}
-
-	ctxBootstrap, cancelBootstrap := context.WithTimeout(context.Background(), agentManifest.Timeout)
-	bootResp, cleanupSecrets, err := agent.BootstrapApp(ctxBootstrap, agentCfg, requiredServices)
-	cancelBootstrap()
-
-	if err != nil {
-		log.Error("❌ Zbiorczy bootstrap poświadczeń z sidecara nie powiódł się", "error", err)
-		os.Exit(1)
-	}
+	log.Info("✅ secret provider initialized", "provider", config.AppConfig.Secret.Provider)
 
 	// Runtime bootstrap credentials are materialized locally and kept separate from
 	// static config. This avoids mutating AppConfig with secrets while still allowing
 	// client initialization to consume the resolved credentials.
-	runtimeDB, runtimeRedis, runtimeRabbit, err := config.BuildRuntimeConfigs(config.AppConfig, bootResp)
+	runtimeDB, runtimeRedis, _, err := config.BuildRuntimeConfigs(config.AppConfig, secretProvider)
 	if err != nil {
-		log.Error("❌ Nie udało się zmapować runtime credentials z bootstrapu", "error", err)
+		log.Error("❌ failed to resolve runtime credentials", "error", err)
 		os.Exit(1)
 	}
 
-	if bootResp.Postgres != nil {
-		log.Info("✅ Pomyślnie pobrano poświadczenia Postgres", "user", bootResp.Postgres.Username)
-	}
-	if bootResp.Redis != nil {
-		log.Info("✅ Pomyślnie pobrano poświadczenia Redis", bootResp.Redis.Username)
-	}
-	if bootResp.RabbitMQ != nil {
-		log.Info("✅ Pomyślnie pobrano poświadczenia RabbitMQ", "user", bootResp.RabbitMQ.Username, runtimeRabbit)
+	if config.AppConfig.Secret.Provider == secretprovider.KMS12Provider {
+		log.Info("✅ running with KMS12 Secret Agent provider")
 	}
 
 	// -------------------------------------------------------------------------
 	// INICJALIZACJA USŁUG Z POBRANYMI POŚWIADCZENIAMI
 	// -------------------------------------------------------------------------
+	var agentManifest *agent.Manifest
+	if config.AppConfig.Secret.Provider == secretprovider.KMS12Provider {
+		agentManifest, err = agent.LoadManifest("secrets.yaml")
+		if err != nil {
+			log.Error("❌ Nie udało się wczytać manifestu agenta (secrets.yaml)", "error", err)
+			os.Exit(1)
+		}
+	}
 
 	// A. Redis Client Init
 	var redisClient *redis.Client
-	if bootResp.Redis != nil {
+	if runtimeRedis.Password != "" || runtimeRedis.Username != "" {
 		redisClient, err = redis.New(redis.Config(runtimeRedis))
 		if err != nil || redisClient == nil {
 			log.Error("❌ Inicjalizacja Redisa nie powiodła się po pobraniu poświadczeń", "error", err)
@@ -139,8 +122,9 @@ func main() {
 	db, closeDB := config.MustInitDB(runtimeDB)
 	defer closeDB()
 
-	// CZYŚCIMY PAMIĘĆ Z SUROWYCH BAJTÓW HASEŁ NATYCHMIAST PO POŁĄCZENIU Z USŁUGAMI
-	cleanupSecrets()
+	if cleaner, ok := secretProvider.(interface{ Cleanup() }); ok {
+		cleaner.Cleanup()
+	}
 
 	// =========================================================================
 	// 5. START LICZNIKA / PĘTLI ROTACJI W TLE (Zero-Downtime Credential Rotation)
@@ -158,9 +142,10 @@ func main() {
 		redisAdapter = redis.NewAdapter(redisClient)
 	}
 
-	// Uruchomienie pętli rotacji w goroutines
-	if err := agent.StartAutoRotation(ctxApp, agentManifest, gormAdapter, redisAdapter); err != nil {
-		log.Error("❌ Nie udało się uruchomić automatycznej rotacji poświadczeń", "error", err)
+	if config.AppConfig.Secret.Provider == secretprovider.KMS12Provider && agentManifest != nil {
+		if err := agent.StartAutoRotation(ctxApp, agentManifest, gormAdapter, redisAdapter); err != nil {
+			log.Error("❌ Nie udało się uruchomić automatycznej rotacji poświadczeń", "error", err)
+		}
 	}
 	// =========================================================================
 	// 6. RabbitMQ Publisher Setup

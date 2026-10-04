@@ -30,8 +30,8 @@ type ServerConfig struct {
 type DBConfig struct {
 	Host            string        `mapstructure:"DB_HOST" validate:"required"`
 	Port            int           `mapstructure:"DB_PORT" validate:"required"`
-	User            string        `mapstructure:"DB_USER" validate:"required"`
-	Password        string        `mapstructure:"DB_PASSWORD" validate:"required"`
+	User            string        `mapstructure:"DB_USER"`
+	Password        string        `mapstructure:"DB_PASSWORD"`
 	DBName          string        `mapstructure:"DB_NAME" validate:"required"`
 	SSLMode         string        `mapstructure:"DB_SSLMODE" validate:"required"`
 	MaxOpenConns    int           `mapstructure:"DB_MAX_OPEN_CONNS" validate:"omitempty,min=1"`
@@ -80,8 +80,8 @@ type RabbitMQConfig struct {
 	Enabled  bool   `mapstructure:"RABBITMQ_ENABLED"`
 	Host     string `mapstructure:"RABBITMQ_HOST" validate:"required_if=Enabled true"`
 	Port     int    `mapstructure:"RABBITMQ_PORT" validate:"required_if=Enabled true"`
-	User     string `mapstructure:"RABBITMQ_USER" validate:"required_if=Enabled true"`
-	Password string `mapstructure:"RABBITMQ_PASSWORD" validate:"required_if=Enabled true"`
+	User     string `mapstructure:"RABBITMQ_USER"`
+	Password string `mapstructure:"RABBITMQ_PASSWORD"`
 	VHost    string `mapstructure:"RABBITMQ_VHOST"`
 }
 
