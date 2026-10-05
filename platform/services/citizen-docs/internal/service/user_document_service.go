@@ -128,7 +128,6 @@ func (s *userDocumentService) CreateDocument(ctx context.Context, payload model.
 	doc := &model.CitizenDocument{
 		UserID:             payload.UserID,
 		DocumentType:       strings.ToUpper(payload.DocumentType),
-		DocumentNumber:     payload.DocumentNumber,
 		DocumentNumberHash: computeDocumentNumberHash(payload.DocumentNumber, s.hmacDocumentNumberSecret),
 		Status:             payload.Status,
 		Metadata:           payload.Metadata,
@@ -232,10 +231,9 @@ func (s *userDocumentService) GetDocumentPDF(ctx context.Context, id uuid.UUID) 
 }
 
 func buildDocumentPDF(doc *model.CitizenDocument) []byte {
-	header := fmt.Sprintf("Citizen Document\nType: %s\nUserID: %s\nDocumentNumber: %s\nStatus: %s",
+	header := fmt.Sprintf("Citizen Document\nType: %s\nUserID: %s\nStatus: %s",
 		doc.DocumentType,
 		doc.UserID.String(),
-		doc.DocumentNumber,
 		doc.Status,
 	)
 	content := escapePDFText(header)

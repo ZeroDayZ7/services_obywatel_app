@@ -114,7 +114,15 @@ func SeedDataWithSecurity(db *gorm.DB, keyStore *httpserver.KeyStore, cryptor *e
 	issuedRecent := now.AddDate(0, -2, 0)
 	expiresIn3Years := now.AddDate(3, 0, 0)
 
-	seedDocs := []model.CitizenDocument{
+	seedInputs := []struct {
+		UserID         uuid.UUID
+		DocumentType   string
+		DocumentNumber string
+		Status         model.DocumentStatus
+		Metadata       datatypes.JSON
+		IssuedAt       *time.Time
+		ExpiresAt      *time.Time
+	}{
 		{UserID: citizenUserID1, DocumentType: "ID_CARD", DocumentNumber: "ABC123456", Status: model.DocumentStatusActive, Metadata: datatypes.JSON(`{"issuer":"Prezydent Miasta Katowice","country":"PL","organ_code":"2469"}`), IssuedAt: &issued1YearAgo, ExpiresAt: &expiresIn9Years},
 		{UserID: citizenUserID1, DocumentType: "DRIVERS_LICENSE", DocumentNumber: "99999/22/2469", Status: model.DocumentStatusActive, Metadata: datatypes.JSON(`{"issuer":"Starosta Będziński","country":"PL","categories":["B","A2"],"restrictions":"01.06"}`), IssuedAt: &issued5YearsAgo, ExpiresAt: &expiresIn5Years},
 		{UserID: citizenUserID1, DocumentType: "PASSPORT", DocumentNumber: "EA8765432", Status: model.DocumentStatusActive, Metadata: datatypes.JSON(`{"issuer":"Wojewoda Śląski","country":"PL","biometric":true}`), IssuedAt: &issuedRecent, ExpiresAt: &expiresIn9Years},
@@ -125,9 +133,10 @@ func SeedDataWithSecurity(db *gorm.DB, keyStore *httpserver.KeyStore, cryptor *e
 		{UserID: citizenUserID2, DocumentType: "PASSPORT", DocumentNumber: "EB1122334", Status: model.DocumentStatusRevoked, Metadata: datatypes.JSON(`{"issuer":"Wojewoda Śląski","country":"PL","revocation_reason":"REPORTED_LOST"}`), IssuedAt: &issued5YearsAgo, ExpiresAt: &expired1MonthAgo},
 	}
 
-	toInsert := make([]model.CitizenDocument, 0, len(seedDocs))
-	for i := range seedDocs {
-		hash := crypto.ComputeHMAC256Hex([]byte(seedDocs[i].DocumentNumber), documentNumberSecret)
+	toInsert := make([]model.CitizenDocument, 0, len(seedInputs))
+	for i := range seedInputs {
+		documentNumber := seedInputs[i].DocumentNumber
+		hash := crypto.ComputeHMAC256Hex([]byte(documentNumber), documentNumberSecret)
 		if !forceSeed {
 			var existing model.CitizenDocument
 			err := db.WithContext(context.Background()).Where("document_number_hash = ?", hash).First(&existing).Error
@@ -135,25 +144,30 @@ func SeedDataWithSecurity(db *gorm.DB, keyStore *httpserver.KeyStore, cryptor *e
 				continue
 			}
 			if !errors.Is(err, gorm.ErrRecordNotFound) {
-				return fmt.Errorf("failed to check document %s before seed insert: %w", seedDocs[i].DocumentNumber, err)
+				return fmt.Errorf("failed to check document %s before seed insert: %w", documentNumber, err)
 			}
 		}
 
-		metadataBytes := []byte(seedDocs[i].Metadata)
+		metadataBytes := []byte(seedInputs[i].Metadata)
 		if len(metadataBytes) == 0 {
 			metadataBytes = []byte(`{}`)
 		}
-		keyAlias := documentDataKeyAlias(seedDocs[i].DocumentType)
+		keyAlias := documentDataKeyAlias(seedInputs[i].DocumentType)
 		encryptedPayload, err := cryptor.SealWithDataKey(context.Background(), keyAlias, metadataBytes)
 		if err != nil {
-			return fmt.Errorf("failed to encrypt metadata for document %s via KMS alias %s: %w", seedDocs[i].DocumentNumber, keyAlias, err)
+			return fmt.Errorf("failed to encrypt metadata for document %s via KMS alias %s: %w", documentNumber, keyAlias, err)
 		}
 
-		seedDocs[i].DocumentNumberHash = hash
-		seedDocs[i].EncryptedMetadata = encryptedPayload.EncryptedData
-		seedDocs[i].EncryptedDEK = encryptedPayload.EncryptedDEK
-		seedDocs[i].Metadata = datatypes.JSON(metadataBytes)
-		toInsert = append(toInsert, seedDocs[i])
+		toInsert = append(toInsert, model.CitizenDocument{
+			UserID:             seedInputs[i].UserID,
+			DocumentType:       seedInputs[i].DocumentType,
+			Status:             seedInputs[i].Status,
+			DocumentNumberHash: hash,
+			EncryptedMetadata:  encryptedPayload.EncryptedData,
+			EncryptedDEK:       encryptedPayload.EncryptedDEK,
+			IssuedAt:           seedInputs[i].IssuedAt,
+			ExpiresAt:          seedInputs[i].ExpiresAt,
+		})
 	}
 
 	if len(toInsert) == 0 {
@@ -168,4 +182,3 @@ func SeedDataWithSecurity(db *gorm.DB, keyStore *httpserver.KeyStore, cryptor *e
 	log.Info("[SEED] Zakończono zasiewanie dokumentów obywateli", "seeded_documents", len(toInsert), "force_seed", forceSeed)
 	return nil
 }
-
