@@ -459,8 +459,6 @@ func (s *authService) prepare2FASession(ctx context.Context, user *model.User, f
 	}, nil
 }
 
-// region finalizeLogin
-//
 // #region finalizeLogin
 func (s *authService) finalizeLogin(ctx context.Context, user *model.User, fingerprint string) (*http.LoginResponse, error) {
 	log := shared.GetLogger()

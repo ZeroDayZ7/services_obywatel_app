@@ -26,8 +26,13 @@ func NewContainer(
 	cryptor *envelope.EnvelopeCryptor,
 	keyStore *httpserver.KeyStore,
 ) *Container {
+	hmacDocumentNumberSecret, _, ok := keyStore.GetKey("document_number")
+	if !ok {
+		panic("critical error: missing 'document_number' hmac key in KeyStore")
+	}
+
 	docRepo := repository.NewUserDocumentRepository(db)
-	docSvc := service.NewUserDocumentService(docRepo, docRepo, cfg, logger, cryptor)
+	docSvc := service.NewUserDocumentService(docRepo, cfg, cryptor, hmacDocumentNumberSecret, "documents-metadata-key")
 
 	return &Container{
 		DB:              db,

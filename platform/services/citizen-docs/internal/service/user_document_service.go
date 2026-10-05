@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/zerodayz7/platform/pkg/crypto"
+	"github.com/zerodayz7/platform/pkg/envelope"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/citizen-docs/config"
 	"github.com/zerodayz7/platform/services/citizen-docs/internal/model"
@@ -14,19 +16,62 @@ import (
 	"gorm.io/datatypes"
 )
 
+const defaultDocumentMetadataKeyAlias = "documents-metadata-key"
+
 type userDocumentService struct {
-	docRepo repository.UserDocumentRepo
-	cfg     *config.Config
+	docRepo                  repository.UserDocumentRepo
+	cfg                      *config.Config
+	cryptor                  *envelope.EnvelopeCryptor
+	hmacDocumentNumberSecret []byte
+	metadataKeyAlias         string
 }
 
 func NewUserDocumentService(
 	docRepo repository.UserDocumentRepo,
-	_ repository.UserDocumentRepo,
 	cfg *config.Config,
-	_ any,
-	_ any,
+	cryptor *envelope.EnvelopeCryptor,
+	hmacDocumentNumberSecret []byte,
+	metadataKeyAlias string,
 ) UserDocumentService {
-	return &userDocumentService{docRepo: docRepo, cfg: cfg}
+	if metadataKeyAlias == "" {
+		metadataKeyAlias = defaultDocumentMetadataKeyAlias
+	}
+	return &userDocumentService{
+		docRepo:                  docRepo,
+		cfg:                      cfg,
+		cryptor:                  cryptor,
+		hmacDocumentNumberSecret: hmacDocumentNumberSecret,
+		metadataKeyAlias:         metadataKeyAlias,
+	}
+}
+
+func computeDocumentNumberHash(documentNumber string, secret []byte) string {
+	return crypto.ComputeHMAC256Hex([]byte(documentNumber), secret)
+}
+
+func (s *userDocumentService) decryptDocumentMetadata(ctx context.Context, doc *model.CitizenDocument) (*model.CitizenDocument, error) {
+	if doc == nil {
+		return nil, nil
+	}
+	if s.cryptor == nil {
+		return nil, fmt.Errorf("document cryptor is not configured")
+	}
+	if len(doc.EncryptedMetadata) == 0 && len(doc.EncryptedDEK) == 0 {
+		if len(doc.Metadata) == 0 {
+			doc.Metadata = datatypes.JSON(`{}`)
+		}
+		return doc, nil
+	}
+
+	plaintext, err := s.cryptor.OpenWithDataKey(ctx, s.metadataKeyAlias, doc.EncryptedMetadata, doc.EncryptedDEK)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt document metadata: %w", err)
+	}
+	if len(plaintext) == 0 {
+		plaintext = []byte(`{}`)
+	}
+	doc.Metadata = datatypes.JSON(plaintext)
+	return doc, nil
 }
 
 func (s *userDocumentService) CreateDocument(ctx context.Context, payload model.CreateDocumentPayload) (*model.CitizenDocument, error) {
@@ -45,22 +90,41 @@ func (s *userDocumentService) CreateDocument(ctx context.Context, payload model.
 	if payload.Metadata == nil {
 		payload.Metadata = datatypes.JSON(`{}`)
 	}
+	if s.cryptor == nil {
+		return nil, fmt.Errorf("document cryptor is not configured")
+	}
+	if len(s.hmacDocumentNumberSecret) == 0 {
+		return nil, fmt.Errorf("document number HMAC secret is not configured")
+	}
+
+	metadataBytes := []byte(payload.Metadata)
+	if len(metadataBytes) == 0 {
+		metadataBytes = []byte(`{}`)
+	}
+
+	encryptedPayload, err := s.cryptor.SealWithDataKey(ctx, s.metadataKeyAlias, metadataBytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encrypt document metadata: %w", err)
+	}
 
 	doc := &model.CitizenDocument{
-		UserID:         payload.UserID,
-		DocumentType:   strings.ToUpper(payload.DocumentType),
-		DocumentNumber: payload.DocumentNumber,
-		Status:         payload.Status,
-		Metadata:       payload.Metadata,
-		IssuedAt:       payload.IssuedAt,
-		ExpiresAt:      payload.ExpiresAt,
+		UserID:             payload.UserID,
+		DocumentType:       strings.ToUpper(payload.DocumentType),
+		DocumentNumber:     payload.DocumentNumber,
+		DocumentNumberHash: computeDocumentNumberHash(payload.DocumentNumber, s.hmacDocumentNumberSecret),
+		Status:             payload.Status,
+		Metadata:           payload.Metadata,
+		EncryptedMetadata:  encryptedPayload.EncryptedData,
+		EncryptedDEK:       encryptedPayload.EncryptedDEK,
+		IssuedAt:           payload.IssuedAt,
+		ExpiresAt:          payload.ExpiresAt,
 	}
 
 	if err := s.docRepo.CreateDocument(ctx, doc); err != nil {
 		return nil, fmt.Errorf("failed to create citizen document: %w", err)
 	}
 
-	return doc, nil
+	return s.decryptDocumentMetadata(ctx, doc)
 }
 
 func (s *userDocumentService) GetDocumentByID(ctx context.Context, id uuid.UUID) (*model.CitizenDocument, error) {
@@ -72,7 +136,28 @@ func (s *userDocumentService) GetDocumentByID(ctx context.Context, id uuid.UUID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch document %s: %w", id, err)
 	}
-	return doc, nil
+	if doc == nil {
+		return nil, nil
+	}
+	return s.decryptDocumentMetadata(ctx, doc)
+}
+
+func (s *userDocumentService) GetDocumentByDocumentNumber(ctx context.Context, documentNumber string) (*model.CitizenDocument, error) {
+	if documentNumber == "" {
+		return nil, fmt.Errorf("document_number is required")
+	}
+	if len(s.hmacDocumentNumberSecret) == 0 {
+		return nil, fmt.Errorf("document number HMAC secret is not configured")
+	}
+
+	doc, err := s.docRepo.GetDocumentByDocumentNumberHash(ctx, computeDocumentNumberHash(documentNumber, s.hmacDocumentNumberSecret))
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch document by document_number: %w", err)
+	}
+	if doc == nil {
+		return nil, nil
+	}
+	return s.decryptDocumentMetadata(ctx, doc)
 }
 
 func (s *userDocumentService) GetDocumentsByUserID(ctx context.Context, userID uuid.UUID) ([]model.CitizenDocument, error) {
@@ -93,6 +178,13 @@ func (s *userDocumentService) GetDocumentsByUserID(ctx context.Context, userID u
 	if docs == nil {
 		log.InfoMap("[userDocumentService.GetDocumentsByUserID] 4. Repository returned nil; normalizing to empty slice", map[string]any{"user_id": userID.String()})
 		return make([]model.CitizenDocument, 0), nil
+	}
+	for i := range docs {
+		if decrypted, err := s.decryptDocumentMetadata(ctx, &docs[i]); err != nil {
+			return nil, err
+		} else {
+			docs[i] = *decrypted
+		}
 	}
 	log.InfoMap("[userDocumentService.GetDocumentsByUserID] 5. Documents loaded successfully", map[string]any{"user_id": userID.String(), "count": len(docs)})
 	return docs, nil

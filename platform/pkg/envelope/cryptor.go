@@ -90,15 +90,14 @@ func (e *EnvelopeCryptor) Seal(ctx context.Context, keyAlias string, plaintext [
 
 // #region Unseal
 
-// Unseal automatycznie rozpakowuje wersję klucza z EncryptedDEK i odszyfrowuje dane
-func (e *EnvelopeCryptor) Unseal(ctx context.Context, keyAlias string, encryptedData []byte, packedDEK []byte) ([]byte, error) {
-	if len(packedDEK) < 4 {
+// OpenWithDataKey rozpakowuje zaszyfrowany DEK i odszyfrowuje dane z użyciem danych z KMS.
+func (e *EnvelopeCryptor) OpenWithDataKey(ctx context.Context, keyAlias string, encryptedData []byte, encryptedDEK []byte) ([]byte, error) {
+	if len(encryptedDEK) < 4 {
 		return nil, fmt.Errorf("envelope: packed DEK too short")
 	}
 
-	// Automatyczne wyciągnięcie wersji z pierwszych 4 bajtów
-	keyVersion := int(binary.BigEndian.Uint32(packedDEK[0:4]))
-	rawEncryptedDEK := packedDEK[4:]
+	keyVersion := int(binary.BigEndian.Uint32(encryptedDEK[0:4]))
+	rawEncryptedDEK := encryptedDEK[4:]
 
 	plaintextDEK, err := kms.DecryptDEK(ctx, e.kmsCfg, keyAlias, rawEncryptedDEK, keyVersion)
 	if err != nil {
@@ -112,4 +111,9 @@ func (e *EnvelopeCryptor) Unseal(ctx context.Context, keyAlias string, encrypted
 	}
 
 	return plaintext, nil
+}
+
+// Unseal automatycznie rozpakowuje wersję klucza z EncryptedDEK i odszyfrowuje dane
+func (e *EnvelopeCryptor) Unseal(ctx context.Context, keyAlias string, encryptedData []byte, packedDEK []byte) ([]byte, error) {
+	return e.OpenWithDataKey(ctx, keyAlias, encryptedData, packedDEK)
 }

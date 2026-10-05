@@ -71,7 +71,8 @@ func LoadConfigGlobal() error {
 		},
 	})
 	spfViper.SetDefault("HMAC_INTERNAL_KEYS", map[string]KeyTarget{
-		"pesel": {TargetKey: "hmac-docs-pesel-index", Algorithm: "HmacSha256"},
+		"pesel":          {TargetKey: "hmac-docs-pesel-index", Algorithm: "HmacSha256"},
+		"document_number": {TargetKey: "hmac-documents-number-index", Algorithm: "HmacSha256"},
 	})
 	spfViper.SetDefault("HMAC_PESEL_KEY", KeyTarget{TargetKey: "hmac-docs-pesel-index", Algorithm: "HmacSha256"})
 

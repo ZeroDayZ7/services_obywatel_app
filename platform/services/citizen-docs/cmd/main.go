@@ -26,6 +26,7 @@ func main() {
 	}
 
 	log := shared.GetLogger()
+	seedData := config.ShouldSeedData(os.Args[1:])
 
 	// 2. Inicjalizacja KeyStore i Kontekstu
 	keyStore := httpserver.NewKeyStore()
@@ -47,6 +48,13 @@ func main() {
 
 	db, closeDB := config.MustInitDB(config.AppConfig.Database)
 	defer closeDB()
+
+	if seedData {
+		if err := config.SeedDataWithSecurity(db, keyStore, cryptor, &config.AppConfig); err != nil {
+			log.Error("Seed data failed", "error", err)
+			os.Exit(1)
+		}
+	}
 
 	container := di.NewContainer(db, log, &config.AppConfig, cryptor, keyStore)
 

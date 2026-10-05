@@ -33,6 +33,16 @@ func (r *userDocumentRepository) GetDocumentByID(ctx context.Context, id uuid.UU
 	return &doc, nil
 }
 
+func (r *userDocumentRepository) GetDocumentByDocumentNumberHash(ctx context.Context, documentNumberHash string) (*model.CitizenDocument, error) {
+	var doc model.CitizenDocument
+	if err := r.db.WithContext(ctx).
+		Where("document_number_hash = ? AND deleted_at IS NULL", documentNumberHash).
+		First(&doc).Error; err != nil {
+		return nil, err
+	}
+	return &doc, nil
+}
+
 func (r *userDocumentRepository) GetDocumentsByUserID(ctx context.Context, userID uuid.UUID) ([]model.CitizenDocument, error) {
 	log := shared.GetLogger()
 	log.InfoMap("[userDocumentRepository.GetDocumentsByUserID] 1. Executing document lookup query", map[string]any{"user_id": userID.String()})
