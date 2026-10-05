@@ -59,19 +59,14 @@ func LoadConfigGlobal() error {
 	viper.SetRedisDefaults()
 	viper.SetSessionDefaults()
 	viper.SetKMSDefaults()
-	spfViper.SetDefault("DOCUMENT_ENCRYPTION_KEY", "change-me-document-encryption-key")
+
+	// Domyślne mapy kluczy HMAC dla wewnętrznych indeksów
 	spfViper.SetDefault("HMAC_TARGET_KEYS", map[string]KeyTarget{
-		"gateway": {
-			TargetKey: "hmac-gateway-docs",
-			Algorithm: "HmacSha256",
-		},
-		"officer-bff": {
-			TargetKey: "hmac-bff-docs",
-			Algorithm: "HmacSha256",
-		},
+		"gateway":     {TargetKey: "hmac-gateway-docs", Algorithm: "HmacSha256"},
+		"officer-bff": {TargetKey: "hmac-bff-docs", Algorithm: "HmacSha256"},
 	})
 	spfViper.SetDefault("HMAC_INTERNAL_KEYS", map[string]KeyTarget{
-		"pesel":          {TargetKey: "hmac-docs-pesel-index", Algorithm: "HmacSha256"},
+		"pesel":           {TargetKey: "hmac-docs-pesel-index", Algorithm: "HmacSha256"},
 		"document_number": {TargetKey: "hmac-documents-number-index", Algorithm: "HmacSha256"},
 	})
 	spfViper.SetDefault("HMAC_PESEL_KEY", KeyTarget{TargetKey: "hmac-docs-pesel-index", Algorithm: "HmacSha256"})

@@ -2,15 +2,15 @@ package config
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"os"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/pkg/crypto"
 	"github.com/zerodayz7/platform/pkg/envelope"
 	"github.com/zerodayz7/platform/pkg/httpserver"
+	"github.com/zerodayz7/platform/pkg/kms"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/citizen-docs/internal/model"
 	"gorm.io/datatypes"
@@ -18,11 +18,47 @@ import (
 )
 
 func SeedData(db *gorm.DB) error {
-	return SeedDataWithSecurity(db, nil, nil, nil)
+	if db == nil {
+		return fmt.Errorf("database is nil")
+	}
+
+	keyStore := httpserver.NewKeyStore()
+	if err := loadSeedSecurityKeys(&AppConfig, keyStore); err != nil {
+		return fmt.Errorf("failed to load security keys for seed: %w", err)
+	}
+
+	cryptor := envelope.NewEnvelopeCryptor(AppConfig.ToKMSServiceConfig())
+	return SeedDataWithSecurity(db, keyStore, cryptor, &AppConfig, false)
 }
 
-func SeedDataWithSecurity(db *gorm.DB, keyStore *httpserver.KeyStore, cryptor *envelope.EnvelopeCryptor, cfg *Config) error {
+func loadSeedSecurityKeys(cfg *Config, keyStore *httpserver.KeyStore) error {
+	if cfg == nil {
+		return fmt.Errorf("config is nil")
+	}
+	if keyStore == nil {
+		return fmt.Errorf("keystore is nil")
+	}
+
+	kmsCfg := cfg.ToKMSServiceConfig()
+	if err := kms.HealthCheck(context.Background(), kmsCfg); err != nil {
+		return fmt.Errorf("kms health check: %w", err)
+	}
+
+	for alias, target := range cfg.GetAllSecurityKeys() {
+		keyBytes, version, err := kms.FetchSymmetricKeyWithVersion(context.Background(), kmsCfg, target.TargetKey, 1, target.Algorithm)
+		if err != nil {
+			return fmt.Errorf("fetch key %s (%s): %w", alias, target.TargetKey, err)
+		}
+		keyStore.SetKey(alias, keyBytes, uint32(version))
+	}
+
+	return nil
+}
+
+func SeedDataWithSecurity(db *gorm.DB, keyStore *httpserver.KeyStore, cryptor *envelope.EnvelopeCryptor, cfg *Config, forceSeed bool) error {
 	log := shared.GetLogger()
+	log.Info("[SEED] Rozpoczynam wykonywanie seedera dokumentów obywateli", "force_seed", forceSeed)
+
 	if db == nil {
 		return fmt.Errorf("database is nil")
 	}
@@ -34,8 +70,14 @@ func SeedDataWithSecurity(db *gorm.DB, keyStore *httpserver.KeyStore, cryptor *e
 	if err := db.Model(&model.CitizenDocument{}).Count(&count).Error; err != nil {
 		return fmt.Errorf("failed to check document count: %w", err)
 	}
-	if count > 0 {
-		return nil
+
+	if count > 0 && !forceSeed {
+		log.Info("[SEED] Tabela dokumentów już zawiera dane; sprawdzam, czy brakuje rekordów do uzupełnienia.", "existing_documents", count)
+	} else if count > 0 && forceSeed {
+		if err := db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&model.CitizenDocument{}).Error; err != nil {
+			return fmt.Errorf("failed to clear existing documents before forced seed: %w", err)
+		}
+		log.Info("[SEED] Wymuszony seed aktywny: wyczyszczono istniejące dokumenty przed uzupełnieniem danych testowych.", "removed_documents", count)
 	}
 
 	documentNumberSecret, _, ok := keyStore.GetKey("document_number")
@@ -67,7 +109,20 @@ func SeedDataWithSecurity(db *gorm.DB, keyStore *httpserver.KeyStore, cryptor *e
 		{UserID: citizenUserID2, DocumentType: "PASSPORT", DocumentNumber: "EB1122334", Status: model.DocumentStatusRevoked, Metadata: datatypes.JSON(`{"issuer":"Wojewoda Śląski","country":"PL","revocation_reason":"REPORTED_LOST"}`), IssuedAt: &issued5YearsAgo, ExpiresAt: &expired1MonthAgo},
 	}
 
+	toInsert := make([]model.CitizenDocument, 0, len(seedDocs))
 	for i := range seedDocs {
+		hash := crypto.ComputeHMAC256Hex([]byte(seedDocs[i].DocumentNumber), documentNumberSecret)
+		if !forceSeed {
+			var existing model.CitizenDocument
+			err := db.WithContext(context.Background()).Where("document_number_hash = ?", hash).First(&existing).Error
+			if err == nil {
+				continue
+			}
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return fmt.Errorf("failed to check document %s before seed insert: %w", seedDocs[i].DocumentNumber, err)
+			}
+		}
+
 		metadataBytes := []byte(seedDocs[i].Metadata)
 		if len(metadataBytes) == 0 {
 			metadataBytes = []byte(`{}`)
@@ -76,26 +131,24 @@ func SeedDataWithSecurity(db *gorm.DB, keyStore *httpserver.KeyStore, cryptor *e
 		if err != nil {
 			return fmt.Errorf("failed to encrypt metadata for document %s: %w", seedDocs[i].DocumentNumber, err)
 		}
-		seedDocs[i].DocumentNumberHash = crypto.ComputeHMAC256Hex([]byte(seedDocs[i].DocumentNumber), documentNumberSecret)
+
+		seedDocs[i].DocumentNumberHash = hash
 		seedDocs[i].EncryptedMetadata = encryptedPayload.EncryptedData
 		seedDocs[i].EncryptedDEK = encryptedPayload.EncryptedDEK
 		seedDocs[i].Metadata = datatypes.JSON(metadataBytes)
+		toInsert = append(toInsert, seedDocs[i])
 	}
 
-	if err := db.Create(&seedDocs).Error; err != nil {
+	if len(toInsert) == 0 {
+		log.Info("[SEED] Brak nowych dokumentów do zasiewu. Seed został pominięty, ponieważ wszystkie rekordy są już obecne.", "existing_documents", count)
+		return nil
+	}
+
+	if err := db.Create(&toInsert).Error; err != nil {
 		return fmt.Errorf("failed to seed citizen documents: %w", err)
 	}
 
-	log.Info("[SEED] Pomyślnie zasiano zróżnicowany zestaw dokumentów obywateli z wykorzystaniem Envelope Encryption i HMAC.")
+	log.Info("[SEED] Zakończono zasiewanie dokumentów obywateli", "seeded_documents", len(toInsert), "force_seed", forceSeed)
 	return nil
 }
 
-func ShouldSeedData(args []string) bool {
-	for _, arg := range args {
-		if strings.TrimSpace(arg) == "--seed" {
-			return true
-		}
-	}
-	seedFlag := strings.TrimSpace(os.Getenv("SEED_DATA"))
-	return strings.EqualFold(seedFlag, "true") || strings.EqualFold(seedFlag, "1") || strings.EqualFold(seedFlag, "yes")
-}
