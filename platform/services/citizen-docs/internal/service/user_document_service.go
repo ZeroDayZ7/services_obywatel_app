@@ -16,7 +16,23 @@ import (
 	"gorm.io/datatypes"
 )
 
-const defaultDocumentMetadataKeyAlias = "documents-metadata-key"
+const defaultDocumentMetadataKeyAlias = "docs-id-cards"
+
+func resolveDocumentKeyAlias(documentType string, fallback string) string {
+	switch strings.ToUpper(strings.TrimSpace(documentType)) {
+	case "ID_CARD", "ID-CARD":
+		return "docs-id-cards"
+	case "DRIVERS_LICENSE", "DRIVER_LICENSE", "DRIVERS-LICENSE":
+		return "docs-driver-license"
+	case "PASSPORT":
+		return "docs-passport"
+	default:
+		if fallback != "" {
+			return fallback
+		}
+		return defaultDocumentMetadataKeyAlias
+	}
+}
 
 type userDocumentService struct {
 	docRepo                  repository.UserDocumentRepo
@@ -63,9 +79,10 @@ func (s *userDocumentService) decryptDocumentMetadata(ctx context.Context, doc *
 		return doc, nil
 	}
 
-	plaintext, err := s.cryptor.OpenWithDataKey(ctx, s.metadataKeyAlias, doc.EncryptedMetadata, doc.EncryptedDEK)
+	keyAlias := resolveDocumentKeyAlias(doc.DocumentType, s.metadataKeyAlias)
+	plaintext, err := s.cryptor.OpenWithDataKey(ctx, keyAlias, doc.EncryptedMetadata, doc.EncryptedDEK)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decrypt document metadata: %w", err)
+		return nil, fmt.Errorf("failed to decrypt document metadata with KMS alias %s: %w", keyAlias, err)
 	}
 	if len(plaintext) == 0 {
 		plaintext = []byte(`{}`)
@@ -102,9 +119,10 @@ func (s *userDocumentService) CreateDocument(ctx context.Context, payload model.
 		metadataBytes = []byte(`{}`)
 	}
 
-	encryptedPayload, err := s.cryptor.SealWithDataKey(ctx, s.metadataKeyAlias, metadataBytes)
+	keyAlias := resolveDocumentKeyAlias(payload.DocumentType, s.metadataKeyAlias)
+	encryptedPayload, err := s.cryptor.SealWithDataKey(ctx, keyAlias, metadataBytes)
 	if err != nil {
-		return nil, fmt.Errorf("failed to encrypt document metadata: %w", err)
+		return nil, fmt.Errorf("failed to encrypt document metadata via KMS alias %s: %w", keyAlias, err)
 	}
 
 	doc := &model.CitizenDocument{

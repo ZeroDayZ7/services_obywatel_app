@@ -32,7 +32,7 @@ func NewContainer(
 	}
 
 	docRepo := repository.NewUserDocumentRepository(db)
-	docSvc := service.NewUserDocumentService(docRepo, cfg, cryptor, hmacDocumentNumberSecret, "documents-metadata-key")
+	docSvc := service.NewUserDocumentService(docRepo, cfg, cryptor, hmacDocumentNumberSecret, "")
 
 	return &Container{
 		DB:              db,

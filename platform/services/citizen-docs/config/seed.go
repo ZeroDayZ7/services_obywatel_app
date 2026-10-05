@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,6 +17,21 @@ import (
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
+
+const defaultDocumentDataKeyAlias = "docs-id-cards"
+
+func documentDataKeyAlias(documentType string) string {
+	switch strings.ToUpper(strings.TrimSpace(documentType)) {
+	case "ID_CARD", "ID-CARD":
+		return "docs-id-cards"
+	case "DRIVERS_LICENSE", "DRIVER_LICENSE", "DRIVERS-LICENSE":
+		return "docs-driver-license"
+	case "PASSPORT":
+		return "docs-passport"
+	default:
+		return defaultDocumentDataKeyAlias
+	}
+}
 
 func SeedData(db *gorm.DB) error {
 	if db == nil {
@@ -127,9 +143,10 @@ func SeedDataWithSecurity(db *gorm.DB, keyStore *httpserver.KeyStore, cryptor *e
 		if len(metadataBytes) == 0 {
 			metadataBytes = []byte(`{}`)
 		}
-		encryptedPayload, err := cryptor.SealWithDataKey(context.Background(), "documents-metadata-key", metadataBytes)
+		keyAlias := documentDataKeyAlias(seedDocs[i].DocumentType)
+		encryptedPayload, err := cryptor.SealWithDataKey(context.Background(), keyAlias, metadataBytes)
 		if err != nil {
-			return fmt.Errorf("failed to encrypt metadata for document %s: %w", seedDocs[i].DocumentNumber, err)
+			return fmt.Errorf("failed to encrypt metadata for document %s via KMS alias %s: %w", seedDocs[i].DocumentNumber, keyAlias, err)
 		}
 
 		seedDocs[i].DocumentNumberHash = hash

@@ -22,10 +22,6 @@ type HMACConfig struct {
 	PeselKey     KeyTarget            `mapstructure:"HMAC_PESEL_KEY"`
 }
 
-type SecurityConfig struct {
-	DocumentEncryptionKey string `mapstructure:"DOCUMENT_ENCRYPTION_KEY" validate:"required,min=16"`
-}
-
 type Config struct {
 	Server   viper.ServerConfig  `mapstructure:",squash"`
 	Database viper.DBConfig      `mapstructure:",squash"`
@@ -34,7 +30,6 @@ type Config struct {
 	OTEL     viper.OTELConfig    `mapstructure:",squash"`
 	KMS      viper.KMSConfig     `mapstructure:",squash"`
 	HMAC     HMACConfig          `mapstructure:",squash"`
-	Security SecurityConfig      `mapstructure:",squash"`
 	Shutdown time.Duration       `mapstructure:"SHUTDOWN_TIMEOUT" validate:"required"`
 }
 
@@ -66,8 +61,11 @@ func LoadConfigGlobal() error {
 		"officer-bff": {TargetKey: "hmac-bff-docs", Algorithm: "HmacSha256"},
 	})
 	spfViper.SetDefault("HMAC_INTERNAL_KEYS", map[string]KeyTarget{
-		"pesel":           {TargetKey: "hmac-docs-pesel-index", Algorithm: "HmacSha256"},
-		"document_number": {TargetKey: "hmac-documents-number-index", Algorithm: "HmacSha256"},
+		"pesel":              {TargetKey: "hmac-docs-pesel-index", Algorithm: "HmacSha256"},
+		"document_number":    {TargetKey: "hmac-documents-number-index", Algorithm: "HmacSha256"},
+		"docs-id-cards":      {TargetKey: "docs-id-cards", Algorithm: "AES256GCM"},
+		"docs-driver-license": {TargetKey: "docs-driver-license", Algorithm: "AES256GCM"},
+		"docs-passport":      {TargetKey: "docs-passport", Algorithm: "AES256GCM"},
 	})
 	spfViper.SetDefault("HMAC_PESEL_KEY", KeyTarget{TargetKey: "hmac-docs-pesel-index", Algorithm: "HmacSha256"})
 
