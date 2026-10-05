@@ -17,8 +17,8 @@ type KeyTarget struct {
 }
 
 type HMACConfig struct {
-	TargetKeys   map[string]KeyTarget `mapstructure:"HMAC_TARGET_KEYS"`
-	InternalKeys map[string]KeyTarget `mapstructure:"HMAC_INTERNAL_KEYS"`
+	TargetKeys   map[string]KeyTarget `mapstructure:"HMAC_TARGET_KEYS" validate:"required"`
+	InternalKeys map[string]KeyTarget `mapstructure:"HMAC_INTERNAL_KEYS" validate:"required"`
 }
 
 type Config struct {

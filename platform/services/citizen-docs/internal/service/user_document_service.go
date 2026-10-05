@@ -16,8 +16,6 @@ import (
 	"gorm.io/datatypes"
 )
 
-const defaultDocumentMetadataKeyAlias = "docs-id-cards"
-
 func resolveDocumentKeyAlias(documentType string, fallback string) string {
 	switch strings.ToUpper(strings.TrimSpace(documentType)) {
 	case "ID_CARD", "ID-CARD":
@@ -27,10 +25,7 @@ func resolveDocumentKeyAlias(documentType string, fallback string) string {
 	case "PASSPORT":
 		return "docs-passport"
 	default:
-		if fallback != "" {
-			return fallback
-		}
-		return defaultDocumentMetadataKeyAlias
+		return fallback
 	}
 }
 
@@ -49,9 +44,6 @@ func NewUserDocumentService(
 	hmacDocumentNumberSecret []byte,
 	metadataKeyAlias string,
 ) UserDocumentService {
-	if metadataKeyAlias == "" {
-		metadataKeyAlias = defaultDocumentMetadataKeyAlias
-	}
 	return &userDocumentService{
 		docRepo:                  docRepo,
 		cfg:                      cfg,
@@ -80,6 +72,9 @@ func (s *userDocumentService) decryptDocumentMetadata(ctx context.Context, doc *
 	}
 
 	keyAlias := resolveDocumentKeyAlias(doc.DocumentType, s.metadataKeyAlias)
+	if keyAlias == "" {
+		return nil, fmt.Errorf("document metadata alias is not configured")
+	}
 	plaintext, err := s.cryptor.OpenWithDataKey(ctx, keyAlias, doc.EncryptedMetadata, doc.EncryptedDEK)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decrypt document metadata with KMS alias %s: %w", keyAlias, err)
@@ -120,6 +115,9 @@ func (s *userDocumentService) CreateDocument(ctx context.Context, payload model.
 	}
 
 	keyAlias := resolveDocumentKeyAlias(payload.DocumentType, s.metadataKeyAlias)
+	if keyAlias == "" {
+		return nil, fmt.Errorf("document metadata alias is not configured")
+	}
 	encryptedPayload, err := s.cryptor.SealWithDataKey(ctx, keyAlias, metadataBytes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encrypt document metadata via KMS alias %s: %w", keyAlias, err)

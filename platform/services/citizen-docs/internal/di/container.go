@@ -26,13 +26,25 @@ func NewContainer(
 	cryptor *envelope.EnvelopeCryptor,
 	keyStore *httpserver.KeyStore,
 ) *Container {
+	if cfg == nil {
+		panic("critical error: config is nil")
+	}
+	if keyStore == nil {
+		panic("critical error: keystore is nil")
+	}
+
+	const metadataKeyAlias = "docs-id-cards"
+	if _, ok := cfg.HMAC.InternalKeys[metadataKeyAlias]; !ok {
+		panic("critical error: missing 'docs-id-cards' metadata key in HMAC internal config")
+	}
+
 	hmacDocumentNumberSecret, _, ok := keyStore.GetKey("document_number")
-	if !ok {
-		panic("critical error: missing 'document_number' hmac key in KeyStore")
+	if !ok || len(hmacDocumentNumberSecret) == 0 {
+		panic("critical error: missing or empty 'document_number' hmac key in KeyStore")
 	}
 
 	docRepo := repository.NewUserDocumentRepository(db)
-	docSvc := service.NewUserDocumentService(docRepo, cfg, cryptor, hmacDocumentNumberSecret, "")
+	docSvc := service.NewUserDocumentService(docRepo, cfg, cryptor, hmacDocumentNumberSecret, metadataKeyAlias)
 
 	return &Container{
 		DB:              db,
