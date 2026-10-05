@@ -1,6 +1,7 @@
 package mapper
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/zerodayz7/platform/services/citizen-docs/internal/dto"
@@ -11,6 +12,7 @@ func ToDocumentResponse(doc model.CitizenDocument) dto.DocumentResponse {
 	response := dto.DocumentResponse{
 		ID:           doc.ID.String(),
 		UserID:       doc.UserID.String(),
+		TypeCode:     doc.DocumentType,
 		DocumentType: doc.DocumentType,
 		Status:       string(doc.Status),
 		DocumentHash: doc.DocumentNumberHash,
@@ -22,6 +24,15 @@ func ToDocumentResponse(doc model.CitizenDocument) dto.DocumentResponse {
 	}
 	if doc.ExpiresAt != nil {
 		response.ExpiresAt = doc.ExpiresAt.Format(time.RFC3339)
+	}
+	if len(doc.Metadata) > 0 {
+		var metadata map[string]any
+		if err := json.Unmarshal(doc.Metadata, &metadata); err == nil {
+			response.Metadata = metadata
+		}
+	}
+	if response.Metadata == nil {
+		response.Metadata = map[string]any{}
 	}
 	return response
 }
