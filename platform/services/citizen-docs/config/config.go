@@ -19,7 +19,6 @@ type KeyTarget struct {
 type HMACConfig struct {
 	TargetKeys   map[string]KeyTarget `mapstructure:"HMAC_TARGET_KEYS"`
 	InternalKeys map[string]KeyTarget `mapstructure:"HMAC_INTERNAL_KEYS"`
-	PeselKey     KeyTarget            `mapstructure:"HMAC_PESEL_KEY"`
 }
 
 type Config struct {
@@ -55,19 +54,17 @@ func LoadConfigGlobal() error {
 	viper.SetSessionDefaults()
 	viper.SetKMSDefaults()
 
-	// Domyślne mapy kluczy HMAC dla wewnętrznych indeksów
-	spfViper.SetDefault("HMAC_TARGET_KEYS", map[string]KeyTarget{
-		"gateway":     {TargetKey: "hmac-gateway-docs", Algorithm: "HmacSha256"},
-		"officer-bff": {TargetKey: "hmac-bff-docs", Algorithm: "HmacSha256"},
-	})
-	spfViper.SetDefault("HMAC_INTERNAL_KEYS", map[string]KeyTarget{
-		"pesel":              {TargetKey: "hmac-docs-pesel-index", Algorithm: "HmacSha256"},
-		"document_number":    {TargetKey: "hmac-documents-number-index", Algorithm: "HmacSha256"},
-		"docs-id-cards":      {TargetKey: "docs-id-cards", Algorithm: "AES256GCM"},
-		"docs-driver-license": {TargetKey: "docs-driver-license", Algorithm: "AES256GCM"},
-		"docs-passport":      {TargetKey: "docs-passport", Algorithm: "AES256GCM"},
-	})
-	spfViper.SetDefault("HMAC_PESEL_KEY", KeyTarget{TargetKey: "hmac-docs-pesel-index", Algorithm: "HmacSha256"})
+	spfViper.SetConfigName("config")
+	spfViper.SetConfigType("yaml")
+	spfViper.AddConfigPath(".")
+	spfViper.AddConfigPath("./config")
+
+	if err := spfViper.ReadInConfig(); err != nil {
+		if _, ok := err.(spfViper.ConfigFileNotFoundError); !ok {
+			return fmt.Errorf("failed to read config file: %w", err)
+		}
+		log.Warn("No config.yaml file found, falling back to environment variables and defaults")
+	}
 
 	if err := viper.InitConfig(&AppConfig, "citizen-docs"); err != nil {
 		return fmt.Errorf("failed to initialize citizen-docs config: %w", err)
