@@ -99,6 +99,11 @@ func main() {
 		log.Warn("RabbitMQ is DISABLED for notification-service. Using NoOpPublisher.")
 		eventPublisher = rabbitmq.NewNoOpPublisher()
 	}
+	defer func() {
+		if err := eventPublisher.Close(); err != nil {
+			log.Error("Failed to close RabbitMQ connection cleanly", "error", err)
+		}
+	}()
 
 	container.EventPublisher = eventPublisher
 
@@ -156,12 +161,6 @@ func main() {
 			Shutdown:   config.AppConfig.Shutdown,
 		},
 		*log,
-		func() {
-			closeDB()
-			if redisClient != nil {
-				_ = redisClient.Close()
-			}
-			// Additional resource cleanup can be added here
-		},
+		nil,
 	)
 }

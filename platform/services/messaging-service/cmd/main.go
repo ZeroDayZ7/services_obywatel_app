@@ -55,6 +55,7 @@ func main() {
 
 	// 4. Database
 	db, closeDB := config.MustInitDB(config.AppConfig.Database)
+	defer closeDB()
 
 	// 5. WebSocket Hub
 	wsHub := websocket.NewHub()
@@ -77,8 +78,6 @@ func main() {
 			Shutdown:   config.AppConfig.Shutdown,
 		},
 		*log,
-		func() {
-			closeDB()
-		},
+		nil,
 	)
 }
