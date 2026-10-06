@@ -21,6 +21,7 @@ type NotificationService interface {
 	Send(ctx context.Context, n *model.Notification) error
 	Restore(ctx context.Context, id uuid.UUID, userID uuid.UUID) error
 	DeletePermanently(ctx context.Context, id uuid.UUID, userID uuid.UUID) error
+	ProcessSyncBatch(ctx context.Context, userID uuid.UUID, req model.SyncBatchRequest) (*model.SyncBatchResponse, error)
 }
 
 // #endregion
@@ -206,5 +207,30 @@ func (h *NotificationHandler) DeletePermanently(c *fiber.Ctx) error {
 
 	return c.SendStatus(fiber.StatusNoContent)
 }
+
+// #region SyncBatch
+func (h *NotificationHandler) SyncBatch(c *fiber.Ctx) error {
+	userID, err := utils.GetUserID(c)
+	if err != nil {
+		return errors.SendAppError(c, errors.ErrInvalidToken)
+	}
+
+	var req model.SyncBatchRequest
+	if err := c.BodyParser(&req); err != nil {
+		return errors.SendAppError(c, errors.ErrInvalidRequest)
+	}
+
+	ctx, cancel := context.WithTimeout(c.UserContext(), 20*time.Second)
+	defer cancel()
+
+	resp, svcErr := h.service.ProcessSyncBatch(ctx, userID, req)
+	if svcErr != nil {
+		return errors.SendAppError(c, errors.ErrInternal)
+	}
+
+	return c.JSON(resp)
+}
+
+// #endregion
 
 // #endregion

@@ -2,6 +2,8 @@ package mysql
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/services/notification-service/internal/model"
@@ -69,4 +71,118 @@ func (r *NotificationRepository) DeletePermanently(ctx context.Context, id uuid.
 	return r.db.WithContext(ctx).
 		Where("id = ? AND user_id = ?", id, userID).
 		Delete(&model.Notification{}).Error
+}
+
+// ProcessSyncBatch applies a batch of sync events in a single DB transaction.
+func (r *NotificationRepository) ProcessSyncBatch(ctx context.Context, userID uuid.UUID, req model.SyncBatchRequest) (processed []string, failed []string, err error) {
+	tx := r.db.Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+			err = fmt.Errorf("panic: %v", r)
+		}
+	}()
+
+	for _, ev := range req.Events {
+		switch ev.EventType {
+		case "notification.mark_read":
+			if ev.Payload != nil {
+				var p map[string]string
+				if err := json.Unmarshal(ev.Payload, &p); err == nil {
+					idStr := p["id"]
+					if id, parseErr := uuid.Parse(idStr); parseErr == nil {
+						if uErr := tx.WithContext(ctx).
+							Model(&model.Notification{}).
+							Where("id = ? AND user_id = ?", id, userID).
+							Update("is_read", true).Error; uErr == nil {
+							processed = append(processed, ev.ID)
+							continue
+						}
+					}
+				}
+			}
+			failed = append(failed, ev.ID)
+		case "notification.mark_all_read":
+			if uErr := tx.WithContext(ctx).
+				Model(&model.Notification{}).
+				Where("user_id = ? AND is_read = ?", userID, false).
+				Update("is_read", true).Error; uErr == nil {
+				processed = append(processed, ev.ID)
+				continue
+			}
+			failed = append(failed, ev.ID)
+		case "notification.move_to_trash":
+			if ev.Payload != nil {
+				var p map[string]string
+				if err := json.Unmarshal(ev.Payload, &p); err == nil {
+					idStr := p["id"]
+					if id, parseErr := uuid.Parse(idStr); parseErr == nil {
+						if uErr := tx.WithContext(ctx).
+							Model(&model.Notification{}).
+							Where("id = ? AND user_id = ?", id, userID).
+							Update("deleted_at", gorm.Expr("NOW()")).Error; uErr == nil {
+							processed = append(processed, ev.ID)
+							continue
+						}
+					}
+				}
+			}
+			failed = append(failed, ev.ID)
+		case "notification.restore":
+			if ev.Payload != nil {
+				var p map[string]string
+				if err := json.Unmarshal(ev.Payload, &p); err == nil {
+					idStr := p["id"]
+					if id, parseErr := uuid.Parse(idStr); parseErr == nil {
+						if uErr := tx.WithContext(ctx).
+							Model(&model.Notification{}).
+							Where("id = ? AND user_id = ?", id, userID).
+							Update("deleted_at", nil).Error; uErr == nil {
+							processed = append(processed, ev.ID)
+							continue
+						}
+					}
+				}
+			}
+			failed = append(failed, ev.ID)
+		case "notification.delete":
+			if ev.Payload != nil {
+				var p map[string]string
+				if err := json.Unmarshal(ev.Payload, &p); err == nil {
+					idStr := p["id"]
+					if id, parseErr := uuid.Parse(idStr); parseErr == nil {
+						if uErr := tx.WithContext(ctx).
+							Where("id = ? AND user_id = ?", id, userID).
+							Delete(&model.Notification{}).Error; uErr == nil {
+							processed = append(processed, ev.ID)
+							continue
+						}
+					}
+				}
+			}
+			failed = append(failed, ev.ID)
+		case "notification.clear_trash":
+			if uErr := tx.WithContext(ctx).
+				Where("user_id = ? AND deleted_at IS NOT NULL", userID).
+				Delete(&model.Notification{}).Error; uErr == nil {
+				processed = append(processed, ev.ID)
+				continue
+			}
+			failed = append(failed, ev.ID)
+		default:
+			// Unknown event -> mark failed
+			failed = append(failed, ev.ID)
+		}
+	}
+
+	if len(failed) > 0 {
+		tx.Rollback()
+		return processed, failed, nil
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		return processed, failed, err
+	}
+
+	return processed, failed, nil
 }
