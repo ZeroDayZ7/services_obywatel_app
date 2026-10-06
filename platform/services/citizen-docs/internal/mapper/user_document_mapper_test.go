@@ -6,7 +6,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/services/citizen-docs/internal/model"
-	"gorm.io/datatypes"
 )
 
 func TestToDocumentResponse_IncludesDecryptedMetadataAndTypeCode(t *testing.T) {
@@ -18,12 +17,11 @@ func TestToDocumentResponse_IncludesDecryptedMetadataAndTypeCode(t *testing.T) {
 		UserID:       uuid.New(),
 		DocumentType: "ID_CARD",
 		Status:       model.DocumentStatusActive,
-		Metadata:     datatypes.JSON(`{"title":"Dowód osobisty","issuer":"Rzeczpospolita Polska","category":"identity"}`),
 		IssuedAt:     &issuedAt,
 		ExpiresAt:    &expiresAt,
 	}
 
-	resp := ToDocumentResponse(doc)
+	resp := ToDocumentResponse(doc, []byte(`{"title":"Dowód osobisty","issuer":"Rzeczpospolita Polska","category":"identity"}`))
 
 	if resp.TypeCode != "ID_CARD" {
 		t.Fatalf("TypeCode = %q, want %q", resp.TypeCode, "ID_CARD")

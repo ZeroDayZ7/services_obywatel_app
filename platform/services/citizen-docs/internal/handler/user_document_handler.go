@@ -9,7 +9,6 @@ import (
 	reqctx "github.com/zerodayz7/platform/pkg/context"
 	apperr "github.com/zerodayz7/platform/pkg/errors"
 	"github.com/zerodayz7/platform/pkg/shared"
-	"github.com/zerodayz7/platform/services/citizen-docs/internal/mapper"
 	"github.com/zerodayz7/platform/services/citizen-docs/internal/model"
 	"github.com/zerodayz7/platform/services/citizen-docs/internal/service"
 )
@@ -55,7 +54,7 @@ func (h *UserDocumentHandler) CreateDocument(c *fiber.Ctx) error {
 		return apperr.SendAppError(c, err)
 	}
 
-	return c.Status(fiber.StatusCreated).JSON(mapper.ToDocumentResponse(*doc))
+	return c.Status(fiber.StatusCreated).JSON(doc)
 }
 
 func (h *UserDocumentHandler) GetDocumentByID(c *fiber.Ctx) error {
@@ -72,7 +71,7 @@ func (h *UserDocumentHandler) GetDocumentByID(c *fiber.Ctx) error {
 		return apperr.SendAppError(c, err)
 	}
 
-	return c.Status(fiber.StatusOK).JSON(mapper.ToDocumentResponse(*doc))
+	return c.Status(fiber.StatusOK).JSON(doc)
 }
 
 func (h *UserDocumentHandler) GetDocumentsByUserID(c *fiber.Ctx) error {
@@ -105,9 +104,8 @@ func (h *UserDocumentHandler) GetDocumentsByUserID(c *fiber.Ctx) error {
 		return apperr.SendAppError(c, err)
 	}
 
-	response := mapper.ToDocumentResponses(docs)
-	log.InfoMap("[UserDocumentHandler.GetDocumentsByUserID] 5. Returning documents", map[string]any{"user_id": userID.String(), "count": len(response)})
-	return c.Status(fiber.StatusOK).JSON(response)
+	log.InfoMap("[UserDocumentHandler.GetDocumentsByUserID] 5. Returning documents", map[string]any{"user_id": userID.String(), "count": len(docs)})
+	return c.Status(fiber.StatusOK).JSON(docs)
 }
 
 func (h *UserDocumentHandler) GetDocumentsMe(c *fiber.Ctx) error {
@@ -130,9 +128,8 @@ func (h *UserDocumentHandler) GetDocumentsMe(c *fiber.Ctx) error {
 		return apperr.SendAppError(c, err)
 	}
 
-	responses := mapper.ToDocumentResponses(docs)
-	log.InfoMap("[UserDocumentHandler.GetDocumentsMe] 5. Returning current user documents", map[string]any{"user_id": rc.UserID.String(), "count": len(responses)})
-	return c.Status(fiber.StatusOK).JSON(responses)
+	log.InfoMap("[UserDocumentHandler.GetDocumentsMe] 5. Returning current user documents", map[string]any{"user_id": rc.UserID.String(), "count": len(docs)})
+	return c.Status(fiber.StatusOK).JSON(docs)
 }
 
 func (h *UserDocumentHandler) GetDocumentPDF(c *fiber.Ctx) error {

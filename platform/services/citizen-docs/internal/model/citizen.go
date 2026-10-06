@@ -36,9 +36,6 @@ type CitizenDocument struct {
 	DocumentNumberHash string         `gorm:"type:varchar(64);not null;index;unique" json:"document_number_hash"`
 	EncryptedMetadata  []byte         `gorm:"column:encrypted_metadata;type:bytea;not null" json:"-"`
 	EncryptedDEK       []byte         `gorm:"column:encrypted_dek;type:bytea;not null" json:"-"`
-	DocumentNumber     string         `gorm:"-" json:"document_number,omitempty"`
-	Metadata           datatypes.JSON `gorm:"-" json:"metadata,omitempty"`
-
 	BaseModel
 }
 

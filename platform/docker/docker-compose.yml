@@ -256,8 +256,8 @@ services:
     depends_on:
       db-citizen-docs:
         condition: service_healthy
-      cache-redis:
-        condition: service_started
+      # cache-redis:
+      #   condition: service_started
 
   # region SVC DOCUMENT-RENDERER
   # --- DOCUMENT RENDERER SERVICE ---
