@@ -20,13 +20,13 @@ type RefreshTokenRepository struct {
 	DB *gorm.DB
 }
 
-//#region NewRefreshTokenRepository
+// #region NewRefreshTokenRepository
 func NewRefreshTokenRepository(db *gorm.DB) *RefreshTokenRepository {
 	return &RefreshTokenRepository{DB: db}
 }
 
 // region Save
-//#region Save
+// #region Save
 func (r *RefreshTokenRepository) Save(rt *model.RefreshToken) error {
 	// Ensure token column stores hash (length check for hex-encoded SHA256 = 64)
 	if len(rt.Token) == 44 {
@@ -38,7 +38,7 @@ func (r *RefreshTokenRepository) Save(rt *model.RefreshToken) error {
 }
 
 // region Get
-//#region Get
+// #region Get
 func (r *RefreshTokenRepository) Get(token string) (*model.RefreshToken, error) {
 	var rt model.RefreshToken
 	err := r.DB.Where("token = ? AND revoked = false AND expires_at > ?", token, time.Now()).First(&rt).Error
@@ -49,13 +49,13 @@ func (r *RefreshTokenRepository) Get(token string) (*model.RefreshToken, error) 
 }
 
 // region Revoke
-//#region Revoke
+// #region Revoke
 func (r *RefreshTokenRepository) Revoke(token string) error {
 	return r.DB.Model(&model.RefreshToken{}).Where("token = ?", token).Update("revoked", true).Error
 }
 
 // region RevokeAllUserTokens
-//#region RevokeAllUserTokens
+// #region RevokeAllUserTokens
 func (r *RefreshTokenRepository) RevokeAllUserTokens(ctx context.Context, userID uuid.UUID) error {
 	return r.DB.WithContext(ctx).
 		Model(&model.RefreshToken{}).
@@ -64,7 +64,7 @@ func (r *RefreshTokenRepository) RevokeAllUserTokens(ctx context.Context, userID
 }
 
 // region GetByToken
-//#region GetByToken
+// #region GetByToken
 func (r *RefreshTokenRepository) GetByToken(token string) (*model.RefreshToken, error) {
 	var rt model.RefreshToken
 	err := r.DB.Where("token = ?", token).First(&rt).Error
@@ -75,24 +75,25 @@ func (r *RefreshTokenRepository) GetByToken(token string) (*model.RefreshToken, 
 }
 
 // region Update
-//#region Update
+// #region Update
 func (r *RefreshTokenRepository) Update(rt *model.RefreshToken) error {
 	return r.DB.Save(rt).Error
 }
 
 // region GetSessions
-//#region GetSessions
+// #region GetSessions
 func (r *RefreshTokenRepository) GetSessions(ctx context.Context, userID uuid.UUID) ([]model.UserSessionDTO, error) {
 	var results []model.UserSessionDTO
 
 	err := r.DB.WithContext(ctx).
 		Table("refresh_tokens").
 		Select(`
-      refresh_tokens.id as session_id, 
-      user_devices.device_name_encrypted, 
-      user_devices.platform, 
-      refresh_tokens.created_at, 
-      user_devices.last_used_at, 
+      refresh_tokens.id as session_id,
+      user_devices.id as device_id,
+      user_devices.device_name_encrypted,
+      user_devices.platform,
+      refresh_tokens.created_at,
+      user_devices.last_used_at,
       refresh_tokens.device_fingerprint as fingerprint
     `).
 		Joins("JOIN user_devices ON user_devices.device_fingerprint = refresh_tokens.device_fingerprint AND user_devices.user_id = refresh_tokens.user_id").
@@ -104,7 +105,7 @@ func (r *RefreshTokenRepository) GetSessions(ctx context.Context, userID uuid.UU
 }
 
 // region RevokeSession
-//#region RevokeSession
+// #region RevokeSession
 func (r *RefreshTokenRepository) RevokeSession(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID) error { // <-- zmiana uint na uuid.UUID
 	return r.DB.WithContext(ctx).
 		Model(&model.RefreshToken{}).
@@ -113,7 +114,7 @@ func (r *RefreshTokenRepository) RevokeSession(ctx context.Context, userID uuid.
 }
 
 // region RevokeByFingerprint
-//#region RevokeByFingerprint
+// #region RevokeByFingerprint
 func (r *RefreshTokenRepository) RevokeByFingerprint(ctx context.Context, userID uuid.UUID, fingerprint string) error {
 	return r.DB.Model(&model.RefreshToken{}).
 		Where("user_id = ? AND device_fingerprint = ? AND revoked = ?", userID, fingerprint, false).

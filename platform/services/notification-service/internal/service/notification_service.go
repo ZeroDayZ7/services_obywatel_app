@@ -17,6 +17,7 @@ type NotificationRepository interface {
 	HardDeleteTrash(ctx context.Context, userID uuid.UUID) error
 	RestoreFromTrash(ctx context.Context, id uuid.UUID, userID uuid.UUID) error
 	DeletePermanently(ctx context.Context, id uuid.UUID, userID uuid.UUID) error
+	ProcessSyncBatch(ctx context.Context, userID uuid.UUID, req model.SyncBatchRequest) (processed []string, failed []string, err error)
 }
 
 // #endregion
@@ -84,6 +85,18 @@ func (s *NotificationService) Restore(ctx context.Context, id uuid.UUID, userID 
 // #region DeletePermanently
 func (s *NotificationService) DeletePermanently(ctx context.Context, id uuid.UUID, userID uuid.UUID) error {
 	return s.repo.DeletePermanently(ctx, id, userID)
+}
+
+// ProcessSyncBatch processes a batch of outbox events for a given user.
+func (s *NotificationService) ProcessSyncBatch(ctx context.Context, userID uuid.UUID, req model.SyncBatchRequest) (*model.SyncBatchResponse, error) {
+	processed, failed, err := s.repo.ProcessSyncBatch(ctx, userID, req)
+	if err != nil {
+		return nil, err
+	}
+	return &model.SyncBatchResponse{
+		ProcessedEventIDs: processed,
+		FailedEventIDs:    failed,
+	}, nil
 }
 
 // #endregion

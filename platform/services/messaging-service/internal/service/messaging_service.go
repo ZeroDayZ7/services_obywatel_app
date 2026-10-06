@@ -3,18 +3,22 @@ package service
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/messaging-service/config"
 	"github.com/zerodayz7/platform/services/messaging-service/internal/model"
 	"github.com/zerodayz7/platform/services/messaging-service/internal/repository"
+	"gorm.io/gorm"
 )
 
 var (
 	ErrInvalidUUID          = errors.New("invalid uuid format")
 	ErrConversationNotFound = errors.New("conversation not found")
 	ErrDeviceNotFound       = errors.New("device identity not found")
+	ErrInvalidSession       = errors.New("invalid or untrusted device session")
+	ErrDeviceMismatch       = errors.New("sender device is not bound to the authenticated user")
 )
 
 type MessagingService interface {
@@ -35,6 +39,7 @@ type MessagingService interface {
 
 	// E2EE Keys
 	UploadDeviceKeys(ctx context.Context, userID uuid.UUID, req model.UploadDeviceKeysRequest) error
+	GetUserKeyBundle(ctx context.Context, targetUserID string) (*model.PreKeyBundleDto, error)
 	GetUserPreKeys(ctx context.Context, targetUserID string) (*model.UserPreKeysResponse, error)
 }
 
@@ -94,6 +99,12 @@ func (s *messagingService) ProcessOutbox(ctx context.Context, userID uuid.UUID, 
 
 // #region MessagesAndContacts
 func (s *messagingService) SendMessage(ctx context.Context, senderID uuid.UUID, msg *model.Message) error {
+	if msg == nil {
+		return ErrInvalidSession
+	}
+	if err := s.ValidateSenderDeviceOwnership(ctx, senderID, msg.SenderDeviceID); err != nil {
+		return err
+	}
 	msg.SenderID = senderID
 	return s.repo.CreateMessage(ctx, msg)
 }
@@ -176,29 +187,92 @@ func (s *messagingService) MarkAsRead(ctx context.Context, userID uuid.UUID, con
 // #endregion
 
 // #region E2EE
-func (s *messagingService) UploadDeviceKeys(ctx context.Context, userID uuid.UUID, req model.UploadDeviceKeysRequest) error {
-	identity := &model.UserDeviceIdentity{
+func BuildUserDeviceIdentity(userID uuid.UUID, req model.UploadDeviceKeysRequest) *model.UserDeviceIdentity {
+	return &model.UserDeviceIdentity{
 		UserID:              userID,
 		DeviceID:            req.DeviceID,
+		RegistrationID:      req.RegistrationID,
 		PublicKey:           req.PublicKey,
 		SignedPreKey:        req.SignedPreKey,
 		SignedPreKeySig:     req.SignedPreKeySig,
 		SignedPreKeyID:      req.SignedPreKeyID,
 		OneTimePreKeysCount: len(req.OneTimePreKeys),
 	}
+}
 
+func BuildPreKeyBundle(identity *model.UserDeviceIdentity, oneTimePreKey *model.UserPreKey) *model.PreKeyBundleDto {
+	if identity == nil {
+		return nil
+	}
+
+	bundle := &model.PreKeyBundleDto{
+		RegistrationID:        identity.RegistrationID,
+		DeviceID:              identity.DeviceID,
+		SignedPreKeyID:        identity.SignedPreKeyID,
+		SignedPreKeyPublic:    identity.SignedPreKey,
+		SignedPreKeySignature: identity.SignedPreKeySig,
+		IdentityKey:           identity.PublicKey,
+	}
+	if oneTimePreKey != nil {
+		preKeyID := oneTimePreKey.KeyID
+		bundle.PreKeyID = &preKeyID
+		bundle.PreKeyPublic = oneTimePreKey.PublicKey
+	}
+	return bundle
+}
+
+func ValidateSenderDeviceBinding(userID uuid.UUID, deviceID string, trustedDevices []string) error {
+	if userID == uuid.Nil {
+		return ErrInvalidSession
+	}
+	deviceID = strings.TrimSpace(deviceID)
+	if deviceID == "" {
+		return ErrInvalidSession
+	}
+	for _, trustedDeviceID := range trustedDevices {
+		if strings.EqualFold(strings.TrimSpace(trustedDeviceID), deviceID) {
+			return nil
+		}
+	}
+	return ErrDeviceMismatch
+}
+
+func (s *messagingService) ValidateSenderDeviceOwnership(ctx context.Context, userID uuid.UUID, deviceID string) error {
+	if userID == uuid.Nil || strings.TrimSpace(deviceID) == "" {
+		return ErrInvalidSession
+	}
+	identity, err := s.repo.GetDeviceIdentity(ctx, userID, deviceID)
+	if err != nil || identity == nil {
+		return ErrInvalidSession
+	}
+	return nil
+}
+
+func (s *messagingService) UploadDeviceKeys(ctx context.Context, userID uuid.UUID, req model.UploadDeviceKeysRequest) error {
+	req.Normalize()
+	if req.DeviceID == "" {
+		return errors.New("device_id is required")
+	}
+
+	identity := BuildUserDeviceIdentity(userID, req)
 	if err := s.repo.SaveDeviceIdentity(ctx, identity); err != nil {
 		return err
 	}
 
+	storedIdentity, err := s.repo.GetDeviceIdentity(ctx, userID, req.DeviceID)
+	if err != nil {
+		return err
+	}
+	identity.ID = storedIdentity.ID
+
 	if len(req.OneTimePreKeys) > 0 {
-		preKeys := make([]model.UserPreKey, len(req.OneTimePreKeys))
+		preKeys := make([]model.UserPreKey, 0, len(req.OneTimePreKeys))
 		for i, keyBytes := range req.OneTimePreKeys {
-			preKeys[i] = model.UserPreKey{
+			preKeys = append(preKeys, model.UserPreKey{
 				DeviceID:  identity.ID,
 				KeyID:     uint32(i + 1),
 				PublicKey: keyBytes,
-			}
+			})
 		}
 		if err := s.repo.SavePreKeys(ctx, preKeys); err != nil {
 			return err
@@ -208,13 +282,39 @@ func (s *messagingService) UploadDeviceKeys(ctx context.Context, userID uuid.UUI
 	return nil
 }
 
-func (s *messagingService) GetUserPreKeys(ctx context.Context, targetUserID string) (*model.UserPreKeysResponse, error) {
+func (s *messagingService) GetUserKeyBundle(ctx context.Context, targetUserID string) (*model.PreKeyBundleDto, error) {
 	targetID, err := uuid.Parse(targetUserID)
 	if err != nil {
 		return nil, ErrInvalidUUID
 	}
 
-	identity, err := s.repo.GetDeviceIdentity(ctx, targetID, "")
+	identity, err := s.repo.GetLatestDeviceIdentityForUser(ctx, targetID)
+	if err != nil {
+		return nil, ErrDeviceNotFound
+	}
+
+	preKey, err := s.repo.PopPreKey(ctx, identity.UserID, identity.DeviceID)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+	if err != nil {
+		return BuildPreKeyBundle(identity, nil), nil
+	}
+	return BuildPreKeyBundle(identity, preKey), nil
+}
+
+func (s *messagingService) GetUserPreKeys(ctx context.Context, targetUserID string) (*model.UserPreKeysResponse, error) {
+	bundle, err := s.GetUserKeyBundle(ctx, targetUserID)
+	if err != nil {
+		return nil, err
+	}
+
+	targetID, err := uuid.Parse(targetUserID)
+	if err != nil {
+		return nil, ErrInvalidUUID
+	}
+
+	identity, err := s.repo.GetLatestDeviceIdentityForUser(ctx, targetID)
 	if err != nil {
 		return nil, ErrDeviceNotFound
 	}
@@ -227,13 +327,12 @@ func (s *messagingService) GetUserPreKeys(ctx context.Context, targetUserID stri
 		SignedPreKeySig: identity.SignedPreKeySig,
 		SignedPreKeyID:  identity.SignedPreKeyID,
 	}
-
-	preKey, err := s.repo.PopPreKey(ctx, identity.ID)
-	if err == nil && preKey != nil {
-		res.OneTimePreKey = preKey.PublicKey
-		res.OneTimePreKeyID = preKey.KeyID
+	if bundle != nil {
+		res.OneTimePreKey = bundle.PreKeyPublic
+		if bundle.PreKeyID != nil {
+			res.OneTimePreKeyID = *bundle.PreKeyID
+		}
 	}
-
 	return res, nil
 }
 

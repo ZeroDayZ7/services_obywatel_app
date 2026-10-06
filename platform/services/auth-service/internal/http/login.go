@@ -18,6 +18,7 @@ type Login2FAData struct {
 type LoginSuccessData struct {
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token,omitempty"`
+	DeviceID     string `json:"device_id,omitempty"`
 	UserID       string `json:"user_id,omitempty"`
 	ExpiresAt    int64  `json:"expires_at"`
 }

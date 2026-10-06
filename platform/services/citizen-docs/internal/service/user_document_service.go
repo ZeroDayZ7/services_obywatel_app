@@ -7,29 +7,84 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/zerodayz7/platform/pkg/crypto"
+	"github.com/zerodayz7/platform/pkg/envelope"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/citizen-docs/config"
+	"github.com/zerodayz7/platform/services/citizen-docs/internal/dto"
+	"github.com/zerodayz7/platform/services/citizen-docs/internal/mapper"
 	"github.com/zerodayz7/platform/services/citizen-docs/internal/model"
 	"github.com/zerodayz7/platform/services/citizen-docs/internal/repository"
 	"gorm.io/datatypes"
 )
 
+func resolveDocumentKeyAlias(documentType string, fallback string) string {
+	switch strings.ToUpper(strings.TrimSpace(documentType)) {
+	case "ID_CARD", "ID-CARD":
+		return "docs-id-cards"
+	case "DRIVERS_LICENSE", "DRIVER_LICENSE", "DRIVERS-LICENSE":
+		return "docs-driver-license"
+	case "PASSPORT":
+		return "docs-passport"
+	default:
+		return fallback
+	}
+}
+
 type userDocumentService struct {
-	docRepo repository.UserDocumentRepo
-	cfg     *config.Config
+	docRepo                  repository.UserDocumentRepo
+	cfg                      *config.Config
+	cryptor                  *envelope.EnvelopeCryptor
+	hmacDocumentNumberSecret []byte
+	metadataKeyAlias         string
 }
 
 func NewUserDocumentService(
 	docRepo repository.UserDocumentRepo,
-	_ repository.UserDocumentRepo,
 	cfg *config.Config,
-	_ any,
-	_ any,
+	cryptor *envelope.EnvelopeCryptor,
+	hmacDocumentNumberSecret []byte,
+	metadataKeyAlias string,
 ) UserDocumentService {
-	return &userDocumentService{docRepo: docRepo, cfg: cfg}
+	return &userDocumentService{
+		docRepo:                  docRepo,
+		cfg:                      cfg,
+		cryptor:                  cryptor,
+		hmacDocumentNumberSecret: hmacDocumentNumberSecret,
+		metadataKeyAlias:         metadataKeyAlias,
+	}
 }
 
-func (s *userDocumentService) CreateDocument(ctx context.Context, payload model.CreateDocumentPayload) (*model.CitizenDocument, error) {
+func computeDocumentNumberHash(documentNumber string, secret []byte) string {
+	return crypto.ComputeHMAC256Hex([]byte(documentNumber), secret)
+}
+
+func (s *userDocumentService) decryptDocumentMetadata(ctx context.Context, doc *model.CitizenDocument) ([]byte, error) {
+	if doc == nil {
+		return nil, nil
+	}
+	if s.cryptor == nil {
+		return nil, fmt.Errorf("document cryptor is not configured")
+	}
+	if len(doc.EncryptedMetadata) == 0 && len(doc.EncryptedDEK) == 0 {
+		return []byte(`{}`), nil
+	}
+
+	keyAlias := resolveDocumentKeyAlias(doc.DocumentType, s.metadataKeyAlias)
+	if keyAlias == "" {
+		return nil, fmt.Errorf("document metadata alias is not configured")
+	}
+	plaintext, err := s.cryptor.OpenWithDataKey(ctx, keyAlias, doc.EncryptedMetadata, doc.EncryptedDEK)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt document metadata with KMS alias %s: %w", keyAlias, err)
+	}
+	if len(plaintext) == 0 {
+		plaintext = []byte(`{}`)
+	}
+	return plaintext, nil
+}
+
+func (s *userDocumentService) CreateDocument(ctx context.Context, payload model.CreateDocumentPayload) (*dto.DocumentResponse, error) {
 	if payload.UserID == uuid.Nil {
 		return nil, fmt.Errorf("user_id is required")
 	}
@@ -45,25 +100,51 @@ func (s *userDocumentService) CreateDocument(ctx context.Context, payload model.
 	if payload.Metadata == nil {
 		payload.Metadata = datatypes.JSON(`{}`)
 	}
+	if s.cryptor == nil {
+		return nil, fmt.Errorf("document cryptor is not configured")
+	}
+	if len(s.hmacDocumentNumberSecret) == 0 {
+		return nil, fmt.Errorf("document number HMAC secret is not configured")
+	}
+
+	metadataBytes := []byte(payload.Metadata)
+	if len(metadataBytes) == 0 {
+		metadataBytes = []byte(`{}`)
+	}
+
+	keyAlias := resolveDocumentKeyAlias(payload.DocumentType, s.metadataKeyAlias)
+	if keyAlias == "" {
+		return nil, fmt.Errorf("document metadata alias is not configured")
+	}
+	encryptedPayload, err := s.cryptor.SealWithDataKey(ctx, keyAlias, metadataBytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encrypt document metadata via KMS alias %s: %w", keyAlias, err)
+	}
 
 	doc := &model.CitizenDocument{
-		UserID:         payload.UserID,
-		DocumentType:   strings.ToUpper(payload.DocumentType),
-		DocumentNumber: payload.DocumentNumber,
-		Status:         payload.Status,
-		Metadata:       payload.Metadata,
-		IssuedAt:       payload.IssuedAt,
-		ExpiresAt:      payload.ExpiresAt,
+		UserID:             payload.UserID,
+		DocumentType:       strings.ToUpper(payload.DocumentType),
+		DocumentNumberHash: computeDocumentNumberHash(payload.DocumentNumber, s.hmacDocumentNumberSecret),
+		Status:             payload.Status,
+		EncryptedMetadata:  encryptedPayload.EncryptedData,
+		EncryptedDEK:       encryptedPayload.EncryptedDEK,
+		IssuedAt:           payload.IssuedAt,
+		ExpiresAt:          payload.ExpiresAt,
 	}
 
 	if err := s.docRepo.CreateDocument(ctx, doc); err != nil {
 		return nil, fmt.Errorf("failed to create citizen document: %w", err)
 	}
 
-	return doc, nil
+	plaintext, err := s.decryptDocumentMetadata(ctx, doc)
+	if err != nil {
+		return nil, err
+	}
+	response := mapper.ToDocumentResponse(*doc, plaintext)
+	return &response, nil
 }
 
-func (s *userDocumentService) GetDocumentByID(ctx context.Context, id uuid.UUID) (*model.CitizenDocument, error) {
+func (s *userDocumentService) GetDocumentByID(ctx context.Context, id uuid.UUID) (*dto.DocumentResponse, error) {
 	if id == uuid.Nil {
 		return nil, fmt.Errorf("document id is required")
 	}
@@ -72,10 +153,41 @@ func (s *userDocumentService) GetDocumentByID(ctx context.Context, id uuid.UUID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch document %s: %w", id, err)
 	}
-	return doc, nil
+	if doc == nil {
+		return nil, nil
+	}
+	plaintext, err := s.decryptDocumentMetadata(ctx, doc)
+	if err != nil {
+		return nil, err
+	}
+	response := mapper.ToDocumentResponse(*doc, plaintext)
+	return &response, nil
 }
 
-func (s *userDocumentService) GetDocumentsByUserID(ctx context.Context, userID uuid.UUID) ([]model.CitizenDocument, error) {
+func (s *userDocumentService) GetDocumentByDocumentNumber(ctx context.Context, documentNumber string) (*dto.DocumentResponse, error) {
+	if documentNumber == "" {
+		return nil, fmt.Errorf("document_number is required")
+	}
+	if len(s.hmacDocumentNumberSecret) == 0 {
+		return nil, fmt.Errorf("document number HMAC secret is not configured")
+	}
+
+	doc, err := s.docRepo.GetDocumentByDocumentNumberHash(ctx, computeDocumentNumberHash(documentNumber, s.hmacDocumentNumberSecret))
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch document by document_number: %w", err)
+	}
+	if doc == nil {
+		return nil, nil
+	}
+	plaintext, err := s.decryptDocumentMetadata(ctx, doc)
+	if err != nil {
+		return nil, err
+	}
+	response := mapper.ToDocumentResponse(*doc, plaintext)
+	return &response, nil
+}
+
+func (s *userDocumentService) GetDocumentsByUserID(ctx context.Context, userID uuid.UUID) ([]dto.DocumentResponse, error) {
 	log := shared.GetLogger()
 	log.InfoMap("[userDocumentService.GetDocumentsByUserID] 1. Validating request", map[string]any{"user_id": userID.String()})
 
@@ -92,13 +204,21 @@ func (s *userDocumentService) GetDocumentsByUserID(ctx context.Context, userID u
 	}
 	if docs == nil {
 		log.InfoMap("[userDocumentService.GetDocumentsByUserID] 4. Repository returned nil; normalizing to empty slice", map[string]any{"user_id": userID.String()})
-		return make([]model.CitizenDocument, 0), nil
+		return []dto.DocumentResponse{}, nil
 	}
-	log.InfoMap("[userDocumentService.GetDocumentsByUserID] 5. Documents loaded successfully", map[string]any{"user_id": userID.String(), "count": len(docs)})
-	return docs, nil
+	responses := make([]dto.DocumentResponse, 0, len(docs))
+	for i := range docs {
+		metadata, err := s.decryptDocumentMetadata(ctx, &docs[i])
+		if err != nil {
+			return nil, err
+		}
+		responses = append(responses, mapper.ToDocumentResponse(docs[i], metadata))
+	}
+	log.InfoMap("[userDocumentService.GetDocumentsByUserID] 5. Documents loaded successfully", map[string]any{"user_id": userID.String(), "count": len(responses)})
+	return responses, nil
 }
 
-func (s *userDocumentService) UpdateDocumentStatus(ctx context.Context, id uuid.UUID, status model.DocumentStatus) (*model.CitizenDocument, error) {
+func (s *userDocumentService) UpdateDocumentStatus(ctx context.Context, id uuid.UUID, status model.DocumentStatus) (*dto.DocumentResponse, error) {
 	if id == uuid.Nil {
 		return nil, fmt.Errorf("document id is required")
 	}
@@ -110,7 +230,15 @@ func (s *userDocumentService) UpdateDocumentStatus(ctx context.Context, id uuid.
 	if err != nil {
 		return nil, fmt.Errorf("failed to update document %s status: %w", id, err)
 	}
-	return doc, nil
+	if doc == nil {
+		return nil, nil
+	}
+	plaintext, err := s.decryptDocumentMetadata(ctx, doc)
+	if err != nil {
+		return nil, err
+	}
+	response := mapper.ToDocumentResponse(*doc, plaintext)
+	return &response, nil
 }
 
 func (s *userDocumentService) GetDocumentPDF(ctx context.Context, id uuid.UUID) ([]byte, string, error) {
@@ -118,14 +246,16 @@ func (s *userDocumentService) GetDocumentPDF(ctx context.Context, id uuid.UUID) 
 	if err != nil {
 		return nil, "", err
 	}
+	if doc == nil {
+		return nil, "", nil
+	}
 	return buildDocumentPDF(doc), "application/pdf", nil
 }
 
-func buildDocumentPDF(doc *model.CitizenDocument) []byte {
-	header := fmt.Sprintf("Citizen Document\nType: %s\nUserID: %s\nDocumentNumber: %s\nStatus: %s",
+func buildDocumentPDF(doc *dto.DocumentResponse) []byte {
+	header := fmt.Sprintf("Citizen Document\nType: %s\nUserID: %s\nStatus: %s",
 		doc.DocumentType,
-		doc.UserID.String(),
-		doc.DocumentNumber,
+		doc.UserID,
 		doc.Status,
 	)
 	content := escapePDFText(header)

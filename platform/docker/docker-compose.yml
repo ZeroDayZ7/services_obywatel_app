@@ -5,6 +5,7 @@ services:
   # region SVC GATEWAY
   # --- GATEWAY ---
   gateway:
+    profiles: ["app", "full"]
     build:
       context: ../
       dockerfile: services/gateway/Dockerfile.dev
@@ -38,6 +39,7 @@ services:
   # region SVC AUTH
   # --- AUTHENTICATION SERVICE ---
   auth-service:
+    profiles: ["app", "full"]
     build:
       context: ../
       dockerfile: services/auth-service/Dockerfile.dev
@@ -80,6 +82,7 @@ services:
   # region SVC MESSAGE
   # --- MESSAGING SERVICE ---
   messaging-service:
+    profiles: ["app", "full"]
     build:
       context: ../
       dockerfile: services/messaging-service/Dockerfile.dev
@@ -114,6 +117,7 @@ services:
   # region SVC NOTIFICATION
   # --- NOTIFICATION SERVICE ---
   notification-service:
+    profiles: ["app", "full"]
     build:
       context: ../
       dockerfile: services/notification-service/Dockerfile.dev
@@ -147,6 +151,7 @@ services:
   # region SVC OFFICER-BFF
   # --- OFFICER BFF SERVICE ---
   officer-bff:
+    profiles: ["web", "full"]
     build:
       context: ../
       dockerfile: services/officer-bff/Dockerfile.dev
@@ -180,6 +185,7 @@ services:
   # region SVC IDENTITY
   # --- IDENTITY SERVICE ---
   identity-service:
+    profiles: ["web", "full"]
     build:
       context: ../
       dockerfile: services/identity-service/Dockerfile.dev
@@ -220,6 +226,7 @@ services:
   # region SVC CITIZEN-DOCS
   # --- CITIZEN DOCUMENTS SERVICE ---
   citizen-docs:
+    profiles: ["app", "full"]
     build:
       context: ../
       dockerfile: services/citizen-docs/Dockerfile.dev
@@ -249,12 +256,13 @@ services:
     depends_on:
       db-citizen-docs:
         condition: service_healthy
-      cache-redis:
-        condition: service_started
+      # cache-redis:
+      #   condition: service_started
 
   # region SVC DOCUMENT-RENDERER
   # --- DOCUMENT RENDERER SERVICE ---
   document-renderer:
+    profiles: ["web", "full"]
     build:
       context: ../
       dockerfile: services/document-renderer/Dockerfile.dev
@@ -484,6 +492,7 @@ services:
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
+      # - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
     networks:
       - events-net
 

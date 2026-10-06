@@ -30,6 +30,7 @@ func SetupRoutes(app *fiber.App, container *di.Container) {
 		notifications.Delete("/trash", h.ClearTrash)
 		notifications.Patch("/:id/restore", h.RestoreFromTrash)
 		notifications.Delete("/:id", h.DeletePermanently)
+		notifications.Post("/sync", h.SyncBatch)
 	}
 
 	pkgRouter.SetupFallbackHandlers(app)

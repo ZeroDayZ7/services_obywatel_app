@@ -14,6 +14,7 @@ import (
 
 type TwoFASession struct {
 	UserID      string `json:"user_id"`
+	DeviceID    string `json:"device_id,omitempty"`
 	Email       string `json:"email"`
 	CodeHash    string `json:"code_hash"`
 	Token       string `json:"token"`
@@ -21,17 +22,17 @@ type TwoFASession struct {
 	Attempts    int    `json:"attempts"`
 }
 
-//#region Set2FASession
+// #region Set2FASession
 func (c *Cache) Set2FASession(ctx context.Context, token uuid.UUID, sess TwoFASession, ttl time.Duration) error {
 	return SetJSON(c, ctx, constants.Login2FAPrefix+token.String(), sess, ttl)
 }
 
-//#region Get2FASession
+// #region Get2FASession
 func (c *Cache) Get2FASession(ctx context.Context, token uuid.UUID) (*TwoFASession, error) {
 	return GetJSON[TwoFASession](c, ctx, constants.Login2FAPrefix+token.String())
 }
 
-//#region Delete2FASession
+// #region Delete2FASession
 func (c *Cache) Delete2FASession(ctx context.Context, token uuid.UUID) error {
 	return c.Del(ctx, constants.Login2FAPrefix+token.String())
 }

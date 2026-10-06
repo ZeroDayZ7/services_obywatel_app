@@ -1,0 +1,21 @@
+HMAC_TARGET_KEYS:
+  gateway:
+    target_key: hmac-gateway-docs
+    algorithm: HmacSha256
+  officer-bff:
+    target_key: hmac-bff-docs
+    algorithm: HmacSha256
+
+HMAC_INTERNAL_KEYS:
+  document_number:
+    target_key: hmac-documents-number-index
+    algorithm: HmacSha256
+  docs-id-cards:
+    target_key: docs-id-cards
+    algorithm: AES256GCM
+  docs-driver-license:
+    target_key: docs-driver-license
+    algorithm: AES256GCM
+  docs-passport:
+    target_key: docs-passport
+    algorithm: AES256GCM

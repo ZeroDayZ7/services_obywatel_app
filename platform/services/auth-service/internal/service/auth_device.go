@@ -74,7 +74,7 @@ func (s *authService) VerifyDeviceSignature(ctx context.Context, userID uuid.UUI
 		return nil, errors.ErrInternal
 	}
 
-	sessionData := s.buildUserSession(user, deviceID, device.PublicKey, false)
+	sessionData := s.buildUserSession(user, device.ID.String(), deviceID, device.PublicKey, false)
 
 	if err := s.cache.SetSession(ctx, newSessionID, &sessionData, s.cfg.Session.TTL); err != nil {
 		log.ErrorObj("Failed to save session in Redis", err)
@@ -88,6 +88,7 @@ func (s *authService) VerifyDeviceSignature(ctx context.Context, userID uuid.UUI
 		Success: &http.LoginSuccessData{
 			AccessToken:  accessToken,
 			RefreshToken: refreshToken.Token,
+			DeviceID:     device.ID.String(),
 			UserID:       user.ID.String(),
 			ExpiresAt:    expiresAt,
 		},
@@ -215,7 +216,7 @@ func (s *authService) RegisterDevice(
 	}
 
 	// 6. Zapis pełnej sesji użytkownika w Redis (dla API Gateway)
-	sessionData := s.buildUserSession(user, deviceID, req.PublicKey, false)
+	sessionData := s.buildUserSession(user, device.ID.String(), deviceID, req.PublicKey, false)
 	if err := s.cache.SetSession(ctx, newSID, &sessionData, s.cfg.Session.TTL); err != nil {
 		log.ErrorObj("[RegisterDevice] Failed to persist session in Redis", err)
 		return nil, errors.ErrInternal
@@ -227,6 +228,7 @@ func (s *authService) RegisterDevice(
 		Success:      true,
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken.Token,
+		DeviceID:     device.ID.String(),
 		IsTrusted:    true,
 		User: http.DeviceUserData{
 			UserID:      user.ID.String(),

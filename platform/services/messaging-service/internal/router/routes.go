@@ -39,5 +39,10 @@ func SetupMessagingRoutes(app *fiber.App, container *di.Container) {
 	crypto.Post("/keys/device", msgH.UploadDeviceKeys)
 	crypto.Get("/keys/prekeys/:userId", msgH.GetUserPreKeys)
 
+	v1 := app.Group("/api/v1")
+	e2ee := v1.Group("/e2ee")
+	e2ee.Post("/keys/register", msgH.UploadDeviceKeys)
+	e2ee.Get("/keys/bundle/:userId", msgH.GetKeyBundle)
+
 	SetupFallbackHandlers(app)
 }

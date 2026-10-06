@@ -39,10 +39,11 @@ const (
 // #region E2EE & Crypto Entities
 // UserDeviceIdentity – Przechowuje publiczne klucze urządzenia użytkownika potrzebne do nawiązania sesji E2EE
 type UserDeviceIdentity struct {
-	ID        uuid.UUID `gorm:"type:uuid;primaryKey;default:uuidv7()"`
-	UserID    uuid.UUID `gorm:"type:uuid;index;not null"`
-	DeviceID  string    `gorm:"type:varchar(64);not null;index"` // Identyfikator instalacji / sprzętu
-	PublicKey []byte    `gorm:"type:bytea;not null"`             // Długowieczny publiczny klucz tożsamości (Identity Key)
+	ID             uuid.UUID `gorm:"type:uuid;primaryKey;default:uuidv7()"`
+	UserID         uuid.UUID `gorm:"type:uuid;index;not null"`
+	DeviceID       string    `gorm:"type:varchar(64);not null;index"` // Identyfikator instalacji / sprzętu
+	RegistrationID uint32    `gorm:"not null;default:0"`
+	PublicKey      []byte    `gorm:"type:bytea;not null"` // Długowieczny publiczny klucz tożsamości (Identity Key)
 
 	// Klucze jednorazowe/okresowe do wymiany kluczy (X3DH Key Exchange)
 	SignedPreKey    []byte `gorm:"type:bytea;not null"`
@@ -126,6 +127,151 @@ type Message struct {
 
 // #endregion
 
+// #region Persistent Encrypted Vault Contracts
+// MessageEnvelope – transportowa i archiwalna koperta zaszyfrowanej wiadomości.
+// Serwer nie dekoduje treści, a jedynie przechowuje ciphertext i metadane retencji.
+type MessageEnvelope struct {
+	MessageID              string     `json:"messageId,omitempty"`
+	MessageIDSnake         string     `json:"message_id,omitempty"`
+	ConversationID         uuid.UUID  `json:"conversationId,omitempty"`
+	ConversationIDSnake    uuid.UUID  `json:"conversation_id,omitempty"`
+	SenderUserID           uuid.UUID  `json:"senderUserId,omitempty"`
+	SenderUserIDSnake      uuid.UUID  `json:"sender_user_id,omitempty"`
+	SenderDeviceID         string     `json:"senderDeviceId,omitempty"`
+	SenderDeviceIDSnake    string     `json:"sender_device_id,omitempty"`
+	RecipientUserID        uuid.UUID  `json:"recipientUserId,omitempty"`
+	RecipientUserIDSnake   uuid.UUID  `json:"recipient_user_id,omitempty"`
+	RecipientDeviceID      string     `json:"recipientDeviceId,omitempty"`
+	RecipientDeviceIDSnake string     `json:"recipient_device_id,omitempty"`
+	Ciphertext             []byte     `json:"ciphertext,omitempty"`
+	Type                   uint8      `json:"type,omitempty"`
+	TypeSnake              uint8      `json:"signal_message_type,omitempty"`
+	Nonce                  []byte     `json:"nonce,omitempty"`
+	CreatedAt              time.Time  `json:"createdAt,omitempty"`
+	ExpiresAt              *time.Time `json:"expiresAt,omitempty"`
+	Version                uint64     `json:"version,omitempty"`
+}
+
+func (r *MessageEnvelope) Normalize() {
+	if r.MessageID == "" {
+		r.MessageID = r.MessageIDSnake
+	}
+	if r.ConversationID == uuid.Nil {
+		r.ConversationID = r.ConversationIDSnake
+	}
+	if r.SenderUserID == uuid.Nil {
+		r.SenderUserID = r.SenderUserIDSnake
+	}
+	if r.SenderDeviceID == "" {
+		r.SenderDeviceID = r.SenderDeviceIDSnake
+	}
+	if r.RecipientUserID == uuid.Nil {
+		r.RecipientUserID = r.RecipientUserIDSnake
+	}
+	if r.RecipientDeviceID == "" {
+		r.RecipientDeviceID = r.RecipientDeviceIDSnake
+	}
+	if r.Type == 0 {
+		r.Type = r.TypeSnake
+	}
+}
+
+// MessageRecord – zapis chronologii wiadomości w przechowalni zaszyfrowanych kopert.
+type MessageRecord struct {
+	ID                     uuid.UUID   `json:"id,omitempty"`
+	MessageID              uuid.UUID   `json:"messageId,omitempty"`
+	MessageIDSnake         uuid.UUID   `json:"message_id,omitempty"`
+	ConversationID         uuid.UUID   `json:"conversationId,omitempty"`
+	ConversationIDSnake    uuid.UUID   `json:"conversation_id,omitempty"`
+	SenderUserID           uuid.UUID   `json:"senderUserId,omitempty"`
+	SenderUserIDSnake      uuid.UUID   `json:"sender_user_id,omitempty"`
+	SenderDeviceID         string      `json:"senderDeviceId,omitempty"`
+	SenderDeviceIDSnake    string      `json:"sender_device_id,omitempty"`
+	RecipientUserID        uuid.UUID   `json:"recipientUserId,omitempty"`
+	RecipientUserIDSnake   uuid.UUID   `json:"recipient_user_id,omitempty"`
+	RecipientDeviceID      string      `json:"recipientDeviceId,omitempty"`
+	RecipientDeviceIDSnake string      `json:"recipient_device_id,omitempty"`
+	Ciphertext             []byte      `json:"ciphertext,omitempty"`
+	Type                   MessageType `json:"type,omitempty"`
+	CreatedAt              time.Time   `json:"createdAt,omitempty"`
+	ExpiresAt              *time.Time  `json:"expiresAt,omitempty"`
+	IsDelivered            bool        `json:"isDelivered,omitempty"`
+	Version                uint64      `json:"version,omitempty"`
+}
+
+func (r *MessageRecord) Normalize() {
+	if r.MessageID == uuid.Nil {
+		r.MessageID = r.MessageIDSnake
+	}
+	if r.ConversationID == uuid.Nil {
+		r.ConversationID = r.ConversationIDSnake
+	}
+	if r.SenderUserID == uuid.Nil {
+		r.SenderUserID = r.SenderUserIDSnake
+	}
+	if r.SenderDeviceID == "" {
+		r.SenderDeviceID = r.SenderDeviceIDSnake
+	}
+	if r.RecipientUserID == uuid.Nil {
+		r.RecipientUserID = r.RecipientUserIDSnake
+	}
+	if r.RecipientDeviceID == "" {
+		r.RecipientDeviceID = r.RecipientDeviceIDSnake
+	}
+}
+
+// HistoryFetchRequest – żądanie pobrania historii wiadomości z szyfrowanego archiwum.
+type HistoryFetchRequest struct {
+	ConversationID      *uuid.UUID `json:"conversationId,omitempty"`
+	ConversationIDSnake *uuid.UUID `json:"conversation_id,omitempty"`
+	Since               uint64     `json:"since,omitempty"`
+	Limit               int        `json:"limit,omitempty"`
+}
+
+func (r *HistoryFetchRequest) Normalize() {
+	if r.ConversationID == nil {
+		r.ConversationID = r.ConversationIDSnake
+	}
+	if r.Limit <= 0 {
+		r.Limit = 50
+	}
+}
+
+// NewMessageNotification – lekkie powiadomienie WebSocket o nowej wiadomości z archiwum i message_id.
+type NewMessageNotification struct {
+	EventType           string    `json:"eventType,omitempty"`
+	EventTypeSnake      string    `json:"event_type,omitempty"`
+	ConversationID      uuid.UUID `json:"conversationId,omitempty"`
+	ConversationIDSnake uuid.UUID `json:"conversation_id,omitempty"`
+	MessageID           string    `json:"messageId,omitempty"`
+	MessageIDSnake      string    `json:"message_id,omitempty"`
+	SenderUserID        uuid.UUID `json:"senderUserId,omitempty"`
+	SenderUserIDSnake   uuid.UUID `json:"sender_user_id,omitempty"`
+	SenderDeviceID      string    `json:"senderDeviceId,omitempty"`
+	SenderDeviceIDSnake string    `json:"sender_device_id,omitempty"`
+	Timestamp           time.Time `json:"timestamp,omitempty"`
+}
+
+func (r *NewMessageNotification) Normalize() {
+	if r.EventType == "" {
+		r.EventType = r.EventTypeSnake
+	}
+	if r.ConversationID == uuid.Nil {
+		r.ConversationID = r.ConversationIDSnake
+	}
+	if r.MessageID == "" {
+		r.MessageID = r.MessageIDSnake
+	}
+	if r.SenderUserID == uuid.Nil {
+		r.SenderUserID = r.SenderUserIDSnake
+	}
+	if r.SenderDeviceID == "" {
+		r.SenderDeviceID = r.SenderDeviceIDSnake
+	}
+}
+
+// #endregion
+
 // #region Sync & Outbox DTOs
 // SyncDeltaRequest – Żądanie synchronizacji różnicowej wysyłane z aplikacji mobilnej
 type SyncDeltaRequest struct {
@@ -169,26 +315,134 @@ type CreateConversationRequest struct {
 	RecipientIDs []uuid.UUID      `json:"recipient_ids"`
 }
 
-// UploadDeviceKeysRequest - Rejestracja kluczy E2EE dla urządzenia
+// UploadDeviceKeysRequest - Rejestracja kluczy E2EE dla urządzenia.
+// Akceptuje oba formaty pól: camelCase i snake_case, aby wspierać klienta Flutter i backendowy kontrakt Signal.
 type UploadDeviceKeysRequest struct {
-	DeviceID        string   `json:"device_id"`
-	PublicKey       []byte   `json:"public_key"`
-	SignedPreKey    []byte   `json:"signed_pre_key"`
-	SignedPreKeySig []byte   `json:"signed_pre_key_sig"`
-	SignedPreKeyID  uint32   `json:"signed_pre_key_id"`
-	OneTimePreKeys  [][]byte `json:"one_time_pre_keys,omitempty"`
+	DeviceID               string   `json:"deviceId,omitempty"`
+	DeviceIDSnake          string   `json:"device_id,omitempty"`
+	RegistrationID         uint32   `json:"registrationId,omitempty"`
+	RegistrationIDSnake    uint32   `json:"registration_id,omitempty"`
+	IdentityPublicKey      []byte   `json:"identityPublicKey,omitempty"`
+	IdentityPublicKeySnake []byte   `json:"identity_public_key,omitempty"`
+	PublicKey              []byte   `json:"publicKey,omitempty"`
+	SignedPreKey           []byte   `json:"signedPreKey,omitempty"`
+	SignedPreKeySnake      []byte   `json:"signed_pre_key,omitempty"`
+	SignedPreKeySig        []byte   `json:"signedPreKeySig,omitempty"`
+	SignedPreKeySigSnake   []byte   `json:"signed_pre_key_sig,omitempty"`
+	SignedPreKeyID         uint32   `json:"signedPreKeyId,omitempty"`
+	SignedPreKeyIDSnake    uint32   `json:"signed_pre_key_id,omitempty"`
+	OneTimePreKeys         [][]byte `json:"oneTimePreKeys,omitempty"`
+	OneTimePreKeysSnake    [][]byte `json:"one_time_pre_keys,omitempty"`
+}
+
+func (r *UploadDeviceKeysRequest) Normalize() {
+	if r.DeviceID == "" {
+		r.DeviceID = r.DeviceIDSnake
+	}
+	if r.RegistrationID == 0 {
+		r.RegistrationID = r.RegistrationIDSnake
+	}
+	if len(r.IdentityPublicKey) == 0 {
+		r.IdentityPublicKey = r.IdentityPublicKeySnake
+	}
+	if len(r.PublicKey) == 0 {
+		r.PublicKey = r.IdentityPublicKey
+	}
+	if len(r.SignedPreKey) == 0 {
+		r.SignedPreKey = r.SignedPreKeySnake
+	}
+	if len(r.SignedPreKeySig) == 0 {
+		r.SignedPreKeySig = r.SignedPreKeySigSnake
+	}
+	if r.SignedPreKeyID == 0 {
+		r.SignedPreKeyID = r.SignedPreKeyIDSnake
+	}
+	if len(r.OneTimePreKeys) == 0 {
+		r.OneTimePreKeys = r.OneTimePreKeysSnake
+	}
 }
 
 // UserPreKeysResponse - Klucze publiczne użytkownika do zestawienia sesji E2EE (X3DH)
 type UserPreKeysResponse struct {
-	UserID          uuid.UUID `json:"user_id"`
-	DeviceID        string    `json:"device_id"`
-	IdentityKey     []byte    `json:"identity_key"`
-	SignedPreKey    []byte    `json:"signed_pre_key"`
-	SignedPreKeySig []byte    `json:"signed_pre_key_sig"`
-	SignedPreKeyID  uint32    `json:"signed_pre_key_id"`
-	OneTimePreKey   []byte    `json:"one_time_pre_key,omitempty"`
-	OneTimePreKeyID uint32    `json:"one_time_pre_key_id,omitempty"`
+	UserID          uuid.UUID `json:"userId"`
+	DeviceID        string    `json:"deviceId"`
+	IdentityKey     []byte    `json:"identityKey"`
+	SignedPreKey    []byte    `json:"signedPreKey"`
+	SignedPreKeySig []byte    `json:"signedPreKeySig"`
+	SignedPreKeyID  uint32    `json:"signedPreKeyId"`
+	OneTimePreKey   []byte    `json:"oneTimePreKey,omitempty"`
+	OneTimePreKeyID uint32    `json:"oneTimePreKeyId,omitempty"`
+}
+
+// PreKeyBundleDto - Bundle X3DH wymagany przez Signal Protocol po stronie klienta.
+type PreKeyBundleDto struct {
+	RegistrationID        uint32  `json:"registrationId"`
+	DeviceID              string  `json:"deviceId"`
+	PreKeyID              *uint32 `json:"preKeyId,omitempty"`
+	PreKeyPublic          []byte  `json:"preKeyPublic,omitempty"`
+	SignedPreKeyID        uint32  `json:"signedPreKeyId"`
+	SignedPreKeyPublic    []byte  `json:"signedPreKeyPublic"`
+	SignedPreKeySignature []byte  `json:"signedPreKeySignature"`
+	IdentityKey           []byte  `json:"identityKey"`
+}
+
+// SignalCiphertextEnvelope – transportowa koperta E2EE dla wiadomości wysyłanych do serwera.
+// Backend nie dekoduje jej treści; służy wyłącznie jako bezpieczny kanał przekazu i walidacji device binding.
+type SignalCiphertextEnvelope struct {
+	Type                   uint8     `json:"type,omitempty"`
+	TypeSnake              uint8     `json:"signal_message_type,omitempty"`
+	Ciphertext             []byte    `json:"ciphertext,omitempty"`
+	SenderDeviceID         string    `json:"senderDeviceId,omitempty"`
+	SenderDeviceIDSnake    string    `json:"sender_device_id,omitempty"`
+	RecipientUserID        uuid.UUID `json:"recipientUserId,omitempty"`
+	RecipientUserIDSnake   uuid.UUID `json:"recipient_user_id,omitempty"`
+	RecipientDeviceID      string    `json:"recipientDeviceId,omitempty"`
+	RecipientDeviceIDSnake string    `json:"recipient_device_id,omitempty"`
+}
+
+func (r *SignalCiphertextEnvelope) Normalize() {
+	if r.Type == 0 {
+		r.Type = r.TypeSnake
+	}
+	if r.SenderDeviceID == "" {
+		r.SenderDeviceID = r.SenderDeviceIDSnake
+	}
+	if r.RecipientUserID == uuid.Nil {
+		r.RecipientUserID = r.RecipientUserIDSnake
+	}
+	if r.RecipientDeviceID == "" {
+		r.RecipientDeviceID = r.RecipientDeviceIDSnake
+	}
+}
+
+// SendMessageRequest – request dla endpointu wysyłki wiadomości z obsługą zaszyfrowanych kopert Signal.
+type SendMessageRequest struct {
+	ConversationID         *uuid.UUID `json:"conversationId,omitempty"`
+	ConversationIDSnake    *uuid.UUID `json:"conversation_id,omitempty"`
+	SenderDeviceID         string     `json:"senderDeviceId,omitempty"`
+	SenderDeviceIDSnake    string     `json:"sender_device_id,omitempty"`
+	RecipientUserID        uuid.UUID  `json:"recipientUserId,omitempty"`
+	RecipientUserIDSnake   uuid.UUID  `json:"recipient_user_id,omitempty"`
+	RecipientDeviceID      string     `json:"recipientDeviceId,omitempty"`
+	RecipientDeviceIDSnake string     `json:"recipient_device_id,omitempty"`
+	Ciphertext             []byte     `json:"ciphertext,omitempty"`
+	Type                   uint8      `json:"type,omitempty"`
+	Content                string     `json:"content,omitempty"`
+}
+
+func (r *SendMessageRequest) Normalize() {
+	if r.ConversationID == nil {
+		r.ConversationID = r.ConversationIDSnake
+	}
+	if r.SenderDeviceID == "" {
+		r.SenderDeviceID = r.SenderDeviceIDSnake
+	}
+	if r.RecipientUserID == uuid.Nil {
+		r.RecipientUserID = r.RecipientUserIDSnake
+	}
+	if r.RecipientDeviceID == "" {
+		r.RecipientDeviceID = r.RecipientDeviceIDSnake
+	}
 }
 
 // #endregion

@@ -63,4 +63,13 @@ func RegisterMessagingRoutes(app *fiber.App, container *di.Container) {
 		// gwMiddleware.RequirePermissions("messages.read"),
 		ReverseProxySecure(container, ServiceMessaging, target))
 	//#endregion
+
+	e2ee := app.Group("/api/v1/e2ee")
+	e2ee.Post("/keys/register",
+		// gwMiddleware.RequirePermissions("messages.write"),
+		ReverseProxySecure(container, ServiceMessaging, target))
+	e2ee.Get("/keys/bundle/:userId",
+		// gwMiddleware.RequirePermissions("messages.read"),
+		ReverseProxySecure(container, ServiceMessaging, target))
+	//#endregion
 }

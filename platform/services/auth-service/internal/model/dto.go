@@ -10,6 +10,7 @@ import (
 // region UserSessionDTO
 type UserSessionDTO struct {
 	SessionID           uuid.UUID `gorm:"column:session_id" json:"id"`
+	DeviceID            uuid.UUID `gorm:"column:device_id" json:"device_id,omitempty"`
 	DeviceNameEncrypted string    `gorm:"column:device_name_encrypted" json:"device_name"`
 	Platform            string    `gorm:"column:platform" json:"platform"`
 	CreatedAt           time.Time `gorm:"column:created_at" json:"created_at"`

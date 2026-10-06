@@ -39,6 +39,7 @@ type RegisterDeviceResponse struct {
 	Success      bool           `json:"success"`
 	AccessToken  string         `json:"access_token"`
 	RefreshToken string         `json:"refresh_token"`
+	DeviceID     string         `json:"device_id,omitempty"`
 	IsTrusted    bool           `json:"is_trusted"`
 	User         DeviceUserData `json:"user"`
 	Rbac         map[string]any `json:"rbac"`
@@ -59,6 +60,8 @@ type RefreshResponse struct {
 	AccessToken  string   `json:"access_token"`
 	RefreshToken string   `json:"refresh_token"`
 	UserID       string   `json:"user_id"`
+	DeviceID     string   `json:"device_id,omitempty"`
+	SessionID    string   `json:"session_id,omitempty"`
 	Roles        []string `json:"roles"`
 	ExpiresAt    int64    `json:"expires_at"`
 }

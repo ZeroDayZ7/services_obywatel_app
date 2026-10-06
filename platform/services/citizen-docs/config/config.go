@@ -17,13 +17,8 @@ type KeyTarget struct {
 }
 
 type HMACConfig struct {
-	TargetKeys   map[string]KeyTarget `mapstructure:"HMAC_TARGET_KEYS"`
-	InternalKeys map[string]KeyTarget `mapstructure:"HMAC_INTERNAL_KEYS"`
-	PeselKey     KeyTarget            `mapstructure:"HMAC_PESEL_KEY"`
-}
-
-type SecurityConfig struct {
-	DocumentEncryptionKey string `mapstructure:"DOCUMENT_ENCRYPTION_KEY" validate:"required,min=16"`
+	TargetKeys   map[string]KeyTarget `mapstructure:"HMAC_TARGET_KEYS" validate:"required"`
+	InternalKeys map[string]KeyTarget `mapstructure:"HMAC_INTERNAL_KEYS" validate:"required"`
 }
 
 type Config struct {
@@ -34,7 +29,6 @@ type Config struct {
 	OTEL     viper.OTELConfig    `mapstructure:",squash"`
 	KMS      viper.KMSConfig     `mapstructure:",squash"`
 	HMAC     HMACConfig          `mapstructure:",squash"`
-	Security SecurityConfig      `mapstructure:",squash"`
 	Shutdown time.Duration       `mapstructure:"SHUTDOWN_TIMEOUT" validate:"required"`
 }
 
@@ -59,21 +53,18 @@ func LoadConfigGlobal() error {
 	viper.SetRedisDefaults()
 	viper.SetSessionDefaults()
 	viper.SetKMSDefaults()
-	spfViper.SetDefault("DOCUMENT_ENCRYPTION_KEY", "change-me-document-encryption-key")
-	spfViper.SetDefault("HMAC_TARGET_KEYS", map[string]KeyTarget{
-		"gateway": {
-			TargetKey: "hmac-gateway-docs",
-			Algorithm: "HmacSha256",
-		},
-		"officer-bff": {
-			TargetKey: "hmac-bff-docs",
-			Algorithm: "HmacSha256",
-		},
-	})
-	spfViper.SetDefault("HMAC_INTERNAL_KEYS", map[string]KeyTarget{
-		"pesel": {TargetKey: "hmac-docs-pesel-index", Algorithm: "HmacSha256"},
-	})
-	spfViper.SetDefault("HMAC_PESEL_KEY", KeyTarget{TargetKey: "hmac-docs-pesel-index", Algorithm: "HmacSha256"})
+
+	spfViper.SetConfigName("config")
+	spfViper.SetConfigType("yaml")
+	spfViper.AddConfigPath(".")
+	spfViper.AddConfigPath("./config")
+
+	if err := spfViper.ReadInConfig(); err != nil {
+		if _, ok := err.(spfViper.ConfigFileNotFoundError); !ok {
+			return fmt.Errorf("failed to read config file: %w", err)
+		}
+		log.Warn("No config.yaml file found, falling back to environment variables and defaults")
+	}
 
 	if err := viper.InitConfig(&AppConfig, "citizen-docs"); err != nil {
 		return fmt.Errorf("failed to initialize citizen-docs config: %w", err)
