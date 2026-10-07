@@ -286,11 +286,11 @@ type SyncDeltaRequest struct {
 
 // SyncDeltaResponse – Paczka zmian do zaaplikowania w lokalnej bazie Drift/SQLite.
 type SyncDeltaResponse struct {
-	UpdatedContacts     []Contact `json:"updated_contacts"`
-	NewMessages         []Message `json:"new_messages"`
-	NextSequence        uint64    `json:"next_sequence,omitempty"`
-	HasMore             bool      `json:"has_more"`
-	AppliedIdempotencyKey string   `json:"applied_idempotency_key,omitempty"`
+	UpdatedContacts       []Contact `json:"updated_contacts"`
+	NewMessages           []Message `json:"new_messages"`
+	NextSequence          uint64    `json:"next_sequence,omitempty"`
+	HasMore               bool      `json:"has_more"`
+	AppliedIdempotencyKey string    `json:"applied_idempotency_key,omitempty"`
 }
 
 // OutboxEventPayload – Struktura kolejkowana w lokalnej bazie urządzenia w trybie Offline
@@ -371,14 +371,14 @@ func (r *UploadDeviceKeysRequest) Normalize() {
 
 // UserPreKeysResponse - Klucze publiczne użytkownika do zestawienia sesji E2EE (X3DH)
 type UserPreKeysResponse struct {
-	UserID          uuid.UUID `json:"userId"`
-	DeviceID        string    `json:"deviceId"`
-	IdentityKey     []byte    `json:"identityKey"`
-	SignedPreKey    []byte    `json:"signedPreKey"`
-	SignedPreKeySig []byte    `json:"signedPreKeySig"`
-	SignedPreKeyID  uint32    `json:"signedPreKeyId"`
-	OneTimePreKey   []byte    `json:"oneTimePreKey,omitempty"`
-	OneTimePreKeyID uint32    `json:"oneTimePreKeyId,omitempty"`
+	UserID          uuid.UUID `json:"user_id"`
+	DeviceID        string    `json:"device_id"`
+	IdentityKey     []byte    `json:"identity_key"`
+	SignedPreKey    []byte    `json:"signed_pre_key"`
+	SignedPreKeySig []byte    `json:"signed_pre_key_sig"`
+	SignedPreKeyID  uint32    `json:"signed_pre_key_id"`
+	OneTimePreKey   []byte    `json:"one_time_pre_key,omitempty"`
+	OneTimePreKeyID uint32    `json:"one_time_pre_key_id,omitempty"`
 }
 
 // PreKeyBundleDto - Bundle X3DH wymagany przez Signal Protocol po stronie klienta.

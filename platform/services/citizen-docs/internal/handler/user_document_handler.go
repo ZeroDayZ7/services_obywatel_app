@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -121,14 +122,28 @@ func (h *UserDocumentHandler) GetDocumentsMe(c *fiber.Ctx) error {
 		return apperr.SendAppError(c, apperr.ErrUnauthorized)
 	}
 
-	log.InfoMap("[UserDocumentHandler.GetDocumentsMe] 3. Fetching documents for current user", map[string]any{"user_id": rc.UserID.String(), "role": rc.Role})
-	docs, err := h.service.GetDocumentsByUserID(ctx, *rc.UserID)
+	sinceVersion, err := strconv.ParseUint(c.Query("since_version", "0"), 10, 64)
+	if err != nil {
+		sinceVersion = 0
+	}
+	ifNoneMatch := c.Get(fiber.HeaderIfNoneMatch)
+
+	log.InfoMap("[UserDocumentHandler.GetDocumentsMe] 3. Fetching documents for current user", map[string]any{"user_id": rc.UserID.String(), "role": rc.Role, "since_version": sinceVersion, "if_none_match": ifNoneMatch})
+	docs, etag, stateVersion, notModified, err := h.service.GetDocumentsByUserIDWithSyncState(ctx, *rc.UserID, sinceVersion, ifNoneMatch)
 	if err != nil {
 		log.ErrorMap("[UserDocumentHandler.GetDocumentsMe] 4. Service error while fetching current user documents", map[string]any{"user_id": rc.UserID.String(), "err": err.Error()})
 		return apperr.SendAppError(c, err)
 	}
+	if etag != "" {
+		c.Set(fiber.HeaderETag, strconv.Quote(etag))
+	}
+	c.Set("X-Document-State-Version", strconv.FormatUint(stateVersion, 10))
+	if notModified {
+		log.InfoMap("[UserDocumentHandler.GetDocumentsMe] 5. Returning 304 Not Modified", map[string]any{"user_id": rc.UserID.String(), "state_version": stateVersion, "etag": etag})
+		return c.SendStatus(fiber.StatusNotModified)
+	}
 
-	log.InfoMap("[UserDocumentHandler.GetDocumentsMe] 5. Returning current user documents", map[string]any{"user_id": rc.UserID.String(), "count": len(docs)})
+	log.InfoMap("[UserDocumentHandler.GetDocumentsMe] 6. Returning current user documents", map[string]any{"user_id": rc.UserID.String(), "count": len(docs), "state_version": stateVersion, "etag": etag})
 	return c.Status(fiber.StatusOK).JSON(docs)
 }
 

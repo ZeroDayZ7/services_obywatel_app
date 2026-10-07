@@ -218,6 +218,35 @@ func (s *userDocumentService) GetDocumentsByUserID(ctx context.Context, userID u
 	return responses, nil
 }
 
+func (s *userDocumentService) GetDocumentsByUserIDWithSyncState(ctx context.Context, userID uuid.UUID, sinceVersion uint64, ifNoneMatch string) ([]dto.DocumentResponse, string, uint64, bool, error) {
+	if userID == uuid.Nil {
+		return nil, "", 0, false, fmt.Errorf("user_id is required")
+	}
+
+	state, err := s.docRepo.GetUserDocumentState(ctx, userID)
+	if err != nil {
+		return nil, "", 0, false, fmt.Errorf("failed to fetch document sync state for user %s: %w", userID, err)
+	}
+	if state == nil {
+		state = &model.UserDocumentState{UserID: userID, StateVersion: 0, AggregateHash: ""}
+	}
+
+	normalizedEtag := strings.Trim(strings.TrimSpace(ifNoneMatch), "\"")
+	currentEtag := strings.Trim(strings.TrimSpace(state.AggregateHash), "\"")
+	if normalizedEtag != "" && normalizedEtag == currentEtag {
+		return nil, currentEtag, state.StateVersion, true, nil
+	}
+	if sinceVersion > 0 && sinceVersion >= state.StateVersion {
+		return nil, currentEtag, state.StateVersion, true, nil
+	}
+
+	docs, err := s.GetDocumentsByUserID(ctx, userID)
+	if err != nil {
+		return nil, currentEtag, state.StateVersion, false, err
+	}
+	return docs, currentEtag, state.StateVersion, false, nil
+}
+
 func (s *userDocumentService) UpdateDocumentStatus(ctx context.Context, id uuid.UUID, status model.DocumentStatus) (*dto.DocumentResponse, error) {
 	if id == uuid.Nil {
 		return nil, fmt.Errorf("document id is required")
