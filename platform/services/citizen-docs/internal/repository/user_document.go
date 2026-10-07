@@ -24,7 +24,7 @@ func NewUserDocumentRepository(db *gorm.DB) UserDocumentRepo {
 	return &userDocumentRepository{db: db}
 }
 
-func computeUserDocumentAggregateHash(docs []model.CitizenDocument) string {
+func ComputeUserDocumentAggregateHash(docs []model.CitizenDocument) string {
 	if len(docs) == 0 {
 		sum := sha256.Sum256([]byte("user-documents:empty"))
 		return hex.EncodeToString(sum[:])
@@ -61,7 +61,7 @@ func (r *userDocumentRepository) recomputeUserDocumentState(tx *gorm.DB, userID 
 	state := model.UserDocumentState{
 		UserID:        userID,
 		DocumentCount: len(docs),
-		AggregateHash: computeUserDocumentAggregateHash(docs),
+		AggregateHash: ComputeUserDocumentAggregateHash(docs),
 	}
 	if len(docs) > 0 {
 		maxVersion := uint64(0)

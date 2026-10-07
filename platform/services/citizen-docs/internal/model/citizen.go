@@ -27,7 +27,7 @@ const (
 
 // CitizenDocument stores the encrypted document metadata for a user.
 type CitizenDocument struct {
-	ID                 uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	ID                 uuid.UUID      `gorm:"type:uuid;primaryKey;default:uuidv7()" json:"id"`
 	UserID             uuid.UUID      `gorm:"type:uuid;not null;index" json:"user_id"`
 	DocumentType       string         `gorm:"type:varchar(64);not null;index" json:"document_type"`
 	Status             DocumentStatus `gorm:"type:varchar(32);not null;default:'PENDING';index" json:"status"`

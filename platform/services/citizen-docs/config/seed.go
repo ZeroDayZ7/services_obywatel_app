@@ -14,8 +14,10 @@ import (
 	"github.com/zerodayz7/platform/pkg/kms"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/citizen-docs/internal/model"
+	"github.com/zerodayz7/platform/services/citizen-docs/internal/repository"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 const defaultDocumentDataKeyAlias = "docs-id-cards"
@@ -170,15 +172,53 @@ func SeedDataWithSecurity(db *gorm.DB, keyStore *httpserver.KeyStore, cryptor *e
 		})
 	}
 
-	if len(toInsert) == 0 {
-		log.Info("[SEED] Brak nowych dokumentów do zasiewu. Seed został pominięty, ponieważ wszystkie rekordy są już obecne.", "existing_documents", count)
-		return nil
+	if len(toInsert) > 0 {
+		if err := db.Create(&toInsert).Error; err != nil {
+			return fmt.Errorf("failed to seed citizen documents: %w", err)
+		}
+		log.Info("[SEED] Zakończono zasiewanie dokumentów obywateli", "seeded_documents", len(toInsert), "force_seed", forceSeed)
+	} else {
+		log.Info("[SEED] Brak nowych dokumentów do zasiewu. Sprawdzam spójność tabeli stanów synchronizacji...", "existing_documents", count)
 	}
 
-	if err := db.Create(&toInsert).Error; err != nil {
-		return fmt.Errorf("failed to seed citizen documents: %w", err)
+	// Sychronizacja / Zasielenie tabeli user_document_states dla zeseedowanych użytkowników
+	userIDs := []uuid.UUID{citizenUserID1, citizenUserID2}
+	for _, userID := range userIDs {
+		if err := db.Transaction(func(tx *gorm.DB) error {
+			var docs []model.CitizenDocument
+			if err := tx.Where("user_id = ? AND deleted_at IS NULL", userID).
+				Order("version DESC, updated_at DESC, created_at DESC, id ASC").
+				Find(&docs).Error; err != nil {
+				return err
+			}
+
+			if len(docs) == 0 {
+				return nil
+			}
+
+			maxVersion := uint64(0)
+			for _, doc := range docs {
+				if doc.Version > maxVersion {
+					maxVersion = doc.Version
+				}
+			}
+
+			state := model.UserDocumentState{
+				UserID:        userID,
+				DocumentCount: len(docs),
+				AggregateHash: repository.ComputeUserDocumentAggregateHash(docs),
+				StateVersion:  maxVersion + 1,
+			}
+
+			return tx.Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "user_id"}},
+				DoUpdates: clause.AssignmentColumns([]string{"state_version", "aggregate_hash", "document_count", "updated_at"}),
+			}).Create(&state).Error
+		}); err != nil {
+			return fmt.Errorf("failed to seed user document state for user %s: %w", userID, err)
+		}
 	}
 
-	log.Info("[SEED] Zakończono zasiewanie dokumentów obywateli", "seeded_documents", len(toInsert), "force_seed", forceSeed)
+	log.Info("[SEED] Tabela user_document_states została pomyślnie zsynchronizowana dla seeded users.")
 	return nil
 }

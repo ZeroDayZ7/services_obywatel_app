@@ -14,3 +14,5 @@ docker compose logs -f gateway auth-service messaging-service notification-servi
 
 
 docker compose --profile app rm -s -f -v messaging-service db-messaging && docker compose --profile app up -d --build messaging-service db-messaging
+
+docker compose --profile app rm -s -f -v citizen-docs db-citizen-docs && docker compose --profile app up -d --build citizen-docs db-citizen-docs
