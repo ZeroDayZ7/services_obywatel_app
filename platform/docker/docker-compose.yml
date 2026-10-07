@@ -481,6 +481,7 @@ services:
 
     # region rabbitmq
   rabbitmq:
+    profiles: ["full"]
     image: rabbitmq:4.3.1-management
     container_name: rabbitmq_server
     restart: ${DOCKER_RESTART_POLICY:-no}
@@ -498,6 +499,7 @@ services:
 
   # region STORAGE S3
   minio:
+    profiles: ["web", "full"]
     image: minio/minio:latest
     container_name: storage_minio_s3
     restart: ${DOCKER_RESTART_POLICY:-no}

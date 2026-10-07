@@ -273,17 +273,24 @@ func (r *NewMessageNotification) Normalize() {
 // #endregion
 
 // #region Sync & Outbox DTOs
-// SyncDeltaRequest – Żądanie synchronizacji różnicowej wysyłane z aplikacji mobilnej
+// SyncDeltaRequest – Żądanie synchronizacji różnicowej wysyłane z aplikacji mobilnej.
+// `last_known_sequence` jest globalnym kursorem zmian dla użytkownika i jest preferowanym polem
+// w nowym modelu Offline-First; stare pola wersji są zachowane dla kompatybilności wstecznej.
 type SyncDeltaRequest struct {
-	LastKnownContactVersion uint64 `json:"last_known_contact_version"`
-	LastKnownMessageVersion uint64 `json:"last_known_message_version"`
+	LastKnownSequence       uint64 `json:"last_known_sequence,omitempty"`
+	LastKnownContactVersion uint64 `json:"last_known_contact_version,omitempty"`
+	LastKnownMessageVersion uint64 `json:"last_known_message_version,omitempty"`
+	IdempotencyKey          string `json:"idempotency_key,omitempty"`
+	Limit                   int    `json:"limit,omitempty"`
 }
 
-// SyncDeltaResponse – Paczka zmian do zaaplikowania w lokalnej bazie Drift/SQLite
+// SyncDeltaResponse – Paczka zmian do zaaplikowania w lokalnej bazie Drift/SQLite.
 type SyncDeltaResponse struct {
-	UpdatedContacts []Contact `json:"updated_contacts"`
-	NewMessages     []Message `json:"new_messages"`
-	HasMore         bool      `json:"has_more"`
+	UpdatedContacts     []Contact `json:"updated_contacts"`
+	NewMessages         []Message `json:"new_messages"`
+	NextSequence        uint64    `json:"next_sequence,omitempty"`
+	HasMore             bool      `json:"has_more"`
+	AppliedIdempotencyKey string   `json:"applied_idempotency_key,omitempty"`
 }
 
 // OutboxEventPayload – Struktura kolejkowana w lokalnej bazie urządzenia w trybie Offline
