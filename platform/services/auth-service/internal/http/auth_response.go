@@ -57,13 +57,11 @@ type DeviceUserData struct {
 
 // RefreshResponse defines the new security tokens issued during a refresh cycle.
 type RefreshResponse struct {
-	AccessToken  string   `json:"access_token"`
-	RefreshToken string   `json:"refresh_token"`
-	UserID       string   `json:"user_id"`
-	DeviceID     string   `json:"device_id,omitempty"`
-	SessionID    string   `json:"session_id,omitempty"`
-	Roles        []string `json:"roles"`
-	ExpiresAt    int64    `json:"expires_at"`
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	UserID       string `json:"user_id"`
+	DeviceID     string `json:"device_id,omitempty"`
+	ExpiresAt    int64  `json:"expires_at"`
 }
 
 // LogoutResponse confirms the termination of the current user session and token revocation.

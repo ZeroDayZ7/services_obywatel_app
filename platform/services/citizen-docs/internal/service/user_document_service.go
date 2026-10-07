@@ -227,24 +227,53 @@ func (s *userDocumentService) GetDocumentsByUserIDWithSyncState(ctx context.Cont
 	if err != nil {
 		return nil, "", 0, false, fmt.Errorf("failed to fetch document sync state for user %s: %w", userID, err)
 	}
+
+	currentEtag := ""
+	currentStateVersion := uint64(0)
+	if state != nil {
+		currentEtag = strings.Trim(strings.TrimSpace(state.AggregateHash), "\"")
+		currentStateVersion = state.StateVersion
+	}
+
 	if state == nil {
-		state = &model.UserDocumentState{UserID: userID, StateVersion: 0, AggregateHash: ""}
+		modelDocs, err := s.docRepo.GetDocumentsByUserID(ctx, userID)
+		if err != nil {
+			return nil, "", 0, false, err
+		}
+		currentEtag = repository.ComputeUserDocumentAggregateHash(modelDocs)
+		currentStateVersion = 0
+		if len(modelDocs) == 0 {
+			currentEtag = repository.ComputeUserDocumentAggregateHash(nil)
+		}
+
+		if sinceVersion > 0 {
+			return nil, currentEtag, currentStateVersion, true, nil
+		}
+
+		docs := make([]dto.DocumentResponse, 0, len(modelDocs))
+		for i := range modelDocs {
+			metadata, err := s.decryptDocumentMetadata(ctx, &modelDocs[i])
+			if err != nil {
+				return nil, currentEtag, currentStateVersion, false, err
+			}
+			docs = append(docs, mapper.ToDocumentResponse(modelDocs[i], metadata))
+		}
+		return docs, currentEtag, currentStateVersion, false, nil
 	}
 
 	normalizedEtag := strings.Trim(strings.TrimSpace(ifNoneMatch), "\"")
-	currentEtag := strings.Trim(strings.TrimSpace(state.AggregateHash), "\"")
 	if normalizedEtag != "" && normalizedEtag == currentEtag {
-		return nil, currentEtag, state.StateVersion, true, nil
+		return nil, currentEtag, currentStateVersion, true, nil
 	}
-	if sinceVersion > 0 && sinceVersion >= state.StateVersion {
-		return nil, currentEtag, state.StateVersion, true, nil
+	if sinceVersion > 0 && sinceVersion >= currentStateVersion {
+		return nil, currentEtag, currentStateVersion, true, nil
 	}
 
 	docs, err := s.GetDocumentsByUserID(ctx, userID)
 	if err != nil {
-		return nil, currentEtag, state.StateVersion, false, err
+		return nil, currentEtag, currentStateVersion, false, err
 	}
-	return docs, currentEtag, state.StateVersion, false, nil
+	return docs, currentEtag, currentStateVersion, false, nil
 }
 
 func (s *userDocumentService) UpdateDocumentStatus(ctx context.Context, id uuid.UUID, status model.DocumentStatus) (*dto.DocumentResponse, error) {
