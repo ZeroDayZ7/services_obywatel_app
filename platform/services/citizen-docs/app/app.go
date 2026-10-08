@@ -11,9 +11,7 @@ import (
 )
 
 func NewDocsApp(container *di.Container) *fiber.App {
-	log := shared.GetLogger()
 	cfg := container.Config.Server
-	log.Info("[app.NewDocsApp] 1. Initializing Fiber application")
 
 	app := fiber.New(fiber.Config{
 		AppName:                 cfg.AppName,
@@ -33,7 +31,6 @@ func NewDocsApp(container *di.Container) *fiber.App {
 		ErrorHandler:            server.ErrorHandler(),
 	})
 
-	log.Info("[app.NewDocsApp] 2. Registering middleware: requestid + recovery + rate-limiter + request logger")
 	app.Use(requestid.New())
 	app.Use(recover.New())
 
@@ -41,7 +38,6 @@ func NewDocsApp(container *di.Container) *fiber.App {
 	// Structured HTTP request logging
 	app.Use(shared.RequestLoggerMiddleware())
 	app.Use(middleware.InternalAuthMiddleware(container.KeyStore))
-	log.Info("[app.NewDocsApp] 3. Middleware registration complete")
 
 	return app
 }

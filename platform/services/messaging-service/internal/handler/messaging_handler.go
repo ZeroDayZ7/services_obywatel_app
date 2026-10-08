@@ -95,10 +95,6 @@ func (h *MessagingHandler) SendMessage(c *fiber.Ctx) error {
 	}
 	req.Normalize()
 
-	if req.SenderDeviceID == "" {
-		req.SenderDeviceID = rc.DeviceID
-	}
-
 	conversationIDStr := c.Params("id")
 	if req.ConversationID == nil && conversationIDStr != "" {
 		convID, err := uuid.Parse(conversationIDStr)
