@@ -108,12 +108,12 @@ func (s *authService) UnpairDevice(ctx context.Context, userID uuid.UUID, device
 		return errors.ErrUntrustedDevice
 	}
 
-	if err := s.userRepo.DeleteDevice(ctx, userID, deviceFingerprint); err != nil {
+	if err := s.userRepo.DeleteDevice(ctx, userID, device.DeviceFingerprint); err != nil {
 		log.ErrorObj("UnpairDevice: failed to delete device from DB", err)
 		return errors.ErrInternal
 	}
 
-	if err := s.refreshRepo.RevokeByFingerprint(ctx, userID, deviceFingerprint); err != nil {
+	if err := s.refreshRepo.RevokeByFingerprint(ctx, userID, device.DeviceFingerprint); err != nil {
 		log.WarnObj("UnpairDevice: failed to revoke refresh tokens", err)
 	}
 
@@ -216,7 +216,7 @@ func (s *authService) RegisterDevice(
 	}
 
 	// 6. Zapis pełnej sesji użytkownika w Redis (dla API Gateway)
-	sessionData := s.buildUserSession(user, device.ID.String(), deviceID, req.PublicKey, false)
+	sessionData := s.buildUserSession(user, deviceID, deviceID, req.PublicKey, false)
 	if err := s.cache.SetSession(ctx, newSID, &sessionData, s.cfg.Session.TTL); err != nil {
 		log.ErrorObj("[RegisterDevice] Failed to persist session in Redis", err)
 		return nil, errors.ErrInternal

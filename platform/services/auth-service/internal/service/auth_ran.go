@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -68,7 +69,6 @@ func (s *authService) Register(username, email, rawPassword string) (*model.User
 	return u, nil
 }
 
-// region Logout
 // #region Logout
 func (s *authService) Logout(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID, fingerprint string) error {
 	log := shared.GetLogger()
@@ -80,13 +80,23 @@ func (s *authService) Logout(ctx context.Context, userID uuid.UUID, sessionID uu
 		return errors.ErrUnauthorized
 	}
 
-	// 2. Weryfikacja bezpieczeństwa (UserID i opcjonalnie Fingerprint)
-	if session.UserID != userID.String() || session.Fingerprint != fingerprint {
+	// 2. Weryfikacja bezpieczeństwa (UserID + normalizacja identyfikatora urządzenia)
+	trimmedFingerprint := strings.TrimSpace(fingerprint)
+	trimmedSessionFingerprint := strings.TrimSpace(session.Fingerprint)
+	trimmedSessionDeviceID := strings.TrimSpace(session.DeviceID)
+
+	matchesDeviceID := trimmedFingerprint != "" &&
+		(trimmedSessionFingerprint == trimmedFingerprint || trimmedSessionDeviceID == trimmedFingerprint)
+	matchesSessionFingerprint := trimmedSessionFingerprint != "" &&
+		(trimmedSessionFingerprint == trimmedFingerprint || trimmedSessionDeviceID == trimmedSessionFingerprint)
+
+	if session.UserID != userID.String() || (!matchesDeviceID && !matchesSessionFingerprint) {
 		log.ErrorMap("Logout security violation", map[string]any{
 			"expected_uid": userID.String(),
 			"actual_uid":   session.UserID,
 			"expected_fpt": fingerprint,
 			"actual_fpt":   session.Fingerprint,
+			"session_dev":  session.DeviceID,
 		})
 		return errors.ErrUnauthorized
 	}
@@ -96,8 +106,15 @@ func (s *authService) Logout(ctx context.Context, userID uuid.UUID, sessionID uu
 		return errors.ErrInternal
 	}
 
-	// 4. Unieważnienie Refresh Tokena w DB przy użyciu fingerprintu
-	_ = s.refreshRepo.RevokeByFingerprint(ctx, userID, fingerprint)
+	// 4. Unieważnienie Refresh Tokena w DB przy użyciu zgodnego identyfikatora urządzenia
+	resolverFingerprint := trimmedSessionFingerprint
+	if resolverFingerprint == "" {
+		resolverFingerprint = trimmedSessionDeviceID
+	}
+	if resolverFingerprint == "" {
+		resolverFingerprint = trimmedFingerprint
+	}
+	_ = s.refreshRepo.RevokeByFingerprint(ctx, userID, resolverFingerprint)
 
 	return nil
 }

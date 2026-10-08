@@ -47,10 +47,10 @@ func ContextBuilder(container *di.Container) fiber.Handler {
 		}
 
 		if sessionData, ok := userLocal.(*rdy.UserSession); ok && sessionData != nil {
-			if sessionData.DeviceID != "" {
-				reqCtx.DeviceID = sessionData.DeviceID
-			} else {
+			if sessionData.Fingerprint != "" {
 				reqCtx.DeviceID = sessionData.Fingerprint
+			} else if sessionData.DeviceID != "" {
+				reqCtx.DeviceID = sessionData.DeviceID
 			}
 
 			if parsedUserID, err := uuid.Parse(sessionData.UserID); err == nil {
@@ -80,10 +80,10 @@ func ContextBuilder(container *di.Container) fiber.Handler {
 		}
 
 		if setupData, ok := setupLocal.(*rdy.SetupSession); ok && setupData != nil {
-			if setupData.DeviceID != "" {
-				reqCtx.DeviceID = setupData.DeviceID
-			} else {
+			if setupData.Fingerprint != "" {
 				reqCtx.DeviceID = setupData.Fingerprint
+			} else if setupData.DeviceID != "" {
+				reqCtx.DeviceID = setupData.DeviceID
 			}
 
 			if parsedUserID, err := uuid.Parse(setupData.UserID); err == nil {

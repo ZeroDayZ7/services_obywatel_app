@@ -26,9 +26,15 @@ func NewUserRepository(db *gorm.DB) *UserRepo {
 // region DeleteDevice
 //#region DeleteDevice
 func (r *UserRepo) DeleteDevice(ctx context.Context, userID uuid.UUID, fingerprint string) error {
-	return r.db.WithContext(ctx).
-		Where("user_id = ? AND device_fingerprint = ?", userID, fingerprint).
-		Delete(&model.UserDevice{}).Error
+	query := r.db.WithContext(ctx).Where("user_id = ?", userID)
+
+	if parsed, err := uuid.Parse(fingerprint); err == nil {
+		query = query.Where("device_fingerprint = ? OR id = ?", fingerprint, parsed)
+	} else {
+		query = query.Where("device_fingerprint = ?", fingerprint)
+	}
+
+	return query.Delete(&model.UserDevice{}).Error
 }
 
 // region CreateUser
@@ -150,10 +156,15 @@ func (r *UserRepo) ResetFailedLogin(userID uuid.UUID) error {
 //#region GetDeviceByFingerprint
 func (r *UserRepo) GetDeviceByFingerprint(ctx context.Context, userID uuid.UUID, fingerprint string) (*model.UserDevice, error) {
 	var device model.UserDevice
-	err := r.db.WithContext(ctx).
-		Where("user_id = ? AND device_fingerprint = ? AND is_active = ?", userID, fingerprint, true).
-		First(&device).Error
-	if err != nil {
+	query := r.db.WithContext(ctx).Where("user_id = ? AND is_active = ?", userID, true)
+
+	if parsed, err := uuid.Parse(fingerprint); err == nil {
+		query = query.Where("device_fingerprint = ? OR id = ?", fingerprint, parsed)
+	} else {
+		query = query.Where("device_fingerprint = ?", fingerprint)
+	}
+
+	if err := query.First(&device).Error; err != nil {
 		return nil, err
 	}
 	return &device, nil
