@@ -17,6 +17,7 @@ type MessagingRepository interface {
 
 	// Messaging & Conversations
 	CreateMessage(ctx context.Context, msg *model.Message) error
+	GetMessageByIdempotencyKey(ctx context.Context, idempotencyKey string) (*model.Message, error)
 	GetMessagesByConversation(ctx context.Context, userID uuid.UUID, conversationID uuid.UUID, limit, offset int) ([]model.Message, error)
 	GetConversations(ctx context.Context, userID uuid.UUID) ([]model.Conversation, error)
 	GetConversationByID(ctx context.Context, userID, conversationID uuid.UUID) (*model.Conversation, error)
@@ -87,6 +88,21 @@ func (r *messagingRepository) CreateMessage(ctx context.Context, msg *model.Mess
 			Where("id = ?", msg.ConversationID).
 			Update("last_sequence", msg.Sequence).Error
 	})
+}
+
+func (r *messagingRepository) GetMessageByIdempotencyKey(ctx context.Context, idempotencyKey string) (*model.Message, error) {
+	if idempotencyKey == "" {
+		return nil, nil
+	}
+
+	var msg model.Message
+	if err := r.db.WithContext(ctx).Where("idempotency_key = ?", idempotencyKey).First(&msg).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &msg, nil
 }
 
 func (r *messagingRepository) GetMessagesByConversation(ctx context.Context, userID, conversationID uuid.UUID, limit, offset int) ([]model.Message, error) {

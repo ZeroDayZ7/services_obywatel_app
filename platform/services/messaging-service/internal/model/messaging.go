@@ -101,6 +101,7 @@ type ConversationMember struct {
 // Message – Zaszyfrowana koperta z wiadomością (Payload E2EE jest nieczytelny dla serwera)
 type Message struct {
 	ID             uuid.UUID   `gorm:"type:uuid;primaryKey;default:uuidv7()"`
+	IdempotencyKey string      `gorm:"type:varchar(128);index:idx_message_idempotency,unique;not null;default:''" json:"idempotency_key,omitempty"`
 	ConversationID uuid.UUID   `gorm:"type:uuid;index:idx_conv_seq,unique;not null"`
 	SenderID       uuid.UUID   `gorm:"type:uuid;index;not null"`
 	SenderDeviceID string      `gorm:"type:varchar(64);not null"`
@@ -296,6 +297,7 @@ type SyncDeltaResponse struct {
 // OutboxEventPayload – Struktura kolejkowana w lokalnej bazie urządzenia w trybie Offline
 type OutboxEventPayload struct {
 	EventID        uuid.UUID      `json:"event_id"`
+	IdempotencyKey string         `json:"idempotency_key,omitempty"`
 	EventType      string         `json:"event_type"` // "SEND_MESSAGE", "ADD_CONTACT"
 	ConversationID *uuid.UUID     `json:"conversation_id,omitempty"`
 	Payload        datatypes.JSON `json:"payload"`

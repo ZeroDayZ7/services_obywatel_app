@@ -82,11 +82,25 @@ func (s *messagingService) ProcessOutbox(ctx context.Context, userID uuid.UUID, 
 	processed := 0
 	for _, evt := range req.Messages {
 		if evt.EventType == "SEND_MESSAGE" && evt.ConversationID != nil {
+			idempotencyKey := strings.TrimSpace(evt.IdempotencyKey)
+			if idempotencyKey == "" && evt.EventID != uuid.Nil {
+				idempotencyKey = evt.EventID.String()
+			}
+			if idempotencyKey != "" {
+				if existing, err := s.repo.GetMessageByIdempotencyKey(ctx, idempotencyKey); err == nil && existing != nil {
+					processed++
+					continue
+				} else if err != nil {
+					return nil, err
+				}
+			}
+
 			msg := &model.Message{
 				ConversationID:   *evt.ConversationID,
 				SenderID:         userID,
 				Type:             model.MessageTypeText,
 				EncryptedPayload: []byte(evt.Payload),
+				IdempotencyKey:   idempotencyKey,
 			}
 			if err := s.repo.CreateMessage(ctx, msg); err == nil {
 				processed++
