@@ -31,7 +31,7 @@ func ContextBuilder(container *di.Container) fiber.Handler {
 		if userLocal == nil && setupLocal == nil {
 			rawFP := c.Get(constants.HeaderDeviceFingerprint)
 			if rawFP != "" {
-				reqCtx.DeviceID = crypto.HashSHA256(rawFP)
+				reqCtx.Fingerprint = crypto.HashSHA256(rawFP)
 			}
 			c.Locals("requestContext", reqCtx)
 			return c.Next()
@@ -48,9 +48,9 @@ func ContextBuilder(container *di.Container) fiber.Handler {
 
 		if sessionData, ok := userLocal.(*rdy.UserSession); ok && sessionData != nil {
 			if sessionData.Fingerprint != "" {
-				reqCtx.DeviceID = sessionData.Fingerprint
+				reqCtx.Fingerprint = sessionData.Fingerprint
 			} else if sessionData.DeviceID != "" {
-				reqCtx.DeviceID = sessionData.DeviceID
+				reqCtx.Fingerprint = sessionData.DeviceID
 			}
 
 			if parsedUserID, err := uuid.Parse(sessionData.UserID); err == nil {
@@ -81,9 +81,9 @@ func ContextBuilder(container *di.Container) fiber.Handler {
 
 		if setupData, ok := setupLocal.(*rdy.SetupSession); ok && setupData != nil {
 			if setupData.Fingerprint != "" {
-				reqCtx.DeviceID = setupData.Fingerprint
+				reqCtx.Fingerprint = setupData.Fingerprint
 			} else if setupData.DeviceID != "" {
-				reqCtx.DeviceID = setupData.DeviceID
+				reqCtx.Fingerprint = setupData.DeviceID
 			}
 
 			if parsedUserID, err := uuid.Parse(setupData.UserID); err == nil {

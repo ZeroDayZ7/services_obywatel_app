@@ -6,7 +6,6 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
-	"github.com/zerodayz7/platform/pkg/constants"
 	reqctx "github.com/zerodayz7/platform/pkg/context"
 	apperr "github.com/zerodayz7/platform/pkg/errors"
 	"github.com/zerodayz7/platform/pkg/redis"
@@ -41,8 +40,8 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	body := c.Locals("validatedBody").(schemas.LoginRequest)
 	rc := reqctx.MustFromFiber(c)
 
-	// 2. Pobierz DeviceID (fingerprint)s
-	fingerprint := rc.DeviceID
+	// 2. Pobierz fingerprint
+	fingerprint := rc.Fingerprint
 
 	if fingerprint == "" {
 		return apperr.SendAppError(c, apperr.ErrInvalidDeviceFingerprint)
@@ -67,7 +66,7 @@ func (h *AuthHandler) LoginStep2(c *fiber.Ctx) error {
 	body := c.Locals("validatedBody").(schemas.LoginStep2Request)
 	rc := reqctx.MustFromFiber(c)
 
-	fingerprint := rc.DeviceID
+	fingerprint := rc.Fingerprint
 
 	if fingerprint == "" {
 		return apperr.SendAppError(c, apperr.ErrInvalidDeviceFingerprint)
@@ -130,11 +129,11 @@ func (h *AuthHandler) VerifyDevice(c *fiber.Ctx) error {
 	rc := reqctx.MustFromFiber(c)
 
 	// Sprawdzenie czy kontekst nie jest pusty
-	if rc.UserID == nil || *rc.UserID == uuid.Nil || rc.SessionID == nil || rc.DeviceID == "" {
+	if rc.UserID == nil || *rc.UserID == uuid.Nil || rc.SessionID == nil || rc.Fingerprint == "" {
 		log.ErrorObj("VerifyDevice: Brak wymaganych danych w RequestContext (błąd Middleware)", map[string]any{
-			"user_id":    rc.UserID,
-			"session_id": rc.SessionID,
-			"device_id":  rc.DeviceID,
+			"user_id":     rc.UserID,
+			"session_id":  rc.SessionID,
+			"fingerprint": rc.Fingerprint,
 		})
 		return apperr.SendAppError(c, apperr.ErrUnauthorized)
 	}
@@ -145,14 +144,14 @@ func (h *AuthHandler) VerifyDevice(c *fiber.Ctx) error {
 		*rc.UserID,
 		*rc.SessionID,
 		body.Signature,
-		rc.DeviceID,
+		rc.Fingerprint,
 	)
 	if err != nil {
 		log.WarnObj("VerifyDevice: Weryfikacja podpisu nie powiodła się", map[string]any{
-			"user_id":    rc.UserID.String(),
-			"session_id": rc.SessionID,
-			"device_id":  rc.DeviceID,
-			"err":        err.Error(),
+			"user_id":     rc.UserID.String(),
+			"session_id":  rc.SessionID,
+			"fingerprint": rc.Fingerprint,
+			"err":         err.Error(),
 		})
 		return apperr.SendAppError(c, err)
 	}
@@ -187,7 +186,7 @@ func (h *AuthHandler) RegisterDevice(c *fiber.Ctx) error {
 		ctx,
 		*rc.UserID,
 		*rc.SessionID,
-		rc.DeviceID,
+		rc.Fingerprint,
 		rc.IP,
 		body,
 	)
@@ -204,7 +203,7 @@ func (h *AuthHandler) Verify2FA(c *fiber.Ctx) error {
 	body := c.Locals("validatedBody").(schemas.TwoFARequest)
 
 	rc := reqctx.MustFromFiber(c)
-	fingerprint := rc.DeviceID
+	fingerprint := rc.Fingerprint
 
 	// Wywołanie logiki biznesowej
 	response, err := h.authService.Verify2FA(
@@ -224,18 +223,17 @@ func (h *AuthHandler) Verify2FA(c *fiber.Ctx) error {
 
 // #region RefreshToken
 func (h *AuthHandler) RefreshToken(c *fiber.Ctx) error {
-	// Używamy bezpiecznego kontekstu z timeoutem
 	ctx, cancel := context.WithTimeout(c.Context(), 3*time.Second)
 	defer cancel()
 
 	body := c.Locals("validatedBody").(schemas.RefreshTokenRequest)
-	fingerprint := c.Get(constants.HeaderDeviceFingerprint)
+	rc := reqctx.MustFromFiber(c)
 
+	fingerprint := rc.Fingerprint
 	if fingerprint == "" {
-		return apperr.SendAppError(c, apperr.ErrInvalidToken)
+		return apperr.SendAppError(c, apperr.ErrInvalidDeviceFingerprint)
 	}
 
-	// Wywołanie logiki biznesowej
 	response, err := h.authService.RefreshToken(ctx, body.RefreshToken, fingerprint)
 	if err != nil {
 		return apperr.SendAppError(c, err)
@@ -262,7 +260,7 @@ func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 
 	body := c.Locals("validatedBody").(schemas.RefreshTokenRequest)
 
-	err := h.authService.Logout(c.UserContext(), *rc.UserID, *rc.SessionID, rc.DeviceID, body.RefreshToken)
+	err := h.authService.Logout(c.UserContext(), *rc.UserID, *rc.SessionID, rc.Fingerprint, body.RefreshToken)
 	if err != nil {
 		return apperr.SendAppError(c, err)
 	}
@@ -318,7 +316,7 @@ func (h *AuthHandler) UnpairDevice(c *fiber.Ctx) error {
 		return apperr.SendAppError(c, apperr.ErrUnauthorized)
 	}
 
-	if rc.DeviceID == "" {
+	if rc.Fingerprint == "" {
 		return apperr.SendAppError(c, apperr.ErrInvalidDeviceFingerprint)
 	}
 
@@ -336,11 +334,11 @@ func (h *AuthHandler) UnpairDevice(c *fiber.Ctx) error {
 	}
 
 	// Wywołanie logiki biznesowej w usłudze
-	err := h.authService.UnpairDevice(ctx, *rc.UserID, rc.DeviceID, *rc.SessionID, body)
+	err := h.authService.UnpairDevice(ctx, *rc.UserID, rc.Fingerprint, *rc.SessionID, body)
 	if err != nil {
 		log.WarnObj("Unpair device failed", map[string]any{
 			"user_id":   *rc.UserID,
-			"device_id": rc.DeviceID,
+			"device_id": rc.Fingerprint,
 			"err":       err.Error(),
 		})
 		return apperr.SendAppError(c, err)
@@ -348,7 +346,7 @@ func (h *AuthHandler) UnpairDevice(c *fiber.Ctx) error {
 
 	log.InfoMap("Device unpaired successfully", map[string]any{
 		"user_id":   *rc.UserID,
-		"device_id": rc.DeviceID,
+		"device_id": rc.Fingerprint,
 	})
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{

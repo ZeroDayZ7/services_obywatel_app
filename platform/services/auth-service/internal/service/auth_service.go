@@ -35,7 +35,7 @@ type AuthService interface {
 	VerifyDeviceSignature(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID, signature, fingerprint string) (*http.LoginResponse, error)
 	UnpairDevice(ctx context.Context, userID uuid.UUID, deviceFingerprint string, sessionID uuid.UUID, req schemas.UnpairDeviceRequest) error
 
-	AttemptLoginStep2(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID, signature, fingerprint, clientIP string) (*http.LoginResponse, error)
+	AttemptLoginStep2(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID, fingerprint, signature, clientIP string) (*http.LoginResponse, error)
 }
 
 // region struct
@@ -113,7 +113,7 @@ func (s *authService) AttemptLogin(ctx context.Context, email string, password [
 }
 
 // #region AttemptLoginStep2
-func (s *authService) AttemptLoginStep2(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID, deviceID string, signature string, clientIP string) (*http.LoginResponse, error) {
+func (s *authService) AttemptLoginStep2(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID, fingerprint string, signature string, clientIP string) (*http.LoginResponse, error) {
 	log := shared.GetLogger()
 
 	// 1. Pobranie sesji parowania/wyzwania (Setup Session) z Redisa
@@ -194,18 +194,18 @@ func (s *authService) AttemptLoginStep2(ctx context.Context, userID uuid.UUID, s
 	}
 
 	// 6. Generowanie tokenów i sesji
-	accessToken, newSessionID, err := s.CreateAccessToken(ctx, user.ID, deviceID)
+	accessToken, newSessionID, err := s.CreateAccessToken(ctx, user.ID, fingerprint)
 	if err != nil {
 		return nil, errors.ErrInternal
 	}
 
-	refreshToken, err := s.CreateRefreshToken(user.ID, deviceID, nil)
+	refreshToken, err := s.CreateRefreshToken(user.ID, fingerprint, nil)
 	if err != nil {
 		return nil, errors.ErrInternal
 	}
 
 	// Korzystamy z ujednoliconej budowy sesji
-	sessionData := s.buildUserSession(user, deviceID, deviceID, cred.PublicKey, false)
+	sessionData := s.buildUserSession(user, fingerprint, cred.PublicKey, false)
 
 	if err := s.cache.SetSession(ctx, newSessionID, &sessionData, s.cfg.Session.TTL); err != nil {
 		log.ErrorMap("[AttemptLoginStep2] Failed to save user session in Redis", map[string]any{
@@ -223,7 +223,6 @@ func (s *authService) AttemptLoginStep2(ctx context.Context, userID uuid.UUID, s
 		Success: &http.LoginSuccessData{
 			AccessToken:  accessToken,
 			RefreshToken: refreshToken.Token,
-			DeviceID:     deviceID,
 			UserID:       user.ID.String(),
 			ExpiresAt:    expiresAt,
 		},
@@ -471,7 +470,7 @@ func (s *authService) finalizeLogin(ctx context.Context, user *model.User, finge
 	}
 
 	// 2. Budujemy dane sesji z flagą ReadOnly/Krótkim czasem życia
-	sessionData := s.buildUserSession(user, fingerprint, fingerprint, "", true)
+	sessionData := s.buildUserSession(user, fingerprint, "", true)
 	ttl := s.cfg.Session.TTL
 
 	if err := s.cache.SetSession(ctx, sessionID, &sessionData, ttl); err != nil {
@@ -569,7 +568,7 @@ func (s *authService) CreateTemporarySession(ctx context.Context, userID uuid.UU
 	}
 
 	// 5. Budujemy pełną sesję użytkownika (z flaga readOnly = false, aby umożliwić standardowe działanie)
-	sessionData := s.buildUserSession(user, setupSession.DeviceID, setupSession.Fingerprint, "", false)
+	sessionData := s.buildUserSession(user, setupSession.Fingerprint, "", false)
 
 	if err := s.cache.SetSession(ctx, newSessionID, &sessionData, s.cfg.Session.TTL); err != nil {
 		log.ErrorObj("[CreateTemporarySession] Błąd zapisu sesji w Redis", err)

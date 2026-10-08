@@ -79,7 +79,7 @@ func (s *authService) RefreshToken(ctx context.Context, tokenStr string, fingerp
 	}
 
 	// 8. Zapis pełnej sesji w Redis z wykorzystaniem wspólnej budowy sesji
-	sessionData := s.buildUserSession(user, device.ID.String(), fingerprint, device.PublicKey, false)
+	sessionData := s.buildUserSession(user, fingerprint, device.PublicKey, false)
 
 	if err := s.cache.SetSession(ctx, newSessionID, &sessionData, s.cfg.Session.TTL); err != nil {
 		log.ErrorObj("Failed to save session in Redis", err)

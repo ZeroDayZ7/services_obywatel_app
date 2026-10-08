@@ -159,10 +159,10 @@ func (s *authService) handleFailedLogin(ctx context.Context, userID uuid.UUID) e
 }
 
 // #region createChallengeSession
-func (s *authService) createChallengeSession(ctx context.Context, userID uuid.UUID, deviceID string) (setupToken string, sessionID uuid.UUID, challenge string, err error) {
+func (s *authService) createChallengeSession(ctx context.Context, userID uuid.UUID, fingerprint string) (setupToken string, sessionID uuid.UUID, challenge string, err error) {
 	log := shared.GetLogger()
 
-	setupToken, sessionID, err = s.CreateSetupToken(ctx, userID, deviceID)
+	setupToken, sessionID, err = s.CreateSetupToken(ctx, userID, fingerprint)
 	if err != nil {
 		log.ErrorObj("Failed to create setup token", err)
 		return "", uuid.Nil, "", errors.ErrInternal
@@ -199,7 +199,7 @@ func (s *authService) verifyChallengeSession(challenge string, signatureB64 stri
 }
 
 // #region buildUserSession
-func (s *authService) buildUserSession(user *model.User, deviceID, fingerprint, pubKey string, isReadOnly bool) redis.UserSession {
+func (s *authService) buildUserSession(user *model.User, fingerprint, pubKey string, isReadOnly bool) redis.UserSession {
 	var permissions []string
 
 	// Prefer explicit user-level permissions if present
@@ -209,13 +209,9 @@ func (s *authService) buildUserSession(user *model.User, deviceID, fingerprint, 
 		permissions = user.EmployeeProfile.Permissions
 	}
 
-	if deviceID == "" {
-		deviceID = fingerprint
-	}
-
 	sess := redis.UserSession{
 		UserID:      user.ID.String(),
-		DeviceID:    deviceID,
+		DeviceID:    fingerprint,
 		Role:        string(user.Role),
 		Fingerprint: fingerprint,
 		Permissions: permissions,
