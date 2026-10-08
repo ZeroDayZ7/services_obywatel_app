@@ -80,6 +80,14 @@ func (r *messagingRepository) CreateMessage(ctx context.Context, msg *model.Mess
 
 		msg.Sequence = lastSeq + 1
 
+		var lastVersion uint64
+		if err := tx.Model(&model.Message{}).
+			Select("COALESCE(MAX(version), 0)").
+			Scan(&lastVersion).Error; err != nil {
+			return err
+		}
+		msg.Version = lastVersion + 1
+
 		if err := tx.Create(msg).Error; err != nil {
 			return err
 		}
