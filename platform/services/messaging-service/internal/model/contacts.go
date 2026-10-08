@@ -44,12 +44,12 @@ type Contact struct {
 	Status    ContactStatus `gorm:"type:varchar(20);not null;default:'pending';index"`
 
 	// Synchronization metadata
-	SyncState   ContactSyncState `gorm:"type:varchar(30);not null;default:'synced';index"`
-	Direction   ContactDirection `gorm:"type:varchar(20);not null;default:'incoming';index"`
-	ChangeSeq   uint64           `gorm:"not null;default:1;index"`
-	DeletedAt   gorm.DeletedAt   `gorm:"index" json:"deleted_at,omitempty"`
-	LocalAlias  string           `gorm:"type:varchar(128)" json:"local_alias,omitempty"`
-	EncryptedAlias []byte        `gorm:"type:bytea" json:"-"`
+	SyncState      ContactSyncState `gorm:"type:varchar(30);not null;default:'synced';index"`
+	Direction      ContactDirection `gorm:"type:varchar(20);not null;default:'incoming';index"`
+	ChangeSeq      uint64           `gorm:"not null;default:1;index"`
+	DeletedAt      gorm.DeletedAt   `gorm:"index" json:"deleted_at,omitempty"`
+	LocalAlias     string           `gorm:"type:varchar(128)" json:"local_alias,omitempty"`
+	EncryptedAlias []byte           `gorm:"type:bytea" json:"-"`
 
 	// Wersjonowanie zmiany relacji dla silnika synchronizacji (Delta Sync)
 	Version uint64 `gorm:"not null;default:1;index"`
@@ -61,14 +61,14 @@ type Contact struct {
 
 // #region Contact DTOs
 type SendContactRequest struct {
-	TargetUserID uuid.UUID `json:"target_user_id"`
-	IdempotencyKey string `json:"idempotency_key,omitempty"`
+	TargetUserID   uuid.UUID `json:"target_user_id"`
+	IdempotencyKey string    `json:"idempotency_key,omitempty"`
 }
 
 type RespondContactRequest struct {
-	Accept bool `json:"accept"`
-	Action ContactActionType `json:"action,omitempty"`
-	IdempotencyKey string `json:"idempotency_key,omitempty"`
+	Accept         bool              `json:"accept"`
+	Action         ContactActionType `json:"action,omitempty"`
+	IdempotencyKey string            `json:"idempotency_key,omitempty"`
 }
 
 type ContactActionType string
@@ -81,17 +81,17 @@ const (
 )
 
 type ContactActionRequest struct {
-	Action        ContactActionType `json:"action"`
-	IdempotencyKey string           `json:"idempotency_key,omitempty"`
-	Reason        string           `json:"reason,omitempty"`
+	Action         ContactActionType `json:"action"`
+	IdempotencyKey string            `json:"idempotency_key,omitempty"`
+	Reason         string            `json:"reason,omitempty"`
 }
 
 type ContactActionResponse struct {
-	Status        string    `json:"status"`
-	ContactID     uuid.UUID `json:"contact_id"`
-	Action        ContactActionType `json:"action"`
-	ProcessedAt   time.Time `json:"processed_at"`
-	IdempotencyKey string   `json:"idempotency_key,omitempty"`
+	Status         string            `json:"status"`
+	ContactID      uuid.UUID         `json:"contact_id"`
+	Action         ContactActionType `json:"action"`
+	ProcessedAt    time.Time         `json:"processed_at"`
+	IdempotencyKey string            `json:"idempotency_key,omitempty"`
 }
 
 type AcceptContactRequest struct {
@@ -99,17 +99,17 @@ type AcceptContactRequest struct {
 }
 
 type RejectContactRequest struct {
-	Reason        string `json:"reason,omitempty"`
+	Reason         string `json:"reason,omitempty"`
 	IdempotencyKey string `json:"idempotency_key,omitempty"`
 }
 
 type BlockContactRequest struct {
-	Reason        string `json:"reason,omitempty"`
+	Reason         string `json:"reason,omitempty"`
 	IdempotencyKey string `json:"idempotency_key,omitempty"`
 }
 
 type RemoveContactRequest struct {
-	Reason        string `json:"reason,omitempty"`
+	Reason         string `json:"reason,omitempty"`
 	IdempotencyKey string `json:"idempotency_key,omitempty"`
 }
 

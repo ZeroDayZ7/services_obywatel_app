@@ -355,6 +355,9 @@ func (r *UploadDeviceKeysRequest) Normalize() {
 	if len(r.PublicKey) == 0 {
 		r.PublicKey = r.IdentityPublicKey
 	}
+	if len(r.IdentityPublicKey) == 0 && len(r.PublicKey) > 0 {
+		r.IdentityPublicKey = r.PublicKey
+	}
 	if len(r.SignedPreKey) == 0 {
 		r.SignedPreKey = r.SignedPreKeySnake
 	}

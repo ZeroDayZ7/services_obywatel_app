@@ -1,8 +1,10 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
@@ -187,12 +189,60 @@ func (s *messagingService) MarkAsRead(ctx context.Context, userID uuid.UUID, con
 // #endregion
 
 // #region E2EE
+func validateSignalKeyMaterial(name string, key []byte) error {
+	if len(key) == 0 {
+		return fmt.Errorf("%s is required", name)
+	}
+	if len(key) != 33 && len(key) != 65 {
+		return fmt.Errorf("%s must be a 33-byte compressed or 65-byte uncompressed EC public key, got %d bytes", name, len(key))
+	}
+	if bytes.Equal(bytes.TrimSpace(key), bytes.Repeat([]byte{0x00}, len(key))) {
+		return fmt.Errorf("%s cannot be all-zero", name)
+	}
+	if bytes.IndexFunc(key, func(r rune) bool { return r < 0x20 || r > 0x7e }) == -1 && (bytes.Contains(key, []byte("PUBKEY")) || bytes.Contains(key, []byte("SIGNED_PREKEY")) || bytes.Contains(key, []byte("OTK_")) || bytes.Contains(key, []byte("SIG_"))) {
+		return fmt.Errorf("%s contains fake/mock Signal key material", name)
+	}
+	return nil
+}
+
+func validateDeviceKeyUpload(req model.UploadDeviceKeysRequest) error {
+	if strings.TrimSpace(req.DeviceID) == "" {
+		return errors.New("device_id is required")
+	}
+	if req.RegistrationID == 0 {
+		return errors.New("registration_id is required")
+	}
+	if err := validateSignalKeyMaterial("identity_public_key", req.IdentityPublicKey); err != nil {
+		return err
+	}
+	if err := validateSignalKeyMaterial("signed_pre_key", req.SignedPreKey); err != nil {
+		return err
+	}
+	if len(req.SignedPreKeySig) != 64 {
+		return fmt.Errorf("signed_pre_key_sig must be 64 bytes, got %d", len(req.SignedPreKeySig))
+	}
+	if req.SignedPreKeyID == 0 {
+		return errors.New("signed_pre_key_id is required")
+	}
+	seen := make(map[string]struct{}, len(req.OneTimePreKeys))
+	for i, key := range req.OneTimePreKeys {
+		if err := validateSignalKeyMaterial(fmt.Sprintf("one_time_pre_key[%d]", i), key); err != nil {
+			return err
+		}
+		if _, exists := seen[string(key)]; exists {
+			return fmt.Errorf("duplicate one_time_pre_key[%d] detected", i)
+		}
+		seen[string(key)] = struct{}{}
+	}
+	return nil
+}
+
 func BuildUserDeviceIdentity(userID uuid.UUID, req model.UploadDeviceKeysRequest) *model.UserDeviceIdentity {
 	return &model.UserDeviceIdentity{
 		UserID:              userID,
 		DeviceID:            req.DeviceID,
 		RegistrationID:      req.RegistrationID,
-		PublicKey:           req.PublicKey,
+		PublicKey:           req.IdentityPublicKey,
 		SignedPreKey:        req.SignedPreKey,
 		SignedPreKeySig:     req.SignedPreKeySig,
 		SignedPreKeyID:      req.SignedPreKeyID,
@@ -250,8 +300,8 @@ func (s *messagingService) ValidateSenderDeviceOwnership(ctx context.Context, us
 
 func (s *messagingService) UploadDeviceKeys(ctx context.Context, userID uuid.UUID, req model.UploadDeviceKeysRequest) error {
 	req.Normalize()
-	if req.DeviceID == "" {
-		return errors.New("device_id is required")
+	if err := validateDeviceKeyUpload(req); err != nil {
+		return err
 	}
 
 	identity := BuildUserDeviceIdentity(userID, req)
