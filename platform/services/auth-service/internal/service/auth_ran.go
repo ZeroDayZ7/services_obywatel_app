@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/pkg/errors"
 	"github.com/zerodayz7/platform/pkg/permissions"
+	"github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/security"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/auth-service/internal/model"
@@ -70,51 +71,97 @@ func (s *authService) Register(username, email, rawPassword string) (*model.User
 }
 
 // #region Logout
-func (s *authService) Logout(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID, fingerprint string) error {
+func (s *authService) Logout(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID, deviceID string, refreshToken string) error {
 	log := shared.GetLogger()
+	trimmedDeviceID := strings.TrimSpace(deviceID)
 
-	// 1. Pobierz sesję
-	session, err := s.cache.GetSession(ctx, sessionID)
-	if err != nil {
-		log.WarnMap("Logout: session not found", map[string]any{"sid": sessionID})
-		return errors.ErrUnauthorized
+	var session *redis.UserSession
+	if s.cache != nil {
+		session, _ = s.cache.GetSession(ctx, sessionID)
+		if session != nil {
+			if session.UserID != userID.String() {
+				log.ErrorMap("Logout security violation: user mismatch", map[string]any{
+					"expected_uid": userID.String(),
+					"actual_uid":   session.UserID,
+					"session_id":   sessionID,
+				})
+				return errors.ErrUnauthorized
+			}
+
+			if trimmedDeviceID != "" {
+				trimmedSessionFingerprint := strings.TrimSpace(session.Fingerprint)
+				trimmedSessionDeviceID := strings.TrimSpace(session.DeviceID)
+				matchesDevice := trimmedSessionFingerprint == trimmedDeviceID || trimmedSessionDeviceID == trimmedDeviceID
+				if !matchesDevice {
+					log.ErrorMap("Logout security violation: device mismatch", map[string]any{
+						"user_id":       userID,
+						"session_id":    sessionID,
+						"expected_dev":  trimmedDeviceID,
+						"actual_fpt":    trimmedSessionFingerprint,
+						"actual_dev_id": trimmedSessionDeviceID,
+					})
+					return errors.ErrUnauthorized
+				}
+			}
+		}
 	}
 
-	// 2. Weryfikacja bezpieczeństwa (UserID + normalizacja identyfikatora urządzenia)
-	trimmedFingerprint := strings.TrimSpace(fingerprint)
-	trimmedSessionFingerprint := strings.TrimSpace(session.Fingerprint)
-	trimmedSessionDeviceID := strings.TrimSpace(session.DeviceID)
+	if refreshToken != "" {
+		tokenHash := hashRefreshTokenForLogout(refreshToken)
+		if err := s.refreshRepo.Revoke(tokenHash); err != nil {
+			log.WarnMap("Logout: refresh token revoke failed", map[string]any{
+				"user_id":      userID,
+				"session_id":   sessionID,
+				"device_id":    trimmedDeviceID,
+				"refresh_hash": tokenHash,
+				"err":          err,
+			})
+		}
+	}
 
-	matchesDeviceID := trimmedFingerprint != "" &&
-		(trimmedSessionFingerprint == trimmedFingerprint || trimmedSessionDeviceID == trimmedFingerprint)
-	matchesSessionFingerprint := trimmedSessionFingerprint != "" &&
-		(trimmedSessionFingerprint == trimmedFingerprint || trimmedSessionDeviceID == trimmedSessionFingerprint)
-
-	if session.UserID != userID.String() || (!matchesDeviceID && !matchesSessionFingerprint) {
-		log.ErrorMap("Logout security violation", map[string]any{
-			"expected_uid": userID.String(),
-			"actual_uid":   session.UserID,
-			"expected_fpt": fingerprint,
-			"actual_fpt":   session.Fingerprint,
-			"session_dev":  session.DeviceID,
+	if err := s.refreshRepo.RevokeSession(ctx, userID, sessionID); err != nil {
+		log.WarnMap("Logout: failed to revoke session in DB", map[string]any{
+			"user_id":    userID,
+			"session_id": sessionID,
+			"device_id":  trimmedDeviceID,
+			"err":        err,
 		})
-		return errors.ErrUnauthorized
 	}
 
-	// 3. Usuwanie sesji z Redis
-	if err := s.cache.DeleteSession(ctx, sessionID); err != nil {
-		return errors.ErrInternal
+	if trimmedDeviceID != "" {
+		if err := s.refreshRepo.RevokeByFingerprint(ctx, userID, trimmedDeviceID); err != nil {
+			log.WarnMap("Logout: failed to revoke device refresh tokens", map[string]any{
+				"user_id":   userID,
+				"session_id": sessionID,
+				"device_id": trimmedDeviceID,
+				"err":       err,
+			})
+		}
 	}
 
-	// 4. Unieważnienie Refresh Tokena w DB przy użyciu zgodnego identyfikatora urządzenia
-	resolverFingerprint := trimmedSessionFingerprint
-	if resolverFingerprint == "" {
-		resolverFingerprint = trimmedSessionDeviceID
+	if s.cache != nil {
+		if err := s.cache.DeleteSession(ctx, sessionID); err != nil {
+			log.WarnMap("Logout: failed to delete Redis session", map[string]any{
+				"user_id":    userID,
+				"session_id": sessionID,
+				"device_id":  trimmedDeviceID,
+				"err":        err,
+			})
+		}
+		_ = s.cache.DeleteSetupSession(ctx, sessionID)
 	}
-	if resolverFingerprint == "" {
-		resolverFingerprint = trimmedFingerprint
+
+	clientIP := ""
+	if session != nil {
+		clientIP = session.IP
 	}
-	_ = s.refreshRepo.RevokeByFingerprint(ctx, userID, resolverFingerprint)
+	log.InfoMap("Logout successful", map[string]any{
+		"user_id":    userID,
+		"session_id": sessionID,
+		"device_id":  trimmedDeviceID,
+		"client_ip":  clientIP,
+		"refresh_req": refreshToken != "",
+	})
 
 	return nil
 }

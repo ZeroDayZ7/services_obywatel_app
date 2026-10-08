@@ -1,12 +1,24 @@
 package service
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/services/auth-service/internal/model"
 )
+
+func TestHashRefreshTokenForLogoutUsesSHA256(t *testing.T) {
+	raw := "logout-refresh-token-123"
+	hash := hashRefreshTokenForLogout(raw)
+
+	expected := sha256.Sum256([]byte(raw))
+	if hash != hex.EncodeToString(expected[:]) {
+		t.Fatalf("expected SHA256 hash %s, got %s", hex.EncodeToString(expected[:]), hash)
+	}
+}
 
 func TestBuildUserSessionIncludesFullProfileData(t *testing.T) {
 	userID := uuid.New()

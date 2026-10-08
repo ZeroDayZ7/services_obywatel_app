@@ -260,7 +260,9 @@ func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 		return apperr.SendAppError(c, apperr.ErrInvalidSession)
 	}
 
-	err := h.authService.Logout(c.UserContext(), *rc.UserID, *rc.SessionID, rc.DeviceID)
+	body := c.Locals("validatedBody").(schemas.RefreshTokenRequest)
+
+	err := h.authService.Logout(c.UserContext(), *rc.UserID, *rc.SessionID, rc.DeviceID, body.RefreshToken)
 	if err != nil {
 		return apperr.SendAppError(c, err)
 	}

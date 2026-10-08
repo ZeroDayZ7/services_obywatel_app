@@ -27,7 +27,7 @@ type AuthService interface {
 	UpdatePassword(ctx context.Context, userID uuid.UUID, newPassword string) error
 	Verify2FA(ctx context.Context, token uuid.UUID, code []byte, fingerprint string, ip string) (*http.LoginResponse, error)
 	Resend2FACode(ctx context.Context, email string, token uuid.UUID) error
-	Logout(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID, fingerprint string) error
+	Logout(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID, deviceID string, refreshToken string) error
 	RegisterDevice(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID, deviceID string, clientIP string, req schemas.RegisterDeviceRequest) (*http.RegisterDeviceResponse, error)
 	CreateTemporarySession(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID, clientIP string) (*http.LoginResponse, error)
 	RefreshToken(ctx context.Context, tokenStr string, fingerprint string) (*http.RefreshResponse, error)

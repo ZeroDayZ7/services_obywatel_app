@@ -18,6 +18,11 @@ import (
 )
 
 // #region CanUserLogin
+func hashRefreshTokenForLogout(token string) string {
+	hash := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(hash[:])
+}
+
 func (s *authService) CanUserLogin(user *model.User) error {
 	// 1. Najpierw sprawdzamy statusy stałe
 	switch user.Status {
