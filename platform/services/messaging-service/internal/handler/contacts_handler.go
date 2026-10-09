@@ -30,11 +30,17 @@ func (h *ContactsHandler) GetContacts(c *fiber.Ctx) error {
 	if requestID == "" {
 		requestID = uuid.NewString()
 	}
-	logger := shared.GetLogger()
+	log := shared.GetLogger()
+
+	log.Info("[CONTACTS-01] HANDLER: starting GetContacts request",
+		"request_id", requestID,
+		"method", c.Method(),
+		"path", c.Path(),
+	)
 
 	rc := reqctx.MustFromFiber(c)
 	if rc.UserID == nil {
-		logger.Warn("[CONTACTS-06] AUTH: user_id missing for contact list request",
+		log.Warn("[CONTACTS-06] AUTH: user_id missing for contact list request",
 			"request_id", requestID,
 			"method", c.Method(),
 			"path", c.Path(),
@@ -42,7 +48,12 @@ func (h *ContactsHandler) GetContacts(c *fiber.Ctx) error {
 		return apperr.SendAppError(c, apperr.ErrUnauthorized)
 	}
 
-	logger.Info("[CONTACTS-05] HANDLER: retrieving contacts",
+	log.Debug("[CONTACTS-03] AUTH: user context validated successfully",
+		"request_id", requestID,
+		"user_id", rc.UserID.String(),
+	)
+
+	log.Info("[CONTACTS-05] HANDLER: retrieving contacts from service",
 		"request_id", requestID,
 		"method", c.Method(),
 		"path", c.Path(),
@@ -51,7 +62,7 @@ func (h *ContactsHandler) GetContacts(c *fiber.Ctx) error {
 
 	contacts, err := h.contactsSvc.GetContacts(ctx, *rc.UserID)
 	if err != nil {
-		logger.Error("[CONTACTS-08] REPOSITORY: failed to load contacts",
+		log.Error("[CONTACTS-08] REPOSITORY: failed to load contacts",
 			"request_id", requestID,
 			"user_id", rc.UserID.String(),
 			"error", err,
@@ -59,12 +70,22 @@ func (h *ContactsHandler) GetContacts(c *fiber.Ctx) error {
 		return apperr.SendAppError(c, err)
 	}
 
-	logger.Info("[CONTACTS-09] RESPONSE: returning contact list",
+	log.Debug("[CONTACTS-07] SERVICE: contacts retrieved successfully",
 		"request_id", requestID,
 		"user_id", rc.UserID.String(),
-		"incoming", countIncoming(contacts, *rc.UserID),
-		"outgoing", countOutgoing(contacts, *rc.UserID),
-		"accepted", countAccepted(contacts),
+		"raw_count", len(contacts),
+	)
+
+	incoming := countIncoming(contacts, *rc.UserID)
+	outgoing := countOutgoing(contacts, *rc.UserID)
+	accepted := countAccepted(contacts)
+
+	log.Info("[CONTACTS-09] RESPONSE: returning contact list",
+		"request_id", requestID,
+		"user_id", rc.UserID.String(),
+		"incoming", incoming,
+		"outgoing", outgoing,
+		"accepted", accepted,
 		"total", len(contacts),
 	)
 
@@ -80,11 +101,17 @@ func (h *ContactsHandler) RequestContact(c *fiber.Ctx) error {
 	if requestID == "" {
 		requestID = uuid.NewString()
 	}
-	logger := shared.GetLogger()
+	log := shared.GetLogger()
+
+	log.Info("[CONTACTS-INVITE-00] HANDLER: starting RequestContact request",
+		"request_id", requestID,
+		"method", c.Method(),
+		"path", c.Path(),
+	)
 
 	rc := reqctx.MustFromFiber(c)
 	if rc.UserID == nil {
-		logger.Warn("[CONTACTS-INVITE-02] AUTH: missing user_id for invite request",
+		log.Warn("[CONTACTS-INVITE-02] AUTH: missing user_id for invite request",
 			"request_id", requestID,
 			"method", c.Method(),
 			"path", c.Path(),
@@ -94,7 +121,7 @@ func (h *ContactsHandler) RequestContact(c *fiber.Ctx) error {
 
 	var req model.SendContactRequest
 	if err := c.BodyParser(&req); err != nil {
-		logger.Warn("[CONTACTS-INVITE-03] HTTP: invalid invite payload",
+		log.Warn("[CONTACTS-INVITE-03] HTTP: invalid invite payload",
 			"request_id", requestID,
 			"user_id", rc.UserID.String(),
 			"error", err,
@@ -102,15 +129,21 @@ func (h *ContactsHandler) RequestContact(c *fiber.Ctx) error {
 		return apperr.SendAppError(c, apperr.ErrInvalidRequestBody)
 	}
 
+	log.Debug("[CONTACTS-INVITE-08] VALIDATION: request payload parsed successfully",
+		"request_id", requestID,
+		"user_id", rc.UserID.String(),
+		"target_user_id", req.TargetUserID.String(),
+	)
+
 	if *rc.UserID == req.TargetUserID {
-		logger.Warn("[CONTACTS-INVITE-04] VALIDATION: self-invite rejected",
+		log.Warn("[CONTACTS-INVITE-04] VALIDATION: self-invite rejected",
 			"request_id", requestID,
 			"user_id", rc.UserID.String(),
 		)
 		return apperr.SendAppError(c, apperr.ErrInvalidRequestBody)
 	}
 
-	logger.Info("[CONTACTS-INVITE-01] REQUEST: sending contact invite",
+	log.Info("[CONTACTS-INVITE-01] REQUEST: sending contact invite",
 		"request_id", requestID,
 		"user_id", rc.UserID.String(),
 		"target_user_id", req.TargetUserID.String(),
@@ -118,7 +151,7 @@ func (h *ContactsHandler) RequestContact(c *fiber.Ctx) error {
 
 	contact, err := h.contactsSvc.SendRequest(ctx, *rc.UserID, req.TargetUserID)
 	if err != nil {
-		logger.Error("[CONTACTS-INVITE-05] SERVICE: invite failed",
+		log.Error("[CONTACTS-INVITE-05] SERVICE: invite failed",
 			"request_id", requestID,
 			"user_id", rc.UserID.String(),
 			"target_user_id", req.TargetUserID.String(),
@@ -127,7 +160,7 @@ func (h *ContactsHandler) RequestContact(c *fiber.Ctx) error {
 		return apperr.SendAppError(c, err)
 	}
 
-	logger.Info("[CONTACTS-INVITE-06] SERVICE: invite created",
+	log.Info("[CONTACTS-INVITE-06] SERVICE: invite created",
 		"request_id", requestID,
 		"user_id", rc.UserID.String(),
 		"target_user_id", req.TargetUserID.String(),
@@ -146,11 +179,17 @@ func (h *ContactsHandler) RespondToRequest(c *fiber.Ctx) error {
 	if requestID == "" {
 		requestID = uuid.NewString()
 	}
-	logger := shared.GetLogger()
+	log := shared.GetLogger()
+
+	log.Info("[CONTACTS-RESPOND-00] HANDLER: starting RespondToRequest request",
+		"request_id", requestID,
+		"method", c.Method(),
+		"path", c.Path(),
+	)
 
 	rc := reqctx.MustFromFiber(c)
 	if rc.UserID == nil {
-		logger.Warn("[CONTACTS-RESPOND-02] AUTH: missing user_id for response",
+		log.Warn("[CONTACTS-RESPOND-02] AUTH: missing user_id for response",
 			"request_id", requestID,
 			"method", c.Method(),
 			"path", c.Path(),
@@ -158,19 +197,21 @@ func (h *ContactsHandler) RespondToRequest(c *fiber.Ctx) error {
 		return apperr.SendAppError(c, apperr.ErrUnauthorized)
 	}
 
-	contactID, err := uuid.Parse(c.Params("id"))
+	paramID := c.Params("id")
+	contactID, err := uuid.Parse(paramID)
 	if err != nil {
-		logger.Warn("[CONTACTS-RESPOND-03] VALIDATION: invalid contact id",
+		log.Warn("[CONTACTS-RESPOND-03] VALIDATION: invalid contact id",
 			"request_id", requestID,
 			"user_id", rc.UserID.String(),
-			"contact_id", c.Params("id"),
+			"contact_id_param", paramID,
+			"error", err,
 		)
 		return apperr.SendAppError(c, apperr.ErrInvalidRequestBody)
 	}
 
 	var req model.RespondContactRequest
 	if err := c.BodyParser(&req); err != nil {
-		logger.Warn("[CONTACTS-RESPOND-04] HTTP: invalid accept payload",
+		log.Warn("[CONTACTS-RESPOND-04] HTTP: invalid accept payload",
 			"request_id", requestID,
 			"user_id", rc.UserID.String(),
 			"contact_id", contactID.String(),
@@ -179,7 +220,7 @@ func (h *ContactsHandler) RespondToRequest(c *fiber.Ctx) error {
 		return apperr.SendAppError(c, apperr.ErrInvalidRequestBody)
 	}
 
-	logger.Info("[CONTACTS-RESPOND-01] REQUEST: updating contact response",
+	log.Info("[CONTACTS-RESPOND-01] REQUEST: updating contact response",
 		"request_id", requestID,
 		"user_id", rc.UserID.String(),
 		"contact_id", contactID.String(),
@@ -187,7 +228,7 @@ func (h *ContactsHandler) RespondToRequest(c *fiber.Ctx) error {
 	)
 
 	if err := h.contactsSvc.RespondToRequest(ctx, *rc.UserID, contactID, req.Accept); err != nil {
-		logger.Error("[CONTACTS-RESPOND-05] SERVICE: response failed",
+		log.Error("[CONTACTS-RESPOND-05] SERVICE: response failed",
 			"request_id", requestID,
 			"user_id", rc.UserID.String(),
 			"contact_id", contactID.String(),
@@ -197,7 +238,7 @@ func (h *ContactsHandler) RespondToRequest(c *fiber.Ctx) error {
 		return apperr.SendAppError(c, err)
 	}
 
-	logger.Info("[CONTACTS-RESPOND-06] SERVICE: response applied",
+	log.Info("[CONTACTS-RESPOND-06] SERVICE: response applied",
 		"request_id", requestID,
 		"user_id", rc.UserID.String(),
 		"contact_id", contactID.String(),
@@ -208,31 +249,37 @@ func (h *ContactsHandler) RespondToRequest(c *fiber.Ctx) error {
 }
 
 func countIncoming(contacts []model.Contact, userID uuid.UUID) int {
+	log := shared.GetLogger()
 	count := 0
 	for _, contact := range contacts {
 		if contact.ContactID == userID {
 			count++
 		}
 	}
+	log.Debug("counted incoming contacts", "count", count, "total_contacts", len(contacts))
 	return count
 }
 
 func countOutgoing(contacts []model.Contact, userID uuid.UUID) int {
+	log := shared.GetLogger()
 	count := 0
 	for _, contact := range contacts {
 		if contact.OwnerID == userID {
 			count++
 		}
 	}
+	log.Debug("counted outgoing contacts", "count", count, "total_contacts", len(contacts))
 	return count
 }
 
 func countAccepted(contacts []model.Contact) int {
+	log := shared.GetLogger()
 	count := 0
 	for _, contact := range contacts {
 		if contact.Status == model.ContactStatusAccepted {
 			count++
 		}
 	}
+	log.Debug("counted accepted contacts", "count", count, "total_contacts", len(contacts))
 	return count
 }
