@@ -1,6 +1,7 @@
 package model
 
 import (
+	"encoding/json"
 	"strings"
 	"time"
 
@@ -414,6 +415,74 @@ type OutboxEventPayload struct {
 	Content           string `json:"content,omitempty"`
 	Type              uint8  `json:"type,omitempty"`
 	TypeAlt           uint8  `json:"signal_message_type,omitempty"`
+}
+
+func (o *OutboxEventPayload) UnmarshalJSON(data []byte) error {
+	type rawOutboxEventPayload struct {
+		EventID           json.RawMessage `json:"event_id"`
+		IdempotencyKey    string          `json:"idempotency_key"`
+		EventType         string          `json:"event_type"`
+		ConversationID    json.RawMessage `json:"conversation_id"`
+		Payload           datatypes.JSON  `json:"payload"`
+		CreatedAt         time.Time       `json:"created_at"`
+		MessageID         string          `json:"message_id"`
+		Ciphertext        string          `json:"ciphertext"`
+		SenderDeviceID    string          `json:"sender_device_id"`
+		SenderDeviceIDAlt string          `json:"senderDeviceId"`
+		Content           string          `json:"content"`
+		Type              uint8           `json:"type"`
+		TypeAlt           uint8           `json:"signal_message_type"`
+	}
+
+	var aux rawOutboxEventPayload
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	o.IdempotencyKey = strings.TrimSpace(aux.IdempotencyKey)
+	o.EventType = strings.TrimSpace(aux.EventType)
+	o.Payload = aux.Payload
+	o.CreatedAt = aux.CreatedAt
+	o.MessageID = strings.TrimSpace(aux.MessageID)
+	o.Ciphertext = strings.TrimSpace(aux.Ciphertext)
+	o.SenderDeviceID = strings.TrimSpace(aux.SenderDeviceID)
+	o.SenderDeviceIDAlt = strings.TrimSpace(aux.SenderDeviceIDAlt)
+	o.Content = strings.TrimSpace(aux.Content)
+	o.Type = aux.Type
+	o.TypeAlt = aux.TypeAlt
+
+	if len(aux.EventID) == 0 || string(aux.EventID) == "null" || strings.TrimSpace(string(aux.EventID)) == "" {
+		o.EventID = uuid.Nil
+	} else {
+		var eventID uuid.UUID
+		if err := json.Unmarshal(aux.EventID, &eventID); err != nil {
+			if parsed, err2 := uuid.Parse(strings.Trim(string(aux.EventID), "\"")); err2 == nil {
+				eventID = parsed
+			} else {
+				return err
+			}
+		}
+		o.EventID = eventID
+	}
+
+	if len(aux.ConversationID) == 0 || string(aux.ConversationID) == "null" || strings.TrimSpace(string(aux.ConversationID)) == "" || strings.TrimSpace(string(aux.ConversationID)) == "\"\"" {
+		o.ConversationID = nil
+	} else {
+		var conversationID uuid.UUID
+		if err := json.Unmarshal(aux.ConversationID, &conversationID); err != nil {
+			if parsed, err2 := uuid.Parse(strings.Trim(string(aux.ConversationID), "\"")); err2 == nil {
+				conversationID = parsed
+			} else {
+				return err
+			}
+		}
+		o.ConversationID = &conversationID
+	}
+
+	if o.SenderDeviceID == "" {
+		o.SenderDeviceID = o.SenderDeviceIDAlt
+	}
+	return nil
 }
 
 // OutboxBatchRequest - Paczka zdarzeń wysyłana z klienta w trybie offline

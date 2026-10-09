@@ -65,13 +65,45 @@ func (h *MessagingHandler) ProcessOutbox(c *fiber.Ctx) error {
 		return apperr.SendAppError(c, apperr.ErrUnauthorized)
 	}
 
+	rawBody := string(c.Body())
+	shared.GetLogger().Info("[OUTBOX_DEBUG] raw request body",
+		"user_id", rc.UserID.String(),
+		"body", rawBody,
+	)
+
 	var req model.OutboxBatchRequest
 	if err := c.BodyParser(&req); err != nil {
+		shared.GetLogger().Error("[OUTBOX_DEBUG] failed to parse outbox JSON",
+			"user_id", rc.UserID.String(),
+			"body", rawBody,
+			"error", err.Error(),
+		)
 		return apperr.SendAppError(c, apperr.ErrInvalidRequestBody)
+	}
+
+	shared.GetLogger().Info("[OUTBOX_DEBUG] parsed request",
+		"user_id", rc.UserID.String(),
+		"message_count", len(req.Messages),
+	)
+	for i, msg := range req.Messages {
+		shared.GetLogger().Info("[OUTBOX_DEBUG] message item",
+			"index", i,
+			"event_id", msg.EventID,
+			"event_type", msg.EventType,
+			"conversation_id", msg.ConversationID,
+			"sender_device_id", msg.SenderDeviceID,
+			"ciphertext_len", len(msg.Ciphertext),
+			"type", msg.Type,
+			"idempotency_key", msg.IdempotencyKey,
+		)
 	}
 
 	resp, err := h.service.ProcessOutbox(ctx, *rc.UserID, req)
 	if err != nil {
+		shared.GetLogger().Error("[OUTBOX_DEBUG] service rejected request",
+			"user_id", rc.UserID.String(),
+			"error", err.Error(),
+		)
 		return apperr.SendAppError(c, err)
 	}
 

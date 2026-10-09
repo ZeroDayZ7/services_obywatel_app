@@ -171,6 +171,44 @@ func TestMessagingHandlerProcessOutbox_AcceptsDirectMessageEnvelopePayload(t *te
 	}
 }
 
+func TestMessagingHandlerProcessOutbox_IgnoresEmptyConversationID(t *testing.T) {
+	userID := uuid.New()
+	service := &stubMessagingService{
+		processOutbox: func(ctx context.Context, gotUserID uuid.UUID, req model.OutboxBatchRequest) (*model.OutboxBatchResponse, error) {
+			if gotUserID != userID {
+				t.Fatalf("expected userID %s, got %s", userID, gotUserID)
+			}
+			if len(req.Messages) != 1 {
+				t.Fatalf("expected 1 messages, got %d", len(req.Messages))
+			}
+			if req.Messages[0].ConversationID != nil {
+				t.Fatalf("expected empty conversation_id to be ignored, got %v", req.Messages[0].ConversationID)
+			}
+			return &model.OutboxBatchResponse{ProcessedCount: 0}, nil
+		},
+	}
+
+	handler := NewMessagingHandler(service)
+	app := fiber.New()
+	app.Use(func(c *fiber.Ctx) error {
+		c.Locals(reqctx.FiberRequestContextKey, &reqctx.RequestContext{UserID: &userID})
+		return c.Next()
+	})
+	app.Post("/sync/outbox", handler.ProcessOutbox)
+
+	payload := `{"messages":[{"event_id":"01a1221b-0a84-71be-9f4f-14afafc0b841","idempotency_key":"01a1221b-0a84-71be-9f4f-14afafc0b841","message_id":"01a1221b-0a84-71be-9f4f-14afafc0b841","event_type":"SEND_MESSAGE","conversation_id":"","sender_device_id":"8e681e7c-6ccc-4854-8fc6-b6dd5074f39e","ciphertext":"","type":1,"content":"","created_at":"2026-10-09T19:19:19.933148Z","outbox_event_id":"01a1221b-0a84-71be-9f4f-14afafc0b841"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/sync/outbox", bytes.NewBufferString(payload))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("app test: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
 func TestMessagingHandlerProcessOutbox_RejectsRootArrayPayload(t *testing.T) {
 	userID := uuid.New()
 	handler := NewMessagingHandler(&stubMessagingService{})
