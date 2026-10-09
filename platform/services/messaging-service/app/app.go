@@ -36,6 +36,7 @@ func NewApp(container *di.Container) *fiber.App {
 
 	app.Use(shared.GetLimiter(shared.LimitGlobal, nil))
 	app.Use(middleware.InternalAuthMiddleware(container.KeyStore))
+	app.Use(middleware.OperationIdMiddleware())
 
 	return app
 }

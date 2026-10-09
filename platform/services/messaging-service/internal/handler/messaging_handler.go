@@ -285,6 +285,7 @@ func (h *MessagingHandler) UploadDeviceKeys(c *fiber.Ctx) error {
 		"user_id": rc.UserID.String(),
 		"device_id": req.DeviceID,
 		"one_time_pre_keys_count": len(req.OneTimePreKeys),
+		"operation_id": rc.OperationID,
 	})
 
 	if err := h.service.UploadDeviceKeys(ctx, *rc.UserID, req); err != nil {
@@ -292,6 +293,7 @@ func (h *MessagingHandler) UploadDeviceKeys(c *fiber.Ctx) error {
 			"user_id": rc.UserID.String(),
 			"device_id": req.DeviceID,
 			"error": err.Error(),
+			"operation_id": rc.OperationID,
 		})
 		return apperr.SendAppError(c, err)
 	}
@@ -300,6 +302,7 @@ func (h *MessagingHandler) UploadDeviceKeys(c *fiber.Ctx) error {
 		"user_id": rc.UserID.String(),
 		"device_id": req.DeviceID,
 		"one_time_pre_keys_count": len(req.OneTimePreKeys),
+		"operation_id": rc.OperationID,
 	})
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{"status": "uploaded"})

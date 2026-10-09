@@ -18,6 +18,7 @@ type RequestContext struct {
 	Permissions []string
 	RiskScore   int
 	Challenge   string
+	OperationID string
 
 	InstitutionID *uuid.UUID
 	DepartmentID  *uuid.UUID
