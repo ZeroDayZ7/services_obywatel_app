@@ -41,8 +41,8 @@ const (
 // UserDeviceIdentity – Przechowuje publiczne klucze urządzenia użytkownika potrzebne do nawiązania sesji E2EE
 type UserDeviceIdentity struct {
 	ID             uuid.UUID `gorm:"type:uuid;primaryKey;default:uuidv7()"`
-	UserID         uuid.UUID `gorm:"type:uuid;index;not null"`
-	DeviceID       string    `gorm:"type:varchar(64);not null;index"` // Identyfikator instalacji / sprzętu
+	UserID         uuid.UUID `gorm:"type:uuid;not null;uniqueIndex:idx_user_device_identity_active"`
+	DeviceID       string    `gorm:"type:varchar(64);not null;uniqueIndex:idx_user_device_identity_active"` // Identyfikator instalacji / sprzętu
 	RegistrationID uint32    `gorm:"not null;default:0"`
 	PublicKey      []byte    `gorm:"type:bytea;not null"` // Długowieczny publiczny klucz tożsamości (Identity Key)
 
@@ -136,16 +136,16 @@ type AcceptTermsRequest struct {
 }
 
 type MessagingActivationStatusResponse struct {
-	UserID                 uuid.UUID        `json:"user_id"`
-	Status                 ActivationStatus `json:"status"`
-	ConsentAccepted        bool             `json:"consent_accepted"`
-	TermsVersion           string           `json:"terms_version,omitempty"`
-	CurrentTermsVersion    string           `json:"current_terms_version,omitempty"`
-	RequiresTermsAcceptance bool            `json:"requires_terms_acceptance"`
-	DeviceID               string           `json:"device_id,omitempty"`
-	ActivatedAt            *time.Time       `json:"activated_at,omitempty"`
-	CreatedAt              time.Time        `json:"created_at"`
-	UpdatedAt              time.Time        `json:"updated_at"`
+	UserID                  uuid.UUID        `json:"user_id"`
+	Status                  ActivationStatus `json:"status"`
+	ConsentAccepted         bool             `json:"consent_accepted"`
+	TermsVersion            string           `json:"terms_version,omitempty"`
+	CurrentTermsVersion     string           `json:"current_terms_version,omitempty"`
+	RequiresTermsAcceptance bool             `json:"requires_terms_acceptance"`
+	DeviceID                string           `json:"device_id,omitempty"`
+	ActivatedAt             *time.Time       `json:"activated_at,omitempty"`
+	CreatedAt               time.Time        `json:"created_at"`
+	UpdatedAt               time.Time        `json:"updated_at"`
 }
 
 func (a *MessagingActivation) ToResponse() *MessagingActivationStatusResponse {
@@ -155,16 +155,16 @@ func (a *MessagingActivation) ToResponse() *MessagingActivationStatusResponse {
 	currentTerms := CurrentMessagingTerms()
 	requiresTermsAcceptance := a.Status != ActivationStatusActive || !a.ConsentAccepted || a.TermsVersion != currentTerms.Version
 	return &MessagingActivationStatusResponse{
-		UserID:                 a.UserID,
-		Status:                 a.Status,
-		ConsentAccepted:        a.ConsentAccepted,
-		TermsVersion:           a.TermsVersion,
-		CurrentTermsVersion:    currentTerms.Version,
+		UserID:                  a.UserID,
+		Status:                  a.Status,
+		ConsentAccepted:         a.ConsentAccepted,
+		TermsVersion:            a.TermsVersion,
+		CurrentTermsVersion:     currentTerms.Version,
 		RequiresTermsAcceptance: requiresTermsAcceptance,
-		DeviceID:               a.DeviceID,
-		ActivatedAt:            a.ActivatedAt,
-		CreatedAt:              a.CreatedAt,
-		UpdatedAt:              a.UpdatedAt,
+		DeviceID:                a.DeviceID,
+		ActivatedAt:             a.ActivatedAt,
+		CreatedAt:               a.CreatedAt,
+		UpdatedAt:               a.UpdatedAt,
 	}
 }
 

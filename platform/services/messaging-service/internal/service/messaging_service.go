@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	apperr "github.com/zerodayz7/platform/pkg/errors"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/messaging-service/config"
 	"github.com/zerodayz7/platform/services/messaging-service/internal/model"
@@ -410,7 +411,7 @@ func (s *messagingService) ValidateSenderDeviceOwnership(ctx context.Context, us
 func (s *messagingService) UploadDeviceKeys(ctx context.Context, userID uuid.UUID, req model.UploadDeviceKeysRequest) error {
 	req.Normalize()
 	if err := validateDeviceKeyUpload(req); err != nil {
-		return err
+		return apperr.ErrValidationFailed.WithMeta("detail", err.Error())
 	}
 
 	identity := BuildUserDeviceIdentity(userID, req)

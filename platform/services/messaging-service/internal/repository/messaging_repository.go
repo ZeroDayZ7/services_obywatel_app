@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/services/messaging-service/internal/model"
@@ -236,34 +237,62 @@ func (r *messagingRepository) SaveDeviceIdentity(ctx context.Context, identity *
 		return nil
 	}
 
-	var existing model.UserDeviceIdentity
-	err := r.db.WithContext(ctx).
-		Where("user_id = ? AND device_id = ?", identity.UserID, identity.DeviceID).
-		First(&existing).Error
-	if err == nil {
-		identity.ID = existing.ID
-		existing.RegistrationID = identity.RegistrationID
-		existing.PublicKey = identity.PublicKey
-		existing.SignedPreKey = identity.SignedPreKey
-		existing.SignedPreKeySig = identity.SignedPreKeySig
-		existing.SignedPreKeyID = identity.SignedPreKeyID
-		identity.RegistrationID = existing.RegistrationID
-		identity.PublicKey = existing.PublicKey
-		identity.SignedPreKey = existing.SignedPreKey
-		identity.SignedPreKeySig = existing.SignedPreKeySig
-		identity.SignedPreKeyID = existing.SignedPreKeyID
-		return r.db.WithContext(ctx).Save(&existing).Error
-	}
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return err
-	}
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var existing model.UserDeviceIdentity
+		err := tx.Unscoped().
+			Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("user_id = ? AND device_id = ?", identity.UserID, identity.DeviceID).
+			Order("created_at DESC").
+			First(&existing).Error
+		if err == nil {
+			existing.RegistrationID = identity.RegistrationID
+			existing.PublicKey = identity.PublicKey
+			existing.SignedPreKey = identity.SignedPreKey
+			existing.SignedPreKeySig = identity.SignedPreKeySig
+			existing.SignedPreKeyID = identity.SignedPreKeyID
+			existing.OneTimePreKeysCount = identity.OneTimePreKeysCount
+			existing.DeletedAt = gorm.DeletedAt{}
+			return tx.Unscoped().Save(&existing).Error
+		}
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
 
-	return r.db.WithContext(ctx).
-		Clauses(clause.OnConflict{
-			Columns:   []clause.Column{{Name: "user_id"}, {Name: "device_id"}},
-			DoUpdates: clause.AssignmentColumns([]string{"registration_id", "public_key", "signed_pre_key", "signed_pre_key_sig", "signed_pre_key_id", "updated_at"}),
-		}).
-		Create(identity).Error
+		if err := tx.Create(identity).Error; err != nil {
+			if !isUniqueConstraintError(err) {
+				return err
+			}
+
+			var competing model.UserDeviceIdentity
+			if err2 := tx.Unscoped().
+				Where("user_id = ? AND device_id = ?", identity.UserID, identity.DeviceID).
+				Order("created_at DESC").
+				First(&competing).Error; err2 != nil {
+				return err2
+			}
+
+			competing.RegistrationID = identity.RegistrationID
+			competing.PublicKey = identity.PublicKey
+			competing.SignedPreKey = identity.SignedPreKey
+			competing.SignedPreKeySig = identity.SignedPreKeySig
+			competing.SignedPreKeyID = identity.SignedPreKeyID
+			competing.OneTimePreKeysCount = identity.OneTimePreKeysCount
+			competing.DeletedAt = gorm.DeletedAt{}
+			return tx.Unscoped().Save(&competing).Error
+		}
+		return nil
+	})
+}
+
+func isUniqueConstraintError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "duplicate key") ||
+		strings.Contains(msg, "unique constraint") ||
+		strings.Contains(msg, "UNIQUE constraint failed") ||
+		strings.Contains(msg, "constraint") && strings.Contains(msg, "already exists")
 }
 
 func (r *messagingRepository) SavePreKeys(ctx context.Context, keys []model.UserPreKey) error {
