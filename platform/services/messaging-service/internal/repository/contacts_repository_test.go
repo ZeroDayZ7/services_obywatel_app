@@ -68,8 +68,11 @@ func TestContactsRepositoryCreateAndLookup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get by user id: %v", err)
 	}
-	if len(forUser) != 0 {
-		t.Fatalf("expected target user to see no owner-owned contacts, got %d", len(forUser))
+	if len(forUser) != 1 {
+		t.Fatalf("expected target user to see exactly one incoming contact, got %d", len(forUser))
+	}
+	if forUser[0].OwnerID != ownerID || forUser[0].ContactID != targetID {
+		t.Fatalf("expected incoming relation owner=%s contact=%s, got owner=%s contact=%s", ownerID, targetID, forUser[0].OwnerID, forUser[0].ContactID)
 	}
 
 	ownerVisible, err := repo.GetContactsByUserID(context.Background(), ownerID)

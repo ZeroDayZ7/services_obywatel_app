@@ -161,12 +161,37 @@ func (s *messagingService) SendMessage(ctx context.Context, senderID uuid.UUID, 
 }
 
 func (s *messagingService) GetContacts(ctx context.Context, ownerID uuid.UUID, sinceVersion uint64) ([]model.Contact, error) {
-	return s.repo.GetContactsSinceVersion(ctx, ownerID, sinceVersion)
+	s.logger.Info("[CONTACTS_FETCH_START] fetching contacts for owner",
+		"owner_id", ownerID.String(),
+		"since_version", sinceVersion,
+	)
+
+	contacts, err := s.repo.GetContactsSinceVersion(ctx, ownerID, sinceVersion)
+	if err != nil {
+		s.logger.Error("[CONTACTS_FETCH_FAILED] failed to fetch contacts",
+			"owner_id", ownerID.String(),
+			"since_version", sinceVersion,
+			"error", err.Error(),
+		)
+		return nil, err
+	}
+
+	s.logger.Info("[CONTACTS_FETCH_OK] contacts loaded",
+		"owner_id", ownerID.String(),
+		"count", len(contacts),
+		"since_version", sinceVersion,
+	)
+	return contacts, nil
 }
 
 func (s *messagingService) GetMessages(ctx context.Context, userID uuid.UUID, conversationID string, limit, offset int) ([]model.Message, error) {
 	convID, err := uuid.Parse(conversationID)
 	if err != nil {
+		s.logger.Error("[MESSAGE_HISTORY_PARSE_FAILED] invalid conversation UUID",
+			"user_id", userID.String(),
+			"conversation_id", conversationID,
+			"error", err.Error(),
+		)
 		return nil, ErrInvalidUUID
 	}
 
@@ -174,7 +199,29 @@ func (s *messagingService) GetMessages(ctx context.Context, userID uuid.UUID, co
 		limit = 20
 	}
 
-	return s.repo.GetMessagesByConversation(ctx, userID, convID, limit, offset)
+	s.logger.Info("[MESSAGE_HISTORY_FETCH_START] loading message history",
+		"user_id", userID.String(),
+		"conversation_id", convID.String(),
+		"limit", limit,
+		"offset", offset,
+	)
+
+	messages, err := s.repo.GetMessagesByConversation(ctx, userID, convID, limit, offset)
+	if err != nil {
+		s.logger.Error("[MESSAGE_HISTORY_FETCH_FAILED] failed to load message history",
+			"user_id", userID.String(),
+			"conversation_id", convID.String(),
+			"error", err.Error(),
+		)
+		return nil, err
+	}
+
+	s.logger.Info("[MESSAGE_HISTORY_FETCH_OK] message history loaded",
+		"user_id", userID.String(),
+		"conversation_id", convID.String(),
+		"count", len(messages),
+	)
+	return messages, nil
 }
 
 // #endregion
@@ -426,10 +473,19 @@ func ValidateSenderDeviceBinding(userID uuid.UUID, deviceID string, trustedDevic
 
 func (s *messagingService) ValidateSenderDeviceOwnership(ctx context.Context, userID uuid.UUID, deviceID string) error {
 	if userID == uuid.Nil || strings.TrimSpace(deviceID) == "" {
+		s.logger.Error("[DEVICE_OWNERSHIP_INVALID] missing user or device id",
+			"user_id", userID.String(),
+			"device_id", deviceID,
+		)
 		return ErrInvalidSession
 	}
 	identity, err := s.repo.GetDeviceIdentity(ctx, userID, deviceID)
 	if err != nil || identity == nil {
+		s.logger.Error("[DEVICE_OWNERSHIP_MISMATCH] sender device not bound to authenticated user",
+			"user_id", userID.String(),
+			"device_id", deviceID,
+			"error", err,
+		)
 		return ErrInvalidSession
 	}
 	return nil
@@ -437,12 +493,27 @@ func (s *messagingService) ValidateSenderDeviceOwnership(ctx context.Context, us
 
 func (s *messagingService) UploadDeviceKeys(ctx context.Context, userID uuid.UUID, req model.UploadDeviceKeysRequest) error {
 	req.Normalize()
+	s.logger.Info("[DEVICE_KEYS_UPLOAD_START] validating and persisting E2EE identity bundle",
+		"user_id", userID.String(),
+		"device_id", req.DeviceID,
+		"pre_key_count", len(req.OneTimePreKeys),
+	)
 	if err := validateDeviceKeyUpload(req); err != nil {
+		s.logger.Error("[DEVICE_KEYS_UPLOAD_VALIDATION_FAILED] rejected malformed device keys",
+			"user_id", userID.String(),
+			"device_id", req.DeviceID,
+			"error", err.Error(),
+		)
 		return apperr.ErrValidationFailed.WithMeta("detail", err.Error())
 	}
 
 	identity := BuildUserDeviceIdentity(userID, req)
 	if err := s.repo.SaveDeviceIdentity(ctx, identity); err != nil {
+		s.logger.Error("[DEVICE_KEYS_SAVE_FAILED] unable to persist device identity",
+			"user_id", userID.String(),
+			"device_id", req.DeviceID,
+			"error", err.Error(),
+		)
 		return err
 	}
 

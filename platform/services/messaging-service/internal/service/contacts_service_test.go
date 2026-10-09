@@ -122,3 +122,40 @@ func TestContactsServiceRejectsDuplicateRelationInEitherDirection(t *testing.T) 
 		t.Fatalf("expected duplicate conflict, got %v", err)
 	}
 }
+
+func TestContactsServiceGetContactsReturnsIncomingAndOutgoingForAuthorizedUser(t *testing.T) {
+	db := newContactTestDB(t)
+	repo := repository.NewContactsRepository(db)
+	svc := NewContactsService(repo, shared.InitLogger("development", false))
+	ownerID := uuid.New()
+	targetID := uuid.New()
+
+	if _, err := svc.SendRequest(context.Background(), ownerID, targetID); err != nil {
+		t.Fatalf("send request from A to B: %v", err)
+	}
+
+	ownerVisible, err := svc.GetContacts(context.Background(), ownerID)
+	if err != nil {
+		t.Fatalf("A get contacts: %v", err)
+	}
+	if len(ownerVisible) != 1 {
+		t.Fatalf("expected A to see exactly one outgoing contact, got %d", len(ownerVisible))
+	}
+	if ownerVisible[0].Direction != model.ContactDirectionOutgoing {
+		t.Fatalf("expected A to see outgoing direction, got %q", ownerVisible[0].Direction)
+	}
+
+	targetVisible, err := svc.GetContacts(context.Background(), targetID)
+	if err != nil {
+		t.Fatalf("B get contacts: %v", err)
+	}
+	if len(targetVisible) != 1 {
+		t.Fatalf("expected B to see exactly one incoming contact, got %d", len(targetVisible))
+	}
+	if targetVisible[0].Status != model.ContactStatusPending {
+		t.Fatalf("expected B to see pending status, got %q", targetVisible[0].Status)
+	}
+	if targetVisible[0].Direction != model.ContactDirectionIncoming {
+		t.Fatalf("expected B to see incoming direction, got %q", targetVisible[0].Direction)
+	}
+}
