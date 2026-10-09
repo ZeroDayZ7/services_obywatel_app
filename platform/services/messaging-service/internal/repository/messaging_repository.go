@@ -74,6 +74,19 @@ func (r *messagingRepository) GetMessagesSinceVersion(ctx context.Context, userI
 
 // #region MessagingAndConversations
 func (r *messagingRepository) CreateMessage(ctx context.Context, msg *model.Message) error {
+	if msg == nil {
+		return errors.New("message is nil")
+	}
+	if strings.TrimSpace(msg.IdempotencyKey) == "" {
+		msg.IdempotencyKey = uuid.NewString()
+	}
+
+	if existing, err := r.GetMessageByIdempotencyKey(ctx, msg.IdempotencyKey); err != nil {
+		return err
+	} else if existing != nil {
+		return gorm.ErrDuplicatedKey
+	}
+
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var lastSeq uint64
 		err := tx.Model(&model.Conversation{}).

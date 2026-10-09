@@ -126,11 +126,20 @@ func (s *messagingService) SendMessage(ctx context.Context, senderID uuid.UUID, 
 	if msg == nil {
 		return ErrInvalidSession
 	}
+	if strings.TrimSpace(msg.IdempotencyKey) == "" {
+		msg.IdempotencyKey = uuid.NewString()
+	}
+	if existing, err := s.repo.GetMessageByIdempotencyKey(ctx, msg.IdempotencyKey); err != nil {
+		return err
+	} else if existing != nil {
+		return nil
+	}
 
 	s.logger.Info("[CONVERSATION_DB_LOOKUP] resolving conversation before message insert",
 		"user_id", senderID.String(),
 		"conversation_id", msg.ConversationID.String(),
 		"sender_device_id", msg.SenderDeviceID,
+		"idempotency_key", msg.IdempotencyKey,
 	)
 
 	if err := s.ValidateSenderDeviceOwnership(ctx, senderID, msg.SenderDeviceID); err != nil {
@@ -142,9 +151,13 @@ func (s *messagingService) SendMessage(ctx context.Context, senderID uuid.UUID, 
 		"user_id", senderID.String(),
 		"conversation_id", msg.ConversationID.String(),
 		"ciphertext_len", len(msg.EncryptedPayload),
+		"idempotency_key", msg.IdempotencyKey,
 	)
 
 	if err := s.repo.CreateMessage(ctx, msg); err != nil {
+		if existing, lookupErr := s.repo.GetMessageByIdempotencyKey(ctx, msg.IdempotencyKey); lookupErr == nil && existing != nil {
+			return nil
+		}
 		s.logger.Error("[MESSAGE_DB_INSERT_FAILED] failed to persist message",
 			"user_id", senderID.String(),
 			"conversation_id", msg.ConversationID.String(),

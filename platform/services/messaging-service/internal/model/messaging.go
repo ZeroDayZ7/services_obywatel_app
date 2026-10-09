@@ -542,6 +542,7 @@ type SendMessageRequest struct {
 	Ciphertext             []byte     `json:"ciphertext,omitempty"`
 	Type                   uint8      `json:"type,omitempty"`
 	Content                string     `json:"content,omitempty"`
+	IdempotencyKey         string     `json:"idempotency_key,omitempty"`
 }
 
 func (r *SendMessageRequest) Normalize() {
@@ -556,6 +557,9 @@ func (r *SendMessageRequest) Normalize() {
 	}
 	if r.RecipientDeviceID == "" {
 		r.RecipientDeviceID = r.RecipientDeviceIDSnake
+	}
+	if r.IdempotencyKey == "" {
+		r.IdempotencyKey = uuid.NewString()
 	}
 }
 

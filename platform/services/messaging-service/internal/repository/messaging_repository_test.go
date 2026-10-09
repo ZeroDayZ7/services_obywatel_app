@@ -49,6 +49,91 @@ func newMessagingTestRepo(t *testing.T) (*messagingRepository, *gorm.DB) {
 	return &messagingRepository{db: db}, db
 }
 
+func TestMessagingRepositoryCreateMessage_RejectsDuplicateIdempotencyKey(t *testing.T) {
+	repo, db := newMessagingTestRepo(t)
+	ctx := context.Background()
+	if err := db.Exec(`
+		DROP TABLE IF EXISTS messages;
+		DROP TABLE IF EXISTS conversation_members;
+		DROP TABLE IF EXISTS conversations;
+		CREATE TABLE conversations (
+			id TEXT PRIMARY KEY,
+			type TEXT NOT NULL DEFAULT 'direct',
+			title TEXT,
+			last_sequence INTEGER NOT NULL DEFAULT 0,
+			created_at DATETIME,
+			updated_at DATETIME,
+			deleted_at DATETIME
+		);
+		CREATE TABLE conversation_members (
+			id TEXT PRIMARY KEY,
+			conversation_id TEXT NOT NULL,
+			user_id TEXT NOT NULL,
+			role TEXT NOT NULL DEFAULT 'member',
+			last_read_sequence INTEGER NOT NULL DEFAULT 0,
+			created_at DATETIME,
+			updated_at DATETIME,
+			deleted_at DATETIME
+		);
+		CREATE TABLE messages (
+			id TEXT PRIMARY KEY,
+			idempotency_key TEXT NOT NULL DEFAULT '',
+			conversation_id TEXT NOT NULL,
+			sender_id TEXT NOT NULL,
+			sender_device_id TEXT NOT NULL,
+			type TEXT NOT NULL DEFAULT 'text',
+			sequence INTEGER NOT NULL,
+			encrypted_payload BLOB NOT NULL,
+			media_header BLOB,
+			version INTEGER NOT NULL DEFAULT 1,
+			created_at DATETIME,
+			updated_at DATETIME,
+			deleted_at DATETIME
+		);
+	`).Error; err != nil {
+		t.Fatalf("migrate message schema: %v", err)
+	}
+
+	conversationID := uuid.New()
+	if err := db.Create(&model.Conversation{ID: conversationID, Type: model.ConversationTypeDirect, Title: "demo"}).Error; err != nil {
+		t.Fatalf("create conversation: %v", err)
+	}
+
+	msgA := &model.Message{
+		ID:               uuid.New(),
+		ConversationID:   conversationID,
+		SenderID:         uuid.New(),
+		SenderDeviceID:   "device-1",
+		Type:             model.MessageTypeText,
+		EncryptedPayload: []byte("hello"),
+		IdempotencyKey:   "same-key",
+	}
+	msgB := &model.Message{
+		ID:               uuid.New(),
+		ConversationID:   conversationID,
+		SenderID:         uuid.New(),
+		SenderDeviceID:   "device-1",
+		Type:             model.MessageTypeText,
+		EncryptedPayload: []byte("hello-again"),
+		IdempotencyKey:   "same-key",
+	}
+
+	if err := repo.CreateMessage(ctx, msgA); err != nil {
+		t.Fatalf("create first message: %v", err)
+	}
+	if err := repo.CreateMessage(ctx, msgB); err == nil {
+		t.Fatal("expected duplicate idempotency key to be rejected")
+	}
+
+	var total int64
+	if err := db.Model(&model.Message{}).Count(&total).Error; err != nil {
+		t.Fatalf("count messages: %v", err)
+	}
+	if total != 1 {
+		t.Fatalf("expected exactly one persisted message for same idempotency key, got %d", total)
+	}
+}
+
 func TestMessagingRepositorySaveDeviceIdentity_UpsertsSameDevice(t *testing.T) {
 	repo, db := newMessagingTestRepo(t)
 	ctx := context.Background()

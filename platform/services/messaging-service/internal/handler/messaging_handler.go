@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -129,9 +130,13 @@ func (h *MessagingHandler) SendMessage(c *fiber.Ctx) error {
 		SenderDeviceID:   req.SenderDeviceID,
 		Type:             model.MessageTypeText,
 		EncryptedPayload: req.Ciphertext,
+		IdempotencyKey:   strings.TrimSpace(req.IdempotencyKey),
 	}
 	if req.Content != "" {
 		msg.EncryptedPayload = []byte(req.Content)
+	}
+	if msg.IdempotencyKey == "" {
+		msg.IdempotencyKey = uuid.NewString()
 	}
 
 	if err := h.service.SendMessage(ctx, *rc.UserID, msg); err != nil {
