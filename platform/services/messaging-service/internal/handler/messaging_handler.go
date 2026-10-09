@@ -84,6 +84,7 @@ func (h *MessagingHandler) SendMessage(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(c.UserContext(), 5*time.Second)
 	defer cancel()
 
+	logger := shared.GetLogger()
 	rc := reqctx.MustFromFiber(c)
 	if rc.UserID == nil {
 		return apperr.SendAppError(c, apperr.ErrUnauthorized)
@@ -91,6 +92,9 @@ func (h *MessagingHandler) SendMessage(c *fiber.Ctx) error {
 
 	var req model.SendMessageRequest
 	if err := c.BodyParser(&req); err != nil {
+		logger.Error("[MESSAGE_REQUEST_PARSE_ERROR] invalid body for message send",
+			"user_id", rc.UserID.String(),
+			"error", err.Error())
 		return apperr.SendAppError(c, apperr.ErrInvalidRequestBody)
 	}
 	req.Normalize()
@@ -99,6 +103,10 @@ func (h *MessagingHandler) SendMessage(c *fiber.Ctx) error {
 	if req.ConversationID == nil && conversationIDStr != "" {
 		convID, err := uuid.Parse(conversationIDStr)
 		if err != nil {
+			logger.Error("[MESSAGE_REQUEST_PARSE_ERROR] invalid conversation id",
+				"user_id", rc.UserID.String(),
+				"conversation_id", conversationIDStr,
+				"error", err.Error())
 			return apperr.SendAppError(c, apperr.ErrInvalidRequestBody)
 		}
 		req.ConversationID = &convID
@@ -106,6 +114,14 @@ func (h *MessagingHandler) SendMessage(c *fiber.Ctx) error {
 	if req.ConversationID == nil {
 		return apperr.SendAppError(c, apperr.ErrInvalidRequestBody)
 	}
+
+	logger.Info("[MESSAGE_RECEIVE_REQUEST] inbound message request",
+		"user_id", rc.UserID.String(),
+		"conversation_id", req.ConversationID.String(),
+		"sender_device_id", req.SenderDeviceID,
+		"ciphertext_len", len(req.Ciphertext),
+		"content_len", len(req.Content),
+	)
 
 	msg := &model.Message{
 		ConversationID:   *req.ConversationID,
@@ -119,8 +135,18 @@ func (h *MessagingHandler) SendMessage(c *fiber.Ctx) error {
 	}
 
 	if err := h.service.SendMessage(ctx, *rc.UserID, msg); err != nil {
+		logger.Error("[MESSAGE_SEND_FAILED] service rejected message",
+			"user_id", rc.UserID.String(),
+			"conversation_id", req.ConversationID.String(),
+			"error", err.Error())
 		return apperr.SendAppError(c, err)
 	}
+
+	logger.Info("[MESSAGE_SEND_OK] message accepted by backend",
+		"user_id", rc.UserID.String(),
+		"conversation_id", req.ConversationID.String(),
+		"message_id", msg.ID.String(),
+	)
 
 	return c.Status(fiber.StatusCreated).JSON(msg)
 }
@@ -282,27 +308,27 @@ func (h *MessagingHandler) UploadDeviceKeys(c *fiber.Ctx) error {
 	// Log a minimal, non-sensitive trace to help debug missing DB records in production.
 	// Do NOT log any key material.
 	shared.GetLogger().InfoObj("Uploading device keys", map[string]any{
-		"user_id": rc.UserID.String(),
-		"device_id": req.DeviceID,
+		"user_id":                 rc.UserID.String(),
+		"device_id":               req.DeviceID,
 		"one_time_pre_keys_count": len(req.OneTimePreKeys),
-		"operation_id": rc.OperationID,
+		"operation_id":            rc.OperationID,
 	})
 
 	if err := h.service.UploadDeviceKeys(ctx, *rc.UserID, req); err != nil {
 		shared.GetLogger().ErrorObj("Failed to upload device keys", map[string]any{
-			"user_id": rc.UserID.String(),
-			"device_id": req.DeviceID,
-			"error": err.Error(),
+			"user_id":      rc.UserID.String(),
+			"device_id":    req.DeviceID,
+			"error":        err.Error(),
 			"operation_id": rc.OperationID,
 		})
 		return apperr.SendAppError(c, err)
 	}
 
 	shared.GetLogger().InfoObj("Device keys uploaded", map[string]any{
-		"user_id": rc.UserID.String(),
-		"device_id": req.DeviceID,
+		"user_id":                 rc.UserID.String(),
+		"device_id":               req.DeviceID,
 		"one_time_pre_keys_count": len(req.OneTimePreKeys),
-		"operation_id": rc.OperationID,
+		"operation_id":            rc.OperationID,
 	})
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{"status": "uploaded"})

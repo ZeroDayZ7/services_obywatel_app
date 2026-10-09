@@ -126,11 +126,38 @@ func (s *messagingService) SendMessage(ctx context.Context, senderID uuid.UUID, 
 	if msg == nil {
 		return ErrInvalidSession
 	}
+
+	s.logger.Info("[CONVERSATION_DB_LOOKUP] resolving conversation before message insert",
+		"user_id", senderID.String(),
+		"conversation_id", msg.ConversationID.String(),
+		"sender_device_id", msg.SenderDeviceID,
+	)
+
 	if err := s.ValidateSenderDeviceOwnership(ctx, senderID, msg.SenderDeviceID); err != nil {
 		return err
 	}
 	msg.SenderID = senderID
-	return s.repo.CreateMessage(ctx, msg)
+
+	s.logger.Info("[MESSAGE_DB_INSERT] creating message record",
+		"user_id", senderID.String(),
+		"conversation_id", msg.ConversationID.String(),
+		"ciphertext_len", len(msg.EncryptedPayload),
+	)
+
+	if err := s.repo.CreateMessage(ctx, msg); err != nil {
+		s.logger.Error("[MESSAGE_DB_INSERT_FAILED] failed to persist message",
+			"user_id", senderID.String(),
+			"conversation_id", msg.ConversationID.String(),
+			"error", err.Error())
+		return err
+	}
+
+	s.logger.Info("[MESSAGE_DB_INSERT_OK] message persisted",
+		"user_id", senderID.String(),
+		"conversation_id", msg.ConversationID.String(),
+		"message_id", msg.ID.String(),
+	)
+	return nil
 }
 
 func (s *messagingService) GetContacts(ctx context.Context, ownerID uuid.UUID, sinceVersion uint64) ([]model.Contact, error) {
