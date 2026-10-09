@@ -57,6 +57,12 @@ func (r *contactsRepository) GetContactByID(ctx context.Context, id uuid.UUID) (
 }
 
 func (r *contactsRepository) CreateContact(ctx context.Context, contact *model.Contact) error {
+	if contact == nil {
+		return errors.New("contact is nil")
+	}
+	if contact.ID == uuid.Nil {
+		contact.ID = uuid.New()
+	}
 	return r.db.WithContext(ctx).Create(contact).Error
 }
 
@@ -83,6 +89,7 @@ func (r *contactsRepository) CreateSymmetricContact(ctx context.Context, ownerID
 
 		if count == 0 {
 			symmetricContact := model.Contact{
+				ID:        uuid.New(),
 				OwnerID:   ownerID,
 				ContactID: targetID,
 				Status:    status,
