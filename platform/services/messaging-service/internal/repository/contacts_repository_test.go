@@ -42,6 +42,7 @@ func TestContactsRepositoryCreateAndLookup(t *testing.T) {
 		OwnerID:   ownerID,
 		ContactID: targetID,
 		Status:    model.ContactStatusPending,
+		Direction: model.ContactDirectionOutgoing,
 		Version:   1,
 	}
 
@@ -58,5 +59,16 @@ func TestContactsRepositoryCreateAndLookup(t *testing.T) {
 	}
 	if stored.OwnerID != ownerID || stored.ContactID != targetID {
 		t.Fatalf("persisted contact mismatch: got %s -> %s", stored.OwnerID, stored.ContactID)
+	}
+	if stored.Direction != model.ContactDirectionOutgoing {
+		t.Fatalf("expected outgoing direction, got %q", stored.Direction)
+	}
+
+	forUser, err := repo.GetContactsByUserID(context.Background(), targetID)
+	if err != nil {
+		t.Fatalf("get by user id: %v", err)
+	}
+	if len(forUser) != 1 {
+		t.Fatalf("expected exactly one visible contact for target, got %d", len(forUser))
 	}
 }

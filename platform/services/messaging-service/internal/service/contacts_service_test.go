@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/google/uuid"
@@ -100,5 +101,24 @@ func TestContactsServiceRespondToRequestAcceptsRelationship(t *testing.T) {
 	}
 	if accepted.Status != model.ContactStatusAccepted {
 		t.Fatalf("expected accepted status, got %q", accepted.Status)
+	}
+	if accepted.Direction != model.ContactDirectionIncoming {
+		t.Fatalf("expected incoming direction, got %q", accepted.Direction)
+	}
+}
+
+func TestContactsServiceRejectsDuplicateRelationInEitherDirection(t *testing.T) {
+	db := newContactTestDB(t)
+	repo := repository.NewContactsRepository(db)
+	svc := NewContactsService(repo, shared.InitLogger("development", false))
+	ownerID := uuid.New()
+	targetID := uuid.New()
+
+	if _, err := svc.SendRequest(context.Background(), ownerID, targetID); err != nil {
+		t.Fatalf("first send request: %v", err)
+	}
+
+	if _, err := svc.SendRequest(context.Background(), targetID, ownerID); !errors.Is(err, ErrContactAlreadyExists) {
+		t.Fatalf("expected duplicate conflict, got %v", err)
 	}
 }

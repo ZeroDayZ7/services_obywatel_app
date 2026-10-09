@@ -29,7 +29,8 @@ func NewContactsRepository(db *gorm.DB) ContactsRepository {
 func (r *contactsRepository) GetContactsByUserID(ctx context.Context, userID uuid.UUID) ([]model.Contact, error) {
 	var contacts []model.Contact
 	err := r.db.WithContext(ctx).
-		Where("owner_id = ?", userID).
+		Where("owner_id = ? OR contact_id = ?", userID, userID).
+		Order("created_at DESC").
 		Find(&contacts).Error
 	return contacts, err
 }
@@ -40,9 +41,22 @@ func (r *contactsRepository) GetContactByOwnerAndTarget(ctx context.Context, own
 		Where("owner_id = ? AND contact_id = ?", ownerID, targetID).
 		First(&contact).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, nil
+		var reverse model.Contact
+		reverseErr := r.db.WithContext(ctx).
+			Where("owner_id = ? AND contact_id = ?", targetID, ownerID).
+			First(&reverse).Error
+		if errors.Is(reverseErr, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		if reverseErr != nil {
+			return nil, reverseErr
+		}
+		return &reverse, nil
 	}
-	return &contact, err
+	if err != nil {
+		return nil, err
+	}
+	return &contact, nil
 }
 
 func (r *contactsRepository) GetContactByID(ctx context.Context, id uuid.UUID) (*model.Contact, error) {
@@ -93,6 +107,7 @@ func (r *contactsRepository) CreateSymmetricContact(ctx context.Context, ownerID
 				OwnerID:   ownerID,
 				ContactID: targetID,
 				Status:    status,
+				Direction: model.ContactDirectionIncoming,
 				Version:   1,
 			}
 			return tx.Create(&symmetricContact).Error

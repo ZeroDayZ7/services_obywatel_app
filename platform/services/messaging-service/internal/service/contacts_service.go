@@ -35,11 +35,26 @@ func NewContactsService(repo repository.ContactsRepository, logger *shared.Logge
 }
 
 func (s *contactsService) GetContacts(ctx context.Context, userID uuid.UUID) ([]model.Contact, error) {
-	return s.repo.GetContactsByUserID(ctx, userID)
+	contacts, err := s.repo.GetContactsByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	for i := range contacts {
+		if contacts[i].OwnerID == userID {
+			contacts[i].Direction = model.ContactDirectionOutgoing
+			continue
+		}
+		if contacts[i].ContactID == userID {
+			contacts[i].Direction = model.ContactDirectionIncoming
+		}
+	}
+
+	return contacts, nil
 }
 
 func (s *contactsService) SendRequest(ctx context.Context, ownerID, targetID uuid.UUID) (*model.Contact, error) {
-	// 1. Sprawdzamy czy relacja już istnieje
+	// 1. Sprawdzamy czy relacja już istnieje w dowolnym kierunku
 	existing, err := s.repo.GetContactByOwnerAndTarget(ctx, ownerID, targetID)
 	if err != nil {
 		return nil, err
@@ -53,6 +68,7 @@ func (s *contactsService) SendRequest(ctx context.Context, ownerID, targetID uui
 		OwnerID:   ownerID,
 		ContactID: targetID,
 		Status:    model.ContactStatusPending,
+		Direction: model.ContactDirectionOutgoing,
 		Version:   1,
 	}
 
@@ -96,3 +112,16 @@ func (s *contactsService) RespondToRequest(ctx context.Context, currentUserID, c
 	// 5. Utworzenie/zaktualizowanie relacji u odbiorcy (staje się symetryczna)
 	return s.repo.CreateSymmetricContact(ctx, currentUserID, contact.OwnerID, model.ContactStatusAccepted)
 }
+
+// func (s *contactsService) normalizeRequestDirection(contact *model.Contact, userID uuid.UUID) model.ContactDirection {
+// 	if contact == nil {
+// 		return model.ContactDirectionIncoming
+// 	}
+// 	if contact.OwnerID == userID {
+// 		return model.ContactDirectionOutgoing
+// 	}
+// 	if contact.ContactID == userID {
+// 		return model.ContactDirectionIncoming
+// 	}
+// 	return contact.Direction
+// }
