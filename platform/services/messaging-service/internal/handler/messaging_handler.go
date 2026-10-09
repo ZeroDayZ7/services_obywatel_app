@@ -279,9 +279,28 @@ func (h *MessagingHandler) UploadDeviceKeys(c *fiber.Ctx) error {
 	}
 	req.Normalize()
 
+	// Log a minimal, non-sensitive trace to help debug missing DB records in production.
+	// Do NOT log any key material.
+	shared.GetLogger().InfoObj("Uploading device keys", map[string]any{
+		"user_id": rc.UserID.String(),
+		"device_id": req.DeviceID,
+		"one_time_pre_keys_count": len(req.OneTimePreKeys),
+	})
+
 	if err := h.service.UploadDeviceKeys(ctx, *rc.UserID, req); err != nil {
+		shared.GetLogger().ErrorObj("Failed to upload device keys", map[string]any{
+			"user_id": rc.UserID.String(),
+			"device_id": req.DeviceID,
+			"error": err.Error(),
+		})
 		return apperr.SendAppError(c, err)
 	}
+
+	shared.GetLogger().InfoObj("Device keys uploaded", map[string]any{
+		"user_id": rc.UserID.String(),
+		"device_id": req.DeviceID,
+		"one_time_pre_keys_count": len(req.OneTimePreKeys),
+	})
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{"status": "uploaded"})
 }
