@@ -32,6 +32,7 @@ func SetupMessagingRoutes(app *fiber.App, container *di.Container) {
 	// --- DELTA SYNC & OUTBOX ---
 	sync := api.Group("/sync")
 	sync.Get("/delta", msgH.SyncDelta)
+	sync.Post("/delta", msgH.SyncDelta)
 	sync.Post("/outbox", msgH.ProcessOutbox)
 
 	// --- MESSAGING ACTIVATION & ONBOARDING ---

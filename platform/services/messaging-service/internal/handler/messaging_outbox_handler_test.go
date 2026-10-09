@@ -16,10 +16,14 @@ import (
 
 type stubMessagingService struct {
 	processOutbox func(ctx context.Context, userID uuid.UUID, req model.OutboxBatchRequest) (*model.OutboxBatchResponse, error)
+	getDeltaSync  func(ctx context.Context, userID uuid.UUID, req model.SyncDeltaRequest) (*model.SyncDeltaResponse, error)
 }
 
 func (s *stubMessagingService) GetDeltaSync(ctx context.Context, userID uuid.UUID, req model.SyncDeltaRequest) (*model.SyncDeltaResponse, error) {
-	return nil, nil
+	if s.getDeltaSync != nil {
+		return s.getDeltaSync(ctx, userID, req)
+	}
+	return &model.SyncDeltaResponse{}, nil
 }
 
 func (s *stubMessagingService) ProcessOutbox(ctx context.Context, userID uuid.UUID, req model.OutboxBatchRequest) (*model.OutboxBatchResponse, error) {
@@ -198,6 +202,44 @@ func TestMessagingHandlerProcessOutbox_IgnoresEmptyConversationID(t *testing.T) 
 
 	payload := `{"messages":[{"event_id":"01a1221b-0a84-71be-9f4f-14afafc0b841","idempotency_key":"01a1221b-0a84-71be-9f4f-14afafc0b841","message_id":"01a1221b-0a84-71be-9f4f-14afafc0b841","event_type":"SEND_MESSAGE","conversation_id":"","sender_device_id":"8e681e7c-6ccc-4854-8fc6-b6dd5074f39e","ciphertext":"","type":1,"content":"","created_at":"2026-10-09T19:19:19.933148Z","outbox_event_id":"01a1221b-0a84-71be-9f4f-14afafc0b841"}]}`
 	req := httptest.NewRequest(http.MethodPost, "/sync/outbox", bytes.NewBufferString(payload))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("app test: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestMessagingHandlerSyncDelta_AcceptsPostPayload(t *testing.T) {
+	userID := uuid.New()
+	service := &stubMessagingService{
+		getDeltaSync: func(ctx context.Context, gotUserID uuid.UUID, req model.SyncDeltaRequest) (*model.SyncDeltaResponse, error) {
+			if gotUserID != userID {
+				t.Fatalf("expected userID %s, got %s", userID, gotUserID)
+			}
+			if req.LastKnownContactVersion != 7 {
+				t.Fatalf("expected contact version 7, got %d", req.LastKnownContactVersion)
+			}
+			if req.LastKnownMessageVersion != 42 {
+				t.Fatalf("expected message version 42, got %d", req.LastKnownMessageVersion)
+			}
+			return &model.SyncDeltaResponse{}, nil
+		},
+	}
+
+	handler := NewMessagingHandler(service)
+	app := fiber.New()
+	app.Use(func(c *fiber.Ctx) error {
+		c.Locals(reqctx.FiberRequestContextKey, &reqctx.RequestContext{UserID: &userID})
+		return c.Next()
+	})
+	app.Post("/sync/delta", handler.SyncDelta)
+
+	payload := `{"last_known_contact_version":7,"last_known_message_version":42}`
+	req := httptest.NewRequest(http.MethodPost, "/sync/delta", bytes.NewBufferString(payload))
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := app.Test(req)
