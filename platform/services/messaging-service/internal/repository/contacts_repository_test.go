@@ -68,7 +68,15 @@ func TestContactsRepositoryCreateAndLookup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get by user id: %v", err)
 	}
-	if len(forUser) != 1 {
-		t.Fatalf("expected exactly one visible contact for target, got %d", len(forUser))
+	if len(forUser) != 0 {
+		t.Fatalf("expected target user to see no owner-owned contacts, got %d", len(forUser))
+	}
+
+	ownerVisible, err := repo.GetContactsByUserID(context.Background(), ownerID)
+	if err != nil {
+		t.Fatalf("get owner contacts: %v", err)
+	}
+	if len(ownerVisible) != 1 {
+		t.Fatalf("expected owner to see exactly one contact, got %d", len(ownerVisible))
 	}
 }

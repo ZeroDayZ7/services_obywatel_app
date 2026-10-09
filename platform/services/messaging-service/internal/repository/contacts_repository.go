@@ -29,7 +29,7 @@ func NewContactsRepository(db *gorm.DB) ContactsRepository {
 func (r *contactsRepository) GetContactsByUserID(ctx context.Context, userID uuid.UUID) ([]model.Contact, error) {
 	var contacts []model.Contact
 	err := r.db.WithContext(ctx).
-		Where("owner_id = ? OR contact_id = ?", userID, userID).
+		Where("owner_id = ? AND deleted_at IS NULL", userID).
 		Order("created_at DESC").
 		Find(&contacts).Error
 	return contacts, err
