@@ -1,6 +1,7 @@
 package model
 
 import (
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -75,6 +76,39 @@ const (
 	ActivationStatusDisabled   ActivationStatus = "disabled"
 )
 
+// MessagingTermsDocument stores the controlled, versioned terms text for the communicator.
+// The backend decides which version is current; the client only accepts a value that matches it.
+type MessagingTermsDocument struct {
+	Version     string    `json:"version"`
+	Text        string    `json:"text"`
+	PublishedAt time.Time `json:"published_at"`
+}
+
+var messagingTermsArchive = []MessagingTermsDocument{
+	{
+		Version:     "v1",
+		Text:        "Komunikator XYZ umożliwia prowadzenie prywatnych rozmów z innymi użytkownikami Obywatel Plus. Przed rozpoczęciem korzystania z komunikatora zapoznaj się z zasadami usługi i potwierdź ich akceptację.",
+		PublishedAt: time.Date(2026, time.October, 9, 0, 0, 0, 0, time.UTC),
+	},
+}
+
+func CurrentMessagingTerms() MessagingTermsDocument {
+	if len(messagingTermsArchive) == 0 {
+		return MessagingTermsDocument{Version: "v1", Text: "Komunikator XYZ umożliwia prowadzenie prywatnych rozmów z innymi użytkownikami Obywatel Plus. Przed rozpoczęciem korzystania z komunikatora zapoznaj się z zasadami usługi i potwierdź ich akceptację."}
+	}
+	return messagingTermsArchive[len(messagingTermsArchive)-1]
+}
+
+func IsKnownMessagingTermsVersion(version string) bool {
+	trimmed := strings.TrimSpace(version)
+	for _, terms := range messagingTermsArchive {
+		if terms.Version == trimmed {
+			return true
+		}
+	}
+	return false
+}
+
 // MessagingActivation tracks the real onboarding lifecycle for the communicator and is the
 // production replacement for ad-hoc demo or fake seed-based activation states.
 type MessagingActivation struct {
@@ -102,29 +136,35 @@ type AcceptTermsRequest struct {
 }
 
 type MessagingActivationStatusResponse struct {
-	UserID          uuid.UUID        `json:"user_id"`
-	Status          ActivationStatus `json:"status"`
-	ConsentAccepted bool             `json:"consent_accepted"`
-	TermsVersion    string           `json:"terms_version,omitempty"`
-	DeviceID        string           `json:"device_id,omitempty"`
-	ActivatedAt     *time.Time       `json:"activated_at,omitempty"`
-	CreatedAt       time.Time        `json:"created_at"`
-	UpdatedAt       time.Time        `json:"updated_at"`
+	UserID                 uuid.UUID        `json:"user_id"`
+	Status                 ActivationStatus `json:"status"`
+	ConsentAccepted        bool             `json:"consent_accepted"`
+	TermsVersion           string           `json:"terms_version,omitempty"`
+	CurrentTermsVersion    string           `json:"current_terms_version,omitempty"`
+	RequiresTermsAcceptance bool            `json:"requires_terms_acceptance"`
+	DeviceID               string           `json:"device_id,omitempty"`
+	ActivatedAt            *time.Time       `json:"activated_at,omitempty"`
+	CreatedAt              time.Time        `json:"created_at"`
+	UpdatedAt              time.Time        `json:"updated_at"`
 }
 
 func (a *MessagingActivation) ToResponse() *MessagingActivationStatusResponse {
 	if a == nil {
 		return nil
 	}
+	currentTerms := CurrentMessagingTerms()
+	requiresTermsAcceptance := a.Status != ActivationStatusActive || !a.ConsentAccepted || a.TermsVersion != currentTerms.Version
 	return &MessagingActivationStatusResponse{
-		UserID:          a.UserID,
-		Status:          a.Status,
-		ConsentAccepted: a.ConsentAccepted,
-		TermsVersion:    a.TermsVersion,
-		DeviceID:        a.DeviceID,
-		ActivatedAt:     a.ActivatedAt,
-		CreatedAt:       a.CreatedAt,
-		UpdatedAt:       a.UpdatedAt,
+		UserID:                 a.UserID,
+		Status:                 a.Status,
+		ConsentAccepted:        a.ConsentAccepted,
+		TermsVersion:           a.TermsVersion,
+		CurrentTermsVersion:    currentTerms.Version,
+		RequiresTermsAcceptance: requiresTermsAcceptance,
+		DeviceID:               a.DeviceID,
+		ActivatedAt:            a.ActivatedAt,
+		CreatedAt:              a.CreatedAt,
+		UpdatedAt:              a.UpdatedAt,
 	}
 }
 

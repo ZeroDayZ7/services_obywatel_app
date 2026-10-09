@@ -36,6 +36,7 @@ func SetupMessagingRoutes(app *fiber.App, container *di.Container) {
 
 	// --- MESSAGING ACTIVATION & ONBOARDING ---
 	messagingActivation := api.Group("/messaging")
+	messagingActivation.Get("/terms", msgH.GetCurrentTerms)
 	messagingActivation.Get("/activation", msgH.GetActivationStatus)
 	messagingActivation.Post("/activation", msgH.ActivateMessaging)
 	messagingActivation.Post("/activation/consent", msgH.AcceptTerms)

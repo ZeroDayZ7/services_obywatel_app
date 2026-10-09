@@ -324,6 +324,17 @@ func (h *MessagingHandler) GetKeyBundle(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(bundle)
 }
 
+func (h *MessagingHandler) GetCurrentTerms(c *fiber.Ctx) error {
+	ctx, cancel := context.WithTimeout(c.UserContext(), 3*time.Second)
+	defer cancel()
+
+	terms, err := h.service.GetCurrentTerms(ctx)
+	if err != nil {
+		return apperr.SendAppError(c, err)
+	}
+	return c.Status(fiber.StatusOK).JSON(terms)
+}
+
 func (h *MessagingHandler) GetActivationStatus(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(c.UserContext(), 3*time.Second)
 	defer cancel()

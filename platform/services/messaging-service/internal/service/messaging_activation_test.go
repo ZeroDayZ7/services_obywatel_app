@@ -49,34 +49,45 @@ func TestMessagingActivationLifecycle(t *testing.T) {
 		t.Fatalf("expected initial status %q, got %q", model.ActivationStatusNotStarted, status.Status)
 	}
 
+	_, err = service.ActivateMessaging(ctx, userID, model.ActivateMessagingRequest{
+		DeviceID: "device-1",
+	})
+	if err == nil {
+		t.Fatal("expected activation without explicit consent to fail")
+	}
+
+	accepted, err := service.AcceptTerms(ctx, userID, model.AcceptTermsRequest{DeviceID: "device-1", TermsVersion: model.CurrentMessagingTerms().Version})
+	if err != nil {
+		t.Fatalf("accept terms: %v", err)
+	}
+	if accepted.Status != model.ActivationStatusActive {
+		t.Fatalf("expected active status after accepted terms, got %q", accepted.Status)
+	}
+	if !accepted.ConsentAccepted {
+		t.Fatal("expected consent accepted flag to be true")
+	}
+	if accepted.TermsVersion != model.CurrentMessagingTerms().Version {
+		t.Fatalf("expected terms version %q, got %q", model.CurrentMessagingTerms().Version, accepted.TermsVersion)
+	}
+	if accepted.ActivatedAt == nil || accepted.ActivatedAt.IsZero() {
+		t.Fatal("expected activated timestamp to be set")
+	}
+
 	activated, err := service.ActivateMessaging(ctx, userID, model.ActivateMessagingRequest{
-		DeviceID:     "device-1",
-		TermsVersion: "v1",
+		DeviceID:     "device-2",
+		TermsVersion: model.CurrentMessagingTerms().Version,
+		Consent:      true,
 	})
 	if err != nil {
-		t.Fatalf("activate messaging: %v", err)
+		t.Fatalf("activate messaging after explicit consent: %v", err)
 	}
 	if activated.Status != model.ActivationStatusActive {
 		t.Fatalf("expected active status after activation, got %q", activated.Status)
 	}
-	if !activated.ConsentAccepted {
-		t.Fatal("expected consent to be accepted after activation")
-	}
-	if activated.ActivatedAt == nil || activated.ActivatedAt.IsZero() {
-		t.Fatal("expected activated timestamp to be set")
-	}
-
-	updated, err := service.AcceptTerms(ctx, userID, model.AcceptTermsRequest{TermsVersion: "v1"})
-	if err != nil {
-		t.Fatalf("accept terms: %v", err)
-	}
-	if updated.TermsVersion != "v1" {
-		t.Fatalf("expected terms version v1, got %q", updated.TermsVersion)
-	}
-	if updated.ConsentAccepted != true {
+	if activated.ConsentAccepted != true {
 		t.Fatal("expected consent accepted flag to be true")
 	}
-	if time.Since(updated.UpdatedAt) > time.Minute {
+	if time.Since(activated.UpdatedAt) > time.Minute {
 		t.Fatal("updated_at should be recent")
 	}
 }

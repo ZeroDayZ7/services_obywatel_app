@@ -42,6 +42,7 @@ type MessagingService interface {
 
 	// Messaging activation and onboarding
 	GetActivationStatus(ctx context.Context, userID uuid.UUID) (*model.MessagingActivationStatusResponse, error)
+	GetCurrentTerms(ctx context.Context) (*model.MessagingTermsDocument, error)
 	ActivateMessaging(ctx context.Context, userID uuid.UUID, req model.ActivateMessagingRequest) (*model.MessagingActivationStatusResponse, error)
 	AcceptTerms(ctx context.Context, userID uuid.UUID, req model.AcceptTermsRequest) (*model.MessagingActivationStatusResponse, error)
 
@@ -223,7 +224,24 @@ func (s *messagingService) GetActivationStatus(ctx context.Context, userID uuid.
 	return activation.ToResponse(), nil
 }
 
+func (s *messagingService) GetCurrentTerms(ctx context.Context) (*model.MessagingTermsDocument, error) {
+	_ = ctx
+	terms := model.CurrentMessagingTerms()
+	return &terms, nil
+}
+
 func (s *messagingService) ActivateMessaging(ctx context.Context, userID uuid.UUID, req model.ActivateMessagingRequest) (*model.MessagingActivationStatusResponse, error) {
+	currentTerms := model.CurrentMessagingTerms()
+	if !req.Consent {
+		return nil, errors.New("explicit consent is required to activate messaging")
+	}
+	if strings.TrimSpace(req.TermsVersion) == "" {
+		return nil, errors.New("terms_version is required for activation")
+	}
+	if req.TermsVersion != currentTerms.Version {
+		return nil, fmt.Errorf("terms version %q is not the current version %q", req.TermsVersion, currentTerms.Version)
+	}
+
 	activation, err := s.repo.GetOrCreateActivation(ctx, userID, req.DeviceID)
 	if err != nil {
 		return nil, err
@@ -231,12 +249,8 @@ func (s *messagingService) ActivateMessaging(ctx context.Context, userID uuid.UU
 	if req.DeviceID != "" {
 		activation.DeviceID = req.DeviceID
 	}
-	if req.TermsVersion != "" {
-		activation.TermsVersion = req.TermsVersion
-	}
-	if req.Consent || req.TermsVersion != "" {
-		activation.ConsentAccepted = true
-	}
+	activation.TermsVersion = req.TermsVersion
+	activation.ConsentAccepted = true
 	activation.Status = model.ActivationStatusActive
 	now := time.Now()
 	if activation.ActivatedAt == nil || activation.ActivatedAt.IsZero() {
@@ -250,6 +264,14 @@ func (s *messagingService) ActivateMessaging(ctx context.Context, userID uuid.UU
 }
 
 func (s *messagingService) AcceptTerms(ctx context.Context, userID uuid.UUID, req model.AcceptTermsRequest) (*model.MessagingActivationStatusResponse, error) {
+	currentTerms := model.CurrentMessagingTerms()
+	if strings.TrimSpace(req.TermsVersion) == "" {
+		return nil, errors.New("terms_version is required")
+	}
+	if req.TermsVersion != currentTerms.Version {
+		return nil, fmt.Errorf("terms version %q is not the current version %q", req.TermsVersion, currentTerms.Version)
+	}
+
 	activation, err := s.repo.GetOrCreateActivation(ctx, userID, req.DeviceID)
 	if err != nil {
 		return nil, err
@@ -257,9 +279,7 @@ func (s *messagingService) AcceptTerms(ctx context.Context, userID uuid.UUID, re
 	if req.DeviceID != "" {
 		activation.DeviceID = req.DeviceID
 	}
-	if req.TermsVersion != "" {
-		activation.TermsVersion = req.TermsVersion
-	}
+	activation.TermsVersion = req.TermsVersion
 	activation.ConsentAccepted = true
 	if activation.Status == model.ActivationStatusNotStarted {
 		activation.Status = model.ActivationStatusActive
