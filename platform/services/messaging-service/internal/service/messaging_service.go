@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -89,34 +90,111 @@ func (s *messagingService) GetDeltaSync(ctx context.Context, userID uuid.UUID, r
 func (s *messagingService) ProcessOutbox(ctx context.Context, userID uuid.UUID, req model.OutboxBatchRequest) (*model.OutboxBatchResponse, error) {
 	processed := 0
 	for _, evt := range req.Messages {
-		if evt.EventType == "SEND_MESSAGE" && evt.ConversationID != nil {
-			idempotencyKey := strings.TrimSpace(evt.IdempotencyKey)
-			if idempotencyKey == "" && evt.EventID != uuid.Nil {
-				idempotencyKey = evt.EventID.String()
-			}
-			if idempotencyKey != "" {
-				if existing, err := s.repo.GetMessageByIdempotencyKey(ctx, idempotencyKey); err == nil && existing != nil {
-					processed++
-					continue
-				} else if err != nil {
-					return nil, err
-				}
-			}
+		msg, ok, err := buildMessageFromOutboxEvent(userID, evt)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			continue
+		}
 
-			msg := &model.Message{
-				ConversationID:   *evt.ConversationID,
-				SenderID:         userID,
-				Type:             model.MessageTypeText,
-				EncryptedPayload: []byte(evt.Payload),
-				IdempotencyKey:   idempotencyKey,
-			}
-			if err := s.repo.CreateMessage(ctx, msg); err == nil {
+		if msg.IdempotencyKey != "" {
+			if existing, err := s.repo.GetMessageByIdempotencyKey(ctx, msg.IdempotencyKey); err == nil && existing != nil {
 				processed++
+				continue
+			} else if err != nil {
+				return nil, err
 			}
+		}
+
+		if err := s.repo.CreateMessage(ctx, msg); err == nil {
+			processed++
+		} else if !errors.Is(err, gorm.ErrDuplicatedKey) {
+			return nil, err
 		}
 	}
 
 	return &model.OutboxBatchResponse{ProcessedCount: processed}, nil
+}
+
+func buildMessageFromOutboxEvent(userID uuid.UUID, evt model.OutboxEventPayload) (*model.Message, bool, error) {
+	if evt.EventType != "" && evt.EventType != "SEND_MESSAGE" {
+		return nil, false, nil
+	}
+
+	conversationID := evt.ConversationID
+	ciphertext := strings.TrimSpace(evt.Ciphertext)
+	idempotencyKey := strings.TrimSpace(evt.IdempotencyKey)
+
+	if conversationID == nil && len(evt.Payload) > 0 {
+		var payload map[string]any
+		if err := json.Unmarshal(evt.Payload, &payload); err == nil {
+			if rawConversationID, ok := payload["conversation_id"].(string); ok && rawConversationID != "" {
+				parsed, err := uuid.Parse(rawConversationID)
+				if err == nil {
+					conversationID = &parsed
+				}
+			}
+			if conversationID == nil {
+				if rawConversationID, ok := payload["conversationId"].(string); ok && rawConversationID != "" {
+					parsed, err := uuid.Parse(rawConversationID)
+					if err == nil {
+						conversationID = &parsed
+					}
+				}
+			}
+			if ciphertext == "" {
+				if rawCiphertext, ok := payload["ciphertext"].(string); ok {
+					ciphertext = strings.TrimSpace(rawCiphertext)
+				}
+			}
+			if idempotencyKey == "" {
+				if rawKey, ok := payload["idempotency_key"].(string); ok {
+					idempotencyKey = strings.TrimSpace(rawKey)
+				}
+			}
+		}
+	}
+
+	if evt.EventType == "" && ciphertext != "" {
+		evt.EventType = "SEND_MESSAGE"
+	}
+	if evt.EventType == "" && evt.EventID != uuid.Nil {
+		evt.EventType = "SEND_MESSAGE"
+	}
+	if evt.EventType == "" {
+		return nil, false, nil
+	}
+	if conversationID == nil || *conversationID == uuid.Nil {
+		return nil, false, nil
+	}
+	if ciphertext == "" {
+		ciphertext = strings.TrimSpace(evt.Content)
+	}
+	if ciphertext == "" {
+		return nil, false, nil
+	}
+	if idempotencyKey == "" && evt.EventID != uuid.Nil {
+		idempotencyKey = evt.EventID.String()
+	}
+	if idempotencyKey == "" {
+		idempotencyKey = uuid.NewString()
+	}
+	if evt.SenderDeviceID == "" {
+		evt.SenderDeviceID = evt.SenderDeviceIDAlt
+	}
+	if evt.SenderDeviceID == "" {
+		evt.SenderDeviceID = "unknown-device"
+	}
+
+	return &model.Message{
+		ConversationID:   *conversationID,
+		SenderID:         userID,
+		SenderDeviceID:   evt.SenderDeviceID,
+		Type:             model.MessageTypeText,
+		EncryptedPayload: []byte(ciphertext),
+		IdempotencyKey:   idempotencyKey,
+	}, true, nil
 }
 
 // #endregion

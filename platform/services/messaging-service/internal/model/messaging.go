@@ -400,10 +400,20 @@ type SyncDeltaResponse struct {
 type OutboxEventPayload struct {
 	EventID        uuid.UUID      `json:"event_id"`
 	IdempotencyKey string         `json:"idempotency_key,omitempty"`
-	EventType      string         `json:"event_type"` // "SEND_MESSAGE", "ADD_CONTACT"
+	EventType      string         `json:"event_type,omitempty"` // "SEND_MESSAGE", "ADD_CONTACT"
 	ConversationID *uuid.UUID     `json:"conversation_id,omitempty"`
-	Payload        datatypes.JSON `json:"payload"`
-	CreatedAt      time.Time      `json:"created_at"`
+	Payload        datatypes.JSON `json:"payload,omitempty"`
+	CreatedAt      time.Time      `json:"created_at,omitempty"`
+
+	// Direct E2EE envelope compatibility fields used by the Flutter client when it
+	// sends an already encrypted message payload through /sync/outbox.
+	MessageID         string `json:"message_id,omitempty"`
+	Ciphertext        string `json:"ciphertext,omitempty"`
+	SenderDeviceID    string `json:"sender_device_id,omitempty"`
+	SenderDeviceIDAlt string `json:"senderDeviceId,omitempty"`
+	Content           string `json:"content,omitempty"`
+	Type              uint8  `json:"type,omitempty"`
+	TypeAlt           uint8  `json:"signal_message_type,omitempty"`
 }
 
 // OutboxBatchRequest - Paczka zdarzeń wysyłana z klienta w trybie offline
