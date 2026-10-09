@@ -10,6 +10,7 @@ func AutoMigrate(db *gorm.DB) error {
 		// E2EE & Device Management
 		&model.UserDeviceIdentity{},
 		&model.UserPreKey{},
+		&model.MessagingActivation{},
 
 		// Contacts Domain
 		&model.Contact{},

@@ -324,4 +324,62 @@ func (h *MessagingHandler) GetKeyBundle(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(bundle)
 }
 
+func (h *MessagingHandler) GetActivationStatus(c *fiber.Ctx) error {
+	ctx, cancel := context.WithTimeout(c.UserContext(), 3*time.Second)
+	defer cancel()
+
+	rc := reqctx.MustFromFiber(c)
+	if rc.UserID == nil {
+		return apperr.SendAppError(c, apperr.ErrUnauthorized)
+	}
+
+	resp, err := h.service.GetActivationStatus(ctx, *rc.UserID)
+	if err != nil {
+		return apperr.SendAppError(c, err)
+	}
+	return c.Status(fiber.StatusOK).JSON(resp)
+}
+
+func (h *MessagingHandler) ActivateMessaging(c *fiber.Ctx) error {
+	ctx, cancel := context.WithTimeout(c.UserContext(), 5*time.Second)
+	defer cancel()
+
+	rc := reqctx.MustFromFiber(c)
+	if rc.UserID == nil {
+		return apperr.SendAppError(c, apperr.ErrUnauthorized)
+	}
+
+	var req model.ActivateMessagingRequest
+	if err := c.BodyParser(&req); err != nil {
+		return apperr.SendAppError(c, apperr.ErrInvalidRequestBody)
+	}
+
+	resp, err := h.service.ActivateMessaging(ctx, *rc.UserID, req)
+	if err != nil {
+		return apperr.SendAppError(c, err)
+	}
+	return c.Status(fiber.StatusOK).JSON(resp)
+}
+
+func (h *MessagingHandler) AcceptTerms(c *fiber.Ctx) error {
+	ctx, cancel := context.WithTimeout(c.UserContext(), 5*time.Second)
+	defer cancel()
+
+	rc := reqctx.MustFromFiber(c)
+	if rc.UserID == nil {
+		return apperr.SendAppError(c, apperr.ErrUnauthorized)
+	}
+
+	var req model.AcceptTermsRequest
+	if err := c.BodyParser(&req); err != nil {
+		return apperr.SendAppError(c, apperr.ErrInvalidRequestBody)
+	}
+
+	resp, err := h.service.AcceptTerms(ctx, *rc.UserID, req)
+	if err != nil {
+		return apperr.SendAppError(c, err)
+	}
+	return c.Status(fiber.StatusOK).JSON(resp)
+}
+
 // #endregion

@@ -66,6 +66,68 @@ type UserPreKey struct {
 	BaseModel
 }
 
+type ActivationStatus string
+
+const (
+	ActivationStatusNotStarted ActivationStatus = "not_started"
+	ActivationStatusPending    ActivationStatus = "pending"
+	ActivationStatusActive     ActivationStatus = "active"
+	ActivationStatusDisabled   ActivationStatus = "disabled"
+)
+
+// MessagingActivation tracks the real onboarding lifecycle for the communicator and is the
+// production replacement for ad-hoc demo or fake seed-based activation states.
+type MessagingActivation struct {
+	ID              uuid.UUID        `gorm:"type:uuid;primaryKey;default:uuidv7()"`
+	UserID          uuid.UUID        `gorm:"type:uuid;uniqueIndex:idx_msg_activation_user;not null"`
+	DeviceID        string           `gorm:"type:varchar(64);not null;default:''"`
+	Status          ActivationStatus `gorm:"type:varchar(32);not null;default:'not_started';index"`
+	ConsentAccepted bool             `gorm:"not null;default:false"`
+	TermsVersion    string           `gorm:"type:varchar(32);not null;default:''"`
+	ActivatedAt     *time.Time       `gorm:"index"`
+	LastSeenAt      *time.Time       `gorm:"index"`
+
+	BaseModel
+}
+
+type ActivateMessagingRequest struct {
+	DeviceID     string `json:"device_id,omitempty"`
+	TermsVersion string `json:"terms_version,omitempty"`
+	Consent      bool   `json:"consent,omitempty"`
+}
+
+type AcceptTermsRequest struct {
+	DeviceID     string `json:"device_id,omitempty"`
+	TermsVersion string `json:"terms_version,omitempty"`
+}
+
+type MessagingActivationStatusResponse struct {
+	UserID          uuid.UUID        `json:"user_id"`
+	Status          ActivationStatus `json:"status"`
+	ConsentAccepted bool             `json:"consent_accepted"`
+	TermsVersion    string           `json:"terms_version,omitempty"`
+	DeviceID        string           `json:"device_id,omitempty"`
+	ActivatedAt     *time.Time       `json:"activated_at,omitempty"`
+	CreatedAt       time.Time        `json:"created_at"`
+	UpdatedAt       time.Time        `json:"updated_at"`
+}
+
+func (a *MessagingActivation) ToResponse() *MessagingActivationStatusResponse {
+	if a == nil {
+		return nil
+	}
+	return &MessagingActivationStatusResponse{
+		UserID:          a.UserID,
+		Status:          a.Status,
+		ConsentAccepted: a.ConsentAccepted,
+		TermsVersion:    a.TermsVersion,
+		DeviceID:        a.DeviceID,
+		ActivatedAt:     a.ActivatedAt,
+		CreatedAt:       a.CreatedAt,
+		UpdatedAt:       a.UpdatedAt,
+	}
+}
+
 // #endregion
 
 // #region Conversation & Message Entities

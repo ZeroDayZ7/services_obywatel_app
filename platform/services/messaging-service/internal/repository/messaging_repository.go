@@ -33,6 +33,11 @@ type MessagingRepository interface {
 
 	// Contacts
 	UpsertContact(ctx context.Context, contact *model.Contact) error
+
+	// Messaging activation
+	GetActivationStatus(ctx context.Context, userID uuid.UUID) (*model.MessagingActivation, error)
+	GetOrCreateActivation(ctx context.Context, userID uuid.UUID, deviceID string) (*model.MessagingActivation, error)
+	SaveActivation(ctx context.Context, activation *model.MessagingActivation) error
 }
 
 type messagingRepository struct {
@@ -158,6 +163,51 @@ func (r *messagingRepository) UpdateLastReadSequence(ctx context.Context, userID
 		Model(&model.ConversationMember{}).
 		Where("user_id = ? AND conversation_id = ?", userID, conversationID).
 		Update("last_read_sequence", sequence).Error
+}
+
+func (r *messagingRepository) GetActivationStatus(ctx context.Context, userID uuid.UUID) (*model.MessagingActivation, error) {
+	var activation model.MessagingActivation
+	if err := r.db.WithContext(ctx).Where("user_id = ?", userID).Order("created_at DESC").First(&activation).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return &model.MessagingActivation{
+				UserID: userID,
+				Status: model.ActivationStatusNotStarted,
+			}, nil
+		}
+		return nil, err
+	}
+	return &activation, nil
+}
+
+func (r *messagingRepository) GetOrCreateActivation(ctx context.Context, userID uuid.UUID, deviceID string) (*model.MessagingActivation, error) {
+	activation, err := r.GetActivationStatus(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if activation.ID == uuid.Nil {
+		activation = &model.MessagingActivation{
+			UserID:   userID,
+			DeviceID: deviceID,
+			Status:   model.ActivationStatusNotStarted,
+		}
+		if err := r.db.WithContext(ctx).Create(activation).Error; err != nil {
+			return nil, err
+		}
+	}
+	if deviceID != "" && activation.DeviceID == "" {
+		activation.DeviceID = deviceID
+		if err := r.SaveActivation(ctx, activation); err != nil {
+			return nil, err
+		}
+	}
+	return activation, nil
+}
+
+func (r *messagingRepository) SaveActivation(ctx context.Context, activation *model.MessagingActivation) error {
+	if activation == nil {
+		return nil
+	}
+	return r.db.WithContext(ctx).Save(activation).Error
 }
 
 // #endregion

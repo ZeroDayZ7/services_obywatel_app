@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/pkg/shared"
@@ -38,6 +39,11 @@ type MessagingService interface {
 	CreateConversation(ctx context.Context, userID uuid.UUID, req model.CreateConversationRequest) (*model.Conversation, error)
 	GetConversationByID(ctx context.Context, userID uuid.UUID, conversationID string) (*model.Conversation, error)
 	MarkAsRead(ctx context.Context, userID uuid.UUID, conversationID string) error
+
+	// Messaging activation and onboarding
+	GetActivationStatus(ctx context.Context, userID uuid.UUID) (*model.MessagingActivationStatusResponse, error)
+	ActivateMessaging(ctx context.Context, userID uuid.UUID, req model.ActivateMessagingRequest) (*model.MessagingActivationStatusResponse, error)
+	AcceptTerms(ctx context.Context, userID uuid.UUID, req model.AcceptTermsRequest) (*model.MessagingActivationStatusResponse, error)
 
 	// E2EE Keys
 	UploadDeviceKeys(ctx context.Context, userID uuid.UUID, req model.UploadDeviceKeysRequest) error
@@ -198,6 +204,75 @@ func (s *messagingService) MarkAsRead(ctx context.Context, userID uuid.UUID, con
 	}
 
 	return s.repo.UpdateLastReadSequence(ctx, userID, convID, conv.LastSequence)
+}
+
+// #endregion
+
+// #region MessagingActivation
+func (s *messagingService) GetActivationStatus(ctx context.Context, userID uuid.UUID) (*model.MessagingActivationStatusResponse, error) {
+	activation, err := s.repo.GetActivationStatus(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if activation == nil {
+		activation = &model.MessagingActivation{
+			UserID: userID,
+			Status: model.ActivationStatusNotStarted,
+		}
+	}
+	return activation.ToResponse(), nil
+}
+
+func (s *messagingService) ActivateMessaging(ctx context.Context, userID uuid.UUID, req model.ActivateMessagingRequest) (*model.MessagingActivationStatusResponse, error) {
+	activation, err := s.repo.GetOrCreateActivation(ctx, userID, req.DeviceID)
+	if err != nil {
+		return nil, err
+	}
+	if req.DeviceID != "" {
+		activation.DeviceID = req.DeviceID
+	}
+	if req.TermsVersion != "" {
+		activation.TermsVersion = req.TermsVersion
+	}
+	if req.Consent || req.TermsVersion != "" {
+		activation.ConsentAccepted = true
+	}
+	activation.Status = model.ActivationStatusActive
+	now := time.Now()
+	if activation.ActivatedAt == nil || activation.ActivatedAt.IsZero() {
+		activation.ActivatedAt = &now
+	}
+	activation.LastSeenAt = &now
+	if err := s.repo.SaveActivation(ctx, activation); err != nil {
+		return nil, err
+	}
+	return activation.ToResponse(), nil
+}
+
+func (s *messagingService) AcceptTerms(ctx context.Context, userID uuid.UUID, req model.AcceptTermsRequest) (*model.MessagingActivationStatusResponse, error) {
+	activation, err := s.repo.GetOrCreateActivation(ctx, userID, req.DeviceID)
+	if err != nil {
+		return nil, err
+	}
+	if req.DeviceID != "" {
+		activation.DeviceID = req.DeviceID
+	}
+	if req.TermsVersion != "" {
+		activation.TermsVersion = req.TermsVersion
+	}
+	activation.ConsentAccepted = true
+	if activation.Status == model.ActivationStatusNotStarted {
+		activation.Status = model.ActivationStatusActive
+	}
+	now := time.Now()
+	if activation.ActivatedAt == nil || activation.ActivatedAt.IsZero() {
+		activation.ActivatedAt = &now
+	}
+	activation.LastSeenAt = &now
+	if err := s.repo.SaveActivation(ctx, activation); err != nil {
+		return nil, err
+	}
+	return activation.ToResponse(), nil
 }
 
 // #endregion
