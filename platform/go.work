@@ -5,11 +5,11 @@ use (
 	./services/audit-service
 	./services/auth-service
 	./services/citizen-docs
-	./services/gateway
-	./services/officer-bff
-	./services/notification-service
-	./services/version-service
-	./services/messaging-service
-	./services/identity-service
 	./services/document-renderer
+	./services/gateway
+	./services/identity-service
+	./services/messaging-service
+	./services/notification-service
+	./services/officer-bff
+	./services/version-service
 )
