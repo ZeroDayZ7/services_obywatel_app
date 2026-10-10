@@ -1,6 +1,7 @@
 package model
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"strings"
 	"time"
@@ -203,30 +204,46 @@ type ConversationMember struct {
 
 // Message – Zaszyfrowana koperta z wiadomością (Payload E2EE jest nieczytelny dla serwera)
 type Message struct {
-	ID             uuid.UUID   `gorm:"type:uuid;primaryKey;default:uuidv7()"`
+	ID             uuid.UUID   `gorm:"type:uuid;primaryKey;default:uuidv7()" json:"id,omitempty"`
 	IdempotencyKey string      `gorm:"type:varchar(128);index:idx_message_idempotency,unique;not null;default:''" json:"idempotency_key,omitempty"`
-	ConversationID uuid.UUID   `gorm:"type:uuid;index:idx_conv_seq,unique;not null"`
-	SenderID       uuid.UUID   `gorm:"type:uuid;index;not null"`
-	SenderDeviceID string      `gorm:"type:varchar(64);not null"`
-	Type           MessageType `gorm:"type:varchar(20);not null;default:'text'"`
+	ConversationID uuid.UUID   `gorm:"type:uuid;index:idx_conv_seq,unique;not null" json:"conversation_id,omitempty"`
+	SenderID       uuid.UUID   `gorm:"type:uuid;index;not null" json:"sender_id,omitempty"`
+	SenderDeviceID string      `gorm:"type:varchar(64);not null" json:"sender_device_id,omitempty"`
+	Type           MessageType `gorm:"type:varchar(20);not null;default:'text'" json:"type,omitempty"`
 
 	// Monotoniczny numer sekwencyjny w ramach danej konwersacji (służy do sortowania i synchronizacji delta)
-	Sequence uint64 `gorm:"index:idx_conv_seq,unique;not null"`
+	Sequence uint64 `gorm:"index:idx_conv_seq,unique;not null" json:"sequence,omitempty"`
 
 	// Szyfrowany ładunek wiadomości (AES-GCM / Signal Protocol Payload)
-	// Serwer widzi wyłącznie ciąg bajtów i nie ma możliwości jego odszyfrowania
-	EncryptedPayload []byte `gorm:"type:bytea;not null" json:"-"`
+	// Serwer widzi wyłącznie ciąg bajtów i nie ma możliwości jego odszyfrowania.
+	// Pole jest jawnie serializowane do API, by Flutter mógł zdeserializować go jako ciphertext/encrypted_payload.
+	EncryptedPayload []byte `gorm:"type:bytea;not null" json:"encrypted_payload,omitempty"`
 
 	// Odnośniki do załączników (dla wiadomości typu media)
-	MediaHeader []byte `gorm:"type:bytea" json:"-"`
+	MediaHeader []byte `gorm:"type:bytea" json:"media_header,omitempty"`
 
 	// Globalny wskaźnik wersji w mikroserwisie dla synchronizacji offline -> online
-	Version uint64 `gorm:"not null;default:1;index"`
+	Version uint64 `gorm:"not null;default:1;index" json:"version,omitempty"`
 
 	// Relacja do konwersacji
-	Conversation *Conversation `gorm:"foreignKey:ConversationID;constraint:OnDelete:CASCADE"`
+	Conversation *Conversation `gorm:"foreignKey:ConversationID;constraint:OnDelete:CASCADE" json:"conversation,omitempty"`
 
 	BaseModel
+}
+
+func (m Message) MarshalJSON() ([]byte, error) {
+	type alias Message
+	ciphertext := base64.StdEncoding.EncodeToString(m.EncryptedPayload)
+	payload := struct {
+		alias
+		Ciphertext string `json:"ciphertext,omitempty"`
+		Encrypted  string `json:"encryptedPayload,omitempty"`
+	}{
+		alias:      alias(m),
+		Ciphertext: ciphertext,
+		Encrypted:  ciphertext,
+	}
+	return json.Marshal(payload)
 }
 
 // #endregion

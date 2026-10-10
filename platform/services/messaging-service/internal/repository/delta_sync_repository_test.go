@@ -75,11 +75,11 @@ func TestCreateMessageAdvancesGlobalVersionAndDeltaCursor(t *testing.T) {
 	}
 
 	first := &model.Message{
-		ID:             uuid.New(),
-		ConversationID: conversationID,
-		SenderID:       userID,
-		SenderDeviceID: "device-1",
-		Type:           model.MessageTypeText,
+		ID:               uuid.New(),
+		ConversationID:   conversationID,
+		SenderID:         userID,
+		SenderDeviceID:   "device-1",
+		Type:             model.MessageTypeText,
 		EncryptedPayload: []byte("first-ciphertext"),
 	}
 	if err := repo.CreateMessage(ctx, first); err != nil {
@@ -87,11 +87,11 @@ func TestCreateMessageAdvancesGlobalVersionAndDeltaCursor(t *testing.T) {
 	}
 
 	second := &model.Message{
-		ID:             uuid.New(),
-		ConversationID: conversationID,
-		SenderID:       userID,
-		SenderDeviceID: "device-1",
-		Type:           model.MessageTypeText,
+		ID:               uuid.New(),
+		ConversationID:   conversationID,
+		SenderID:         userID,
+		SenderDeviceID:   "device-1",
+		Type:             model.MessageTypeText,
 		EncryptedPayload: []byte("second-ciphertext"),
 	}
 	if err := repo.CreateMessage(ctx, second); err != nil {
