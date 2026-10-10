@@ -636,13 +636,16 @@ func validateDeviceKeyUpload(req model.UploadDeviceKeysRequest) error {
 	}
 	seen := make(map[string]struct{}, len(req.OneTimePreKeys))
 	for i, key := range req.OneTimePreKeys {
-		if err := validateSignalKeyMaterial(fmt.Sprintf("one_time_pre_key[%d]", i), key); err != nil {
+		if key.KeyID == 0 {
+			return fmt.Errorf("one_time_pre_key[%d] is missing key_id", i)
+		}
+		if err := validateSignalKeyMaterial(fmt.Sprintf("one_time_pre_key[%d]", i), key.PublicKey); err != nil {
 			return err
 		}
-		if _, exists := seen[string(key)]; exists {
+		if _, exists := seen[string(key.PublicKey)]; exists {
 			return fmt.Errorf("duplicate one_time_pre_key[%d] detected", i)
 		}
-		seen[string(key)] = struct{}{}
+		seen[string(key.PublicKey)] = struct{}{}
 	}
 	return nil
 }
@@ -759,11 +762,15 @@ func (s *messagingService) UploadDeviceKeys(ctx context.Context, userID uuid.UUI
 
 	if len(req.OneTimePreKeys) > 0 {
 		preKeys := make([]model.UserPreKey, 0, len(req.OneTimePreKeys))
-		for i, keyBytes := range req.OneTimePreKeys {
+		for i, key := range req.OneTimePreKeys {
+			keyID := key.KeyID
+			if keyID == 0 {
+				keyID = uint32(i + 1)
+			}
 			preKeys = append(preKeys, model.UserPreKey{
 				DeviceID:  identity.ID,
-				KeyID:     uint32(i + 1),
-				PublicKey: keyBytes,
+				KeyID:     keyID,
+				PublicKey: key.PublicKey,
 			})
 		}
 		if err := s.repo.SavePreKeys(ctx, preKeys); err != nil {

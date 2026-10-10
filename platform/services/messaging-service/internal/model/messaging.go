@@ -529,24 +529,98 @@ type CreateConversationRequest struct {
 	RecipientIDs []uuid.UUID      `json:"recipient_ids"`
 }
 
+// OneTimePreKeyUpload preserves the exact Signal key_id from the client so the
+// backend can bind the correct private pre-key to the correct message.
+type OneTimePreKeyUpload struct {
+	KeyID     uint32 `json:"key_id"`
+	PublicKey []byte `json:"public_key"`
+}
+
 // UploadDeviceKeysRequest - Rejestracja kluczy E2EE dla urządzenia.
 // Akceptuje oba formaty pól: camelCase i snake_case, aby wspierać klienta Flutter i backendowy kontrakt Signal.
 type UploadDeviceKeysRequest struct {
-	DeviceID               string   `json:"deviceId,omitempty"`
-	DeviceIDSnake          string   `json:"device_id,omitempty"`
-	RegistrationID         uint32   `json:"registrationId,omitempty"`
-	RegistrationIDSnake    uint32   `json:"registration_id,omitempty"`
-	IdentityPublicKey      []byte   `json:"identityPublicKey,omitempty"`
-	IdentityPublicKeySnake []byte   `json:"identity_public_key,omitempty"`
-	PublicKey              []byte   `json:"publicKey,omitempty"`
-	SignedPreKey           []byte   `json:"signedPreKey,omitempty"`
-	SignedPreKeySnake      []byte   `json:"signed_pre_key,omitempty"`
-	SignedPreKeySig        []byte   `json:"signedPreKeySig,omitempty"`
-	SignedPreKeySigSnake   []byte   `json:"signed_pre_key_sig,omitempty"`
-	SignedPreKeyID         uint32   `json:"signedPreKeyId,omitempty"`
-	SignedPreKeyIDSnake    uint32   `json:"signed_pre_key_id,omitempty"`
-	OneTimePreKeys         [][]byte `json:"oneTimePreKeys,omitempty"`
-	OneTimePreKeysSnake    [][]byte `json:"one_time_pre_keys,omitempty"`
+	DeviceID               string                `json:"deviceId,omitempty"`
+	DeviceIDSnake          string                `json:"device_id,omitempty"`
+	RegistrationID         uint32                `json:"registrationId,omitempty"`
+	RegistrationIDSnake    uint32                `json:"registration_id,omitempty"`
+	IdentityPublicKey      []byte                `json:"identityPublicKey,omitempty"`
+	IdentityPublicKeySnake []byte                `json:"identity_public_key,omitempty"`
+	PublicKey              []byte                `json:"publicKey,omitempty"`
+	SignedPreKey           []byte                `json:"signedPreKey,omitempty"`
+	SignedPreKeySnake      []byte                `json:"signed_pre_key,omitempty"`
+	SignedPreKeySig        []byte                `json:"signedPreKeySig,omitempty"`
+	SignedPreKeySigSnake   []byte                `json:"signed_pre_key_sig,omitempty"`
+	SignedPreKeyID         uint32                `json:"signedPreKeyId,omitempty"`
+	SignedPreKeyIDSnake    uint32                `json:"signed_pre_key_id,omitempty"`
+	OneTimePreKeys         []OneTimePreKeyUpload `json:"oneTimePreKeys,omitempty"`
+	OneTimePreKeysSnake    []OneTimePreKeyUpload `json:"one_time_pre_keys,omitempty"`
+}
+
+func (r *UploadDeviceKeysRequest) UnmarshalJSON(data []byte) error {
+	type alias UploadDeviceKeysRequest
+	var decoded struct {
+		DeviceID               string          `json:"deviceId"`
+		DeviceIDSnake          string          `json:"device_id"`
+		RegistrationID         uint32          `json:"registrationId"`
+		RegistrationIDSnake    uint32          `json:"registration_id"`
+		IdentityPublicKey      []byte          `json:"identityPublicKey"`
+		IdentityPublicKeySnake []byte          `json:"identity_public_key"`
+		PublicKey              []byte          `json:"publicKey"`
+		SignedPreKey           []byte          `json:"signedPreKey"`
+		SignedPreKeySnake      []byte          `json:"signed_pre_key"`
+		SignedPreKeySig        []byte          `json:"signedPreKeySig"`
+		SignedPreKeySigSnake   []byte          `json:"signed_pre_key_sig"`
+		SignedPreKeyID         uint32          `json:"signedPreKeyId"`
+		SignedPreKeyIDSnake    uint32          `json:"signed_pre_key_id"`
+		OneTimePreKeys         json.RawMessage `json:"oneTimePreKeys"`
+		OneTimePreKeysSnake    json.RawMessage `json:"one_time_pre_keys"`
+	}
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	*r = UploadDeviceKeysRequest{
+		DeviceID:               decoded.DeviceID,
+		DeviceIDSnake:          decoded.DeviceIDSnake,
+		RegistrationID:         decoded.RegistrationID,
+		RegistrationIDSnake:    decoded.RegistrationIDSnake,
+		IdentityPublicKey:      decoded.IdentityPublicKey,
+		IdentityPublicKeySnake: decoded.IdentityPublicKeySnake,
+		PublicKey:              decoded.PublicKey,
+		SignedPreKey:           decoded.SignedPreKey,
+		SignedPreKeySnake:      decoded.SignedPreKeySnake,
+		SignedPreKeySig:        decoded.SignedPreKeySig,
+		SignedPreKeySigSnake:   decoded.SignedPreKeySigSnake,
+		SignedPreKeyID:         decoded.SignedPreKeyID,
+		SignedPreKeyIDSnake:    decoded.SignedPreKeyIDSnake,
+	}
+
+	if len(decoded.OneTimePreKeys) > 0 {
+		if err := json.Unmarshal(decoded.OneTimePreKeys, &r.OneTimePreKeys); err == nil && len(r.OneTimePreKeys) > 0 {
+			return nil
+		}
+		var legacy [][]byte
+		if err := json.Unmarshal(decoded.OneTimePreKeys, &legacy); err == nil {
+			r.OneTimePreKeys = make([]OneTimePreKeyUpload, 0, len(legacy))
+			for i, key := range legacy {
+				r.OneTimePreKeys = append(r.OneTimePreKeys, OneTimePreKeyUpload{KeyID: uint32(i + 1), PublicKey: key})
+			}
+			return nil
+		}
+	}
+	if len(decoded.OneTimePreKeysSnake) > 0 {
+		if err := json.Unmarshal(decoded.OneTimePreKeysSnake, &r.OneTimePreKeysSnake); err == nil && len(r.OneTimePreKeysSnake) > 0 {
+			return nil
+		}
+		var legacy [][]byte
+		if err := json.Unmarshal(decoded.OneTimePreKeysSnake, &legacy); err == nil {
+			r.OneTimePreKeysSnake = make([]OneTimePreKeyUpload, 0, len(legacy))
+			for i, key := range legacy {
+				r.OneTimePreKeysSnake = append(r.OneTimePreKeysSnake, OneTimePreKeyUpload{KeyID: uint32(i + 1), PublicKey: key})
+			}
+			return nil
+		}
+	}
+	return nil
 }
 
 func (r *UploadDeviceKeysRequest) Normalize() {
