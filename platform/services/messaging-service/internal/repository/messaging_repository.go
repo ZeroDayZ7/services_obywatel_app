@@ -284,6 +284,9 @@ func (r *messagingRepository) SaveDeviceIdentity(ctx context.Context, identity *
 			First(&existing).Error
 		if err == nil {
 			existing.RegistrationID = identity.RegistrationID
+			if identity.SignalDeviceID != 0 {
+				existing.SignalDeviceID = identity.SignalDeviceID
+			}
 			existing.PublicKey = identity.PublicKey
 			existing.SignedPreKey = identity.SignedPreKey
 			existing.SignedPreKeySig = identity.SignedPreKeySig
@@ -310,6 +313,9 @@ func (r *messagingRepository) SaveDeviceIdentity(ctx context.Context, identity *
 			}
 
 			competing.RegistrationID = identity.RegistrationID
+			if identity.SignalDeviceID != 0 {
+				competing.SignalDeviceID = identity.SignalDeviceID
+			}
 			competing.PublicKey = identity.PublicKey
 			competing.SignedPreKey = identity.SignedPreKey
 			competing.SignedPreKeySig = identity.SignedPreKeySig

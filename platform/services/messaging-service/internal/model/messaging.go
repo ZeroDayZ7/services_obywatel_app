@@ -44,7 +44,8 @@ const (
 type UserDeviceIdentity struct {
 	ID             uuid.UUID `gorm:"type:uuid;primaryKey;default:uuidv7()"`
 	UserID         uuid.UUID `gorm:"type:uuid;not null;uniqueIndex:idx_user_device_identity_active"`
-	DeviceID       string    `gorm:"type:varchar(64);not null;uniqueIndex:idx_user_device_identity_active"` // Identyfikator instalacji / sprzętu
+	DeviceID       string    `gorm:"type:varchar(64);not null;uniqueIndex:idx_user_device_identity_active"` // Identyfikator instalacji / urządzenia aplikacji (UUID)
+	SignalDeviceID uint32    `gorm:"not null;default:1"`                                                    // Numeryczny identyfikator urządzenia Signal dla sesji protokołu, zawsze liczba > 0
 	RegistrationID uint32    `gorm:"not null;default:0"`
 	PublicKey      []byte    `gorm:"type:bytea;not null"` // Długowieczny publiczny klucz tożsamości (Identity Key)
 
@@ -541,6 +542,8 @@ type OneTimePreKeyUpload struct {
 type UploadDeviceKeysRequest struct {
 	DeviceID               string                `json:"deviceId,omitempty"`
 	DeviceIDSnake          string                `json:"device_id,omitempty"`
+	SignalDeviceID         uint32                `json:"signalDeviceId,omitempty"`
+	SignalDeviceIDSnake    uint32                `json:"signal_device_id,omitempty"`
 	RegistrationID         uint32                `json:"registrationId,omitempty"`
 	RegistrationIDSnake    uint32                `json:"registration_id,omitempty"`
 	IdentityPublicKey      []byte                `json:"identityPublicKey,omitempty"`
@@ -561,6 +564,8 @@ func (r *UploadDeviceKeysRequest) UnmarshalJSON(data []byte) error {
 	var decoded struct {
 		DeviceID               string          `json:"deviceId"`
 		DeviceIDSnake          string          `json:"device_id"`
+		SignalDeviceID         uint32          `json:"signalDeviceId"`
+		SignalDeviceIDSnake    uint32          `json:"signal_device_id"`
 		RegistrationID         uint32          `json:"registrationId"`
 		RegistrationIDSnake    uint32          `json:"registration_id"`
 		IdentityPublicKey      []byte          `json:"identityPublicKey"`
@@ -581,6 +586,8 @@ func (r *UploadDeviceKeysRequest) UnmarshalJSON(data []byte) error {
 	*r = UploadDeviceKeysRequest{
 		DeviceID:               decoded.DeviceID,
 		DeviceIDSnake:          decoded.DeviceIDSnake,
+		SignalDeviceID:         decoded.SignalDeviceID,
+		SignalDeviceIDSnake:    decoded.SignalDeviceIDSnake,
 		RegistrationID:         decoded.RegistrationID,
 		RegistrationIDSnake:    decoded.RegistrationIDSnake,
 		IdentityPublicKey:      decoded.IdentityPublicKey,
@@ -626,6 +633,9 @@ func (r *UploadDeviceKeysRequest) UnmarshalJSON(data []byte) error {
 func (r *UploadDeviceKeysRequest) Normalize() {
 	if r.DeviceID == "" {
 		r.DeviceID = r.DeviceIDSnake
+	}
+	if r.SignalDeviceID == 0 {
+		r.SignalDeviceID = r.SignalDeviceIDSnake
 	}
 	if r.RegistrationID == 0 {
 		r.RegistrationID = r.RegistrationIDSnake

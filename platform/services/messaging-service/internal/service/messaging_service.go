@@ -654,6 +654,7 @@ func BuildUserDeviceIdentity(userID uuid.UUID, req model.UploadDeviceKeysRequest
 	return &model.UserDeviceIdentity{
 		UserID:              userID,
 		DeviceID:            req.DeviceID,
+		SignalDeviceID:      req.SignalDeviceID,
 		RegistrationID:      req.RegistrationID,
 		PublicKey:           req.IdentityPublicKey,
 		SignedPreKey:        req.SignedPreKey,
@@ -670,11 +671,14 @@ func BuildPreKeyBundle(identity *model.UserDeviceIdentity, oneTimePreKey *model.
 
 	bundle := &model.PreKeyBundleDto{
 		RegistrationID:        identity.RegistrationID,
-		DeviceID:              identity.DeviceID,
+		DeviceID:              "",
 		SignedPreKeyID:        identity.SignedPreKeyID,
 		SignedPreKeyPublic:    identity.SignedPreKey,
 		SignedPreKeySignature: identity.SignedPreKeySig,
 		IdentityKey:           identity.PublicKey,
+	}
+	if identity.SignalDeviceID > 0 {
+		bundle.DeviceID = strconv.FormatUint(uint64(identity.SignalDeviceID), 10)
 	}
 	if oneTimePreKey != nil {
 		preKeyID := oneTimePreKey.KeyID
@@ -862,11 +866,14 @@ func (s *messagingService) GetUserPreKeys(ctx context.Context, targetUserID stri
 
 	res := &model.UserPreKeysResponse{
 		UserID:          identity.UserID,
-		DeviceID:        identity.DeviceID,
+		DeviceID:        "",
 		IdentityKey:     identity.PublicKey,
 		SignedPreKey:    identity.SignedPreKey,
 		SignedPreKeySig: identity.SignedPreKeySig,
 		SignedPreKeyID:  identity.SignedPreKeyID,
+	}
+	if identity.SignalDeviceID > 0 {
+		res.DeviceID = strconv.FormatUint(uint64(identity.SignalDeviceID), 10)
 	}
 	if bundle != nil {
 		res.OneTimePreKey = bundle.PreKeyPublic
