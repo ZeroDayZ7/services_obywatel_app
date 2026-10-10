@@ -17,6 +17,7 @@ import (
 type stubMessagingService struct {
 	processOutbox func(ctx context.Context, userID uuid.UUID, req model.OutboxBatchRequest) (*model.OutboxBatchResponse, error)
 	getDeltaSync  func(ctx context.Context, userID uuid.UUID, req model.SyncDeltaRequest) (*model.SyncDeltaResponse, error)
+	sendMessage   func(ctx context.Context, senderID uuid.UUID, msg *model.Message) error
 }
 
 func (s *stubMessagingService) GetDeltaSync(ctx context.Context, userID uuid.UUID, req model.SyncDeltaRequest) (*model.SyncDeltaResponse, error) {
@@ -34,6 +35,9 @@ func (s *stubMessagingService) ProcessOutbox(ctx context.Context, userID uuid.UU
 }
 
 func (s *stubMessagingService) SendMessage(ctx context.Context, senderID uuid.UUID, msg *model.Message) error {
+	if s.sendMessage != nil {
+		return s.sendMessage(ctx, senderID, msg)
+	}
 	return nil
 }
 
@@ -210,6 +214,50 @@ func TestMessagingHandlerProcessOutbox_IgnoresEmptyConversationID(t *testing.T) 
 	}
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestMessagingHandlerSendMessage_PreservesSignalTypeFromRequest(t *testing.T) {
+	userID := uuid.New()
+	conversationID := uuid.New()
+	var captured *model.Message
+	service := &stubMessagingService{
+		sendMessage: func(ctx context.Context, gotUserID uuid.UUID, msg *model.Message) error {
+			if gotUserID != userID {
+				t.Fatalf("expected userID %s, got %s", userID, gotUserID)
+			}
+			captured = msg
+			return nil
+		},
+	}
+
+	handler := NewMessagingHandler(service)
+	app := fiber.New()
+	app.Use(func(c *fiber.Ctx) error {
+		c.Locals(reqctx.FiberRequestContextKey, &reqctx.RequestContext{UserID: &userID})
+		return c.Next()
+	})
+	app.Post("/conversations/:id/messages", handler.SendMessage)
+
+	payload := fmt.Sprintf(`{"conversation_id":"%s","sender_device_id":"device-1","ciphertext":"Zm9v","signal_message_type":3,"idempotency_key":"%s"}`,
+		conversationID,
+		uuid.NewString(),
+	)
+	request := httptest.NewRequest(http.MethodPost, "/conversations/"+conversationID.String()+"/messages", bytes.NewBufferString(payload))
+	request.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(request)
+	if err != nil {
+		t.Fatalf("app test: %v", err)
+	}
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", resp.StatusCode)
+	}
+	if captured == nil {
+		t.Fatal("expected message to be captured")
+	}
+	if captured.Type != model.MessageType("3") {
+		t.Fatalf("expected preserved signal type 3, got %q", captured.Type)
 	}
 }
 

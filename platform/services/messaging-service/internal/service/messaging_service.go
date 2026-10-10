@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -122,9 +123,18 @@ func buildMessageFromOutboxEvent(userID uuid.UUID, evt model.OutboxEventPayload)
 		return nil, false, nil
 	}
 
+	evt.Normalize()
 	conversationID := evt.ConversationID
 	ciphertext := strings.TrimSpace(evt.Ciphertext)
 	idempotencyKey := strings.TrimSpace(evt.IdempotencyKey)
+	resolvedSignalType := evt.Type
+	if resolvedSignalType == 0 {
+		resolvedSignalType = evt.TypeAlt
+	}
+	messageType := model.MessageTypeText
+	if resolvedSignalType != 0 {
+		messageType = model.MessageType(strconv.Itoa(int(resolvedSignalType)))
+	}
 
 	if conversationID == nil && len(evt.Payload) > 0 {
 		var payload map[string]any
@@ -191,7 +201,7 @@ func buildMessageFromOutboxEvent(userID uuid.UUID, evt model.OutboxEventPayload)
 		ConversationID:   *conversationID,
 		SenderID:         userID,
 		SenderDeviceID:   evt.SenderDeviceID,
-		Type:             model.MessageTypeText,
+		Type:             messageType,
 		EncryptedPayload: []byte(ciphertext),
 		IdempotencyKey:   idempotencyKey,
 	}, true, nil

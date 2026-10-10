@@ -156,11 +156,20 @@ func (h *MessagingHandler) SendMessage(c *fiber.Ctx) error {
 		"content_len", len(req.Content),
 	)
 
+	resolvedSignalType := req.Type
+	if resolvedSignalType == 0 {
+		resolvedSignalType = req.TypeSnake
+	}
+	messageType := model.MessageTypeText
+	if resolvedSignalType != 0 {
+		messageType = model.MessageType(strconv.Itoa(int(resolvedSignalType)))
+	}
+
 	msg := &model.Message{
 		ConversationID:   *req.ConversationID,
 		SenderID:         *rc.UserID,
 		SenderDeviceID:   req.SenderDeviceID,
-		Type:             model.MessageTypeText,
+		Type:             messageType,
 		EncryptedPayload: req.Ciphertext,
 		IdempotencyKey:   strings.TrimSpace(req.IdempotencyKey),
 	}

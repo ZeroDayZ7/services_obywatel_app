@@ -417,6 +417,15 @@ type OutboxEventPayload struct {
 	TypeAlt           uint8  `json:"signal_message_type,omitempty"`
 }
 
+func (o *OutboxEventPayload) Normalize() {
+	if o.Type == 0 {
+		o.Type = o.TypeAlt
+	}
+	if o.SenderDeviceID == "" {
+		o.SenderDeviceID = o.SenderDeviceIDAlt
+	}
+}
+
 func (o *OutboxEventPayload) UnmarshalJSON(data []byte) error {
 	type rawOutboxEventPayload struct {
 		EventID           json.RawMessage `json:"event_id"`
@@ -479,9 +488,7 @@ func (o *OutboxEventPayload) UnmarshalJSON(data []byte) error {
 		o.ConversationID = &conversationID
 	}
 
-	if o.SenderDeviceID == "" {
-		o.SenderDeviceID = o.SenderDeviceIDAlt
-	}
+	o.Normalize()
 	return nil
 }
 
@@ -620,6 +627,7 @@ type SendMessageRequest struct {
 	RecipientDeviceIDSnake string     `json:"recipient_device_id,omitempty"`
 	Ciphertext             []byte     `json:"ciphertext,omitempty"`
 	Type                   uint8      `json:"type,omitempty"`
+	TypeSnake              uint8      `json:"signal_message_type,omitempty"`
 	Content                string     `json:"content,omitempty"`
 	IdempotencyKey         string     `json:"idempotency_key,omitempty"`
 }
@@ -636,6 +644,9 @@ func (r *SendMessageRequest) Normalize() {
 	}
 	if r.RecipientDeviceID == "" {
 		r.RecipientDeviceID = r.RecipientDeviceIDSnake
+	}
+	if r.Type == 0 {
+		r.Type = r.TypeSnake
 	}
 	if r.IdempotencyKey == "" {
 		r.IdempotencyKey = uuid.NewString()
