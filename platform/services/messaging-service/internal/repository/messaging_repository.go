@@ -22,6 +22,7 @@ type MessagingRepository interface {
 	GetMessagesByConversation(ctx context.Context, userID uuid.UUID, conversationID uuid.UUID, limit, offset int) ([]model.Message, error)
 	GetConversations(ctx context.Context, userID uuid.UUID) ([]model.Conversation, error)
 	GetConversationByID(ctx context.Context, userID, conversationID uuid.UUID) (*model.Conversation, error)
+	FindDirectConversationByUsers(ctx context.Context, userA, userB uuid.UUID) (*model.Conversation, error)
 	CreateConversation(ctx context.Context, conv *model.Conversation) error
 	UpdateLastReadSequence(ctx context.Context, userID, conversationID uuid.UUID, sequence uint64) error
 
@@ -163,6 +164,30 @@ func (r *messagingRepository) GetConversationByID(ctx context.Context, userID, c
 		Preload("Members").
 		First(&conv).Error
 	if err != nil {
+		return nil, err
+	}
+	return &conv, nil
+}
+
+func (r *messagingRepository) FindDirectConversationByUsers(ctx context.Context, userA, userB uuid.UUID) (*model.Conversation, error) {
+	if userA == uuid.Nil || userB == uuid.Nil || userA == userB {
+		return nil, nil
+	}
+
+	var conv model.Conversation
+	err := r.db.WithContext(ctx).
+		Table("conversations").
+		Joins("JOIN conversation_members cm_a ON cm_a.conversation_id = conversations.id").
+		Joins("JOIN conversation_members cm_b ON cm_b.conversation_id = conversations.id").
+		Where("conversations.type = ?", model.ConversationTypeDirect).
+		Where("conversations.deleted_at IS NULL AND cm_a.deleted_at IS NULL AND cm_b.deleted_at IS NULL").
+		Where("(cm_a.user_id = ? AND cm_b.user_id = ?) OR (cm_a.user_id = ? AND cm_b.user_id = ?)", userA, userB, userB, userA).
+		Preload("Members").
+		First(&conv).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	return &conv, nil

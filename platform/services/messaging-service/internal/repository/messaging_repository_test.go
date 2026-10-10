@@ -134,6 +134,77 @@ func TestMessagingRepositoryCreateMessage_RejectsDuplicateIdempotencyKey(t *test
 	}
 }
 
+func TestMessagingRepositoryFindDirectConversationByUsers_ReturnsExistingConversation(t *testing.T) {
+	repo, db := newMessagingTestRepo(t)
+	ctx := context.Background()
+	userA := uuid.New()
+	userB := uuid.New()
+	conversationID := uuid.New()
+
+	if err := db.Exec(`
+		DROP TABLE IF EXISTS messages;
+		DROP TABLE IF EXISTS conversation_members;
+		DROP TABLE IF EXISTS conversations;
+		CREATE TABLE conversations (
+			id TEXT PRIMARY KEY,
+			type TEXT NOT NULL DEFAULT 'direct',
+			title TEXT,
+			last_sequence INTEGER NOT NULL DEFAULT 0,
+			created_at DATETIME,
+			updated_at DATETIME,
+			deleted_at DATETIME
+		);
+		CREATE TABLE conversation_members (
+			id TEXT PRIMARY KEY,
+			conversation_id TEXT NOT NULL,
+			user_id TEXT NOT NULL,
+			role TEXT NOT NULL DEFAULT 'member',
+			last_read_sequence INTEGER NOT NULL DEFAULT 0,
+			created_at DATETIME,
+			updated_at DATETIME,
+			deleted_at DATETIME
+		);
+	`).Error; err != nil {
+		t.Fatalf("create tables: %v", err)
+	}
+
+	if err := db.Create(&model.Conversation{
+		ID:    conversationID,
+		Type:  model.ConversationTypeDirect,
+		Title: "direct",
+	}).Error; err != nil {
+		t.Fatalf("create conversation: %v", err)
+	}
+
+	if err := db.Create(&model.ConversationMember{
+		ID:             uuid.New(),
+		ConversationID: conversationID,
+		UserID:         userA,
+		Role:           "admin",
+	}).Error; err != nil {
+		t.Fatalf("create member A: %v", err)
+	}
+	if err := db.Create(&model.ConversationMember{
+		ID:             uuid.New(),
+		ConversationID: conversationID,
+		UserID:         userB,
+		Role:           "member",
+	}).Error; err != nil {
+		t.Fatalf("create member B: %v", err)
+	}
+
+	found, err := repo.FindDirectConversationByUsers(ctx, userA, userB)
+	if err != nil {
+		t.Fatalf("find direct conversation: %v", err)
+	}
+	if found == nil {
+		t.Fatal("expected existing direct conversation to be found")
+	}
+	if found.ID != conversationID {
+		t.Fatalf("expected conversation %s, got %s", conversationID, found.ID)
+	}
+}
+
 func TestMessagingRepositorySaveDeviceIdentity_UpsertsSameDevice(t *testing.T) {
 	repo, db := newMessagingTestRepo(t)
 	ctx := context.Background()

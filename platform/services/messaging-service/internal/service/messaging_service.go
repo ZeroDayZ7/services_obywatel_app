@@ -445,6 +445,15 @@ func (s *messagingService) GetConversations(ctx context.Context, userID uuid.UUI
 }
 
 func (s *messagingService) CreateConversation(ctx context.Context, userID uuid.UUID, req model.CreateConversationRequest) (*model.Conversation, error) {
+	if req.Type == model.ConversationTypeDirect && len(req.RecipientIDs) > 0 {
+		recipientID := req.RecipientIDs[0]
+		if existing, err := s.repo.FindDirectConversationByUsers(ctx, userID, recipientID); err != nil {
+			return nil, err
+		} else if existing != nil {
+			return existing, nil
+		}
+	}
+
 	conv := &model.Conversation{
 		Type:  req.Type,
 		Title: req.Title,
