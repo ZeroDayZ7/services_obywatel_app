@@ -71,55 +71,132 @@ func NewMessagingService(repo repository.MessagingRepository, cfg *config.Config
 
 // #region DeltaAndOutbox
 func (s *messagingService) GetDeltaSync(ctx context.Context, userID uuid.UUID, req model.SyncDeltaRequest) (*model.SyncDeltaResponse, error) {
+	s.logger.Info("[SYNC-DELTA-1] starting delta sync",
+		"user_id", userID.String(),
+		"last_known_contact_version", req.LastKnownContactVersion,
+		"last_known_message_version", req.LastKnownMessageVersion,
+	)
+
 	contacts, err := s.repo.GetContactsSinceVersion(ctx, userID, req.LastKnownContactVersion)
 	if err != nil {
+		s.logger.Error("[SYNC-DELTA-1.1] failed to fetch contacts for delta sync",
+			"user_id", userID.String(),
+			"error", err.Error(),
+		)
 		return nil, err
 	}
 
 	messages, err := s.repo.GetMessagesSinceVersion(ctx, userID, req.LastKnownMessageVersion)
 	if err != nil {
+		s.logger.Error("[SYNC-DELTA-1.2] failed to fetch messages for delta sync",
+			"user_id", userID.String(),
+			"error", err.Error(),
+		)
 		return nil, err
 	}
 
-	return &model.SyncDeltaResponse{
+	resp := &model.SyncDeltaResponse{
 		UpdatedContacts: contacts,
 		NewMessages:     messages,
 		HasMore:         false,
-	}, nil
+	}
+
+	s.logger.Info("[SYNC-DELTA-1.3] delta sync completed",
+		"user_id", userID.String(),
+		"contacts_count", len(contacts),
+		"messages_count", len(messages),
+	)
+	return resp, nil
 }
 
 func (s *messagingService) ProcessOutbox(ctx context.Context, userID uuid.UUID, req model.OutboxBatchRequest) (*model.OutboxBatchResponse, error) {
 	processed := 0
+	s.logger.Info("[OUTBOX-1] processing outbox batch",
+		"user_id", userID.String(),
+		"message_count", len(req.Messages),
+	)
+
 	for _, evt := range req.Messages {
+		s.logger.Info("[OUTBOX-1.1] handling outbox event",
+			"user_id", userID.String(),
+			"event_id", evt.EventID,
+			"event_type", evt.EventType,
+			"conversation_id", evt.ConversationID,
+			"sender_device_id", evt.SenderDeviceID,
+		)
 		msg, ok, err := buildMessageFromOutboxEvent(userID, evt)
 		if err != nil {
+			s.logger.Error("[OUTBOX-1.2] outbox event conversion failed",
+				"user_id", userID.String(),
+				"event_id", evt.EventID,
+				"error", err.Error(),
+			)
 			return nil, err
 		}
 		if !ok {
+			s.logger.Warn("[OUTBOX-1.3] outbox event skipped",
+				"user_id", userID.String(),
+				"event_id", evt.EventID,
+				"event_type", evt.EventType,
+			)
 			continue
 		}
 
 		if msg.IdempotencyKey != "" {
 			if existing, err := s.repo.GetMessageByIdempotencyKey(ctx, msg.IdempotencyKey); err == nil && existing != nil {
+				s.logger.Info("[OUTBOX-1.4] duplicate message found by idempotency key",
+					"user_id", userID.String(),
+					"idempotency_key", msg.IdempotencyKey,
+				)
 				processed++
 				continue
 			} else if err != nil {
+				s.logger.Error("[OUTBOX-1.5] failed to check idempotency key",
+					"user_id", userID.String(),
+					"idempotency_key", msg.IdempotencyKey,
+					"error", err.Error(),
+				)
 				return nil, err
 			}
 		}
 
 		if err := s.repo.CreateMessage(ctx, msg); err == nil {
 			processed++
+			s.logger.Info("[OUTBOX-1.6] message persisted from outbox",
+				"user_id", userID.String(),
+				"conversation_id", msg.ConversationID.String(),
+				"idempotency_key", msg.IdempotencyKey,
+			)
 		} else if !errors.Is(err, gorm.ErrDuplicatedKey) {
+			s.logger.Error("[OUTBOX-1.7] message persistence failed",
+				"user_id", userID.String(),
+				"conversation_id", msg.ConversationID.String(),
+				"idempotency_key", msg.IdempotencyKey,
+				"error", err.Error(),
+			)
 			return nil, err
 		}
 	}
 
+	s.logger.Info("[OUTBOX-1.8] outbox batch complete",
+		"user_id", userID.String(),
+		"processed_count", processed,
+	)
 	return &model.OutboxBatchResponse{ProcessedCount: processed}, nil
 }
 
 func buildMessageFromOutboxEvent(userID uuid.UUID, evt model.OutboxEventPayload) (*model.Message, bool, error) {
+	shared.GetLogger().Info("[OUTBOX-BUILD-1] normalizing outbox event",
+		"user_id", userID.String(),
+		"event_id", evt.EventID,
+		"event_type", evt.EventType,
+	)
+
 	if evt.EventType != "" && evt.EventType != "SEND_MESSAGE" {
+		shared.GetLogger().Warn("[OUTBOX-BUILD-1.1] unsupported event type skipped",
+			"user_id", userID.String(),
+			"event_type", evt.EventType,
+		)
 		return nil, false, nil
 	}
 
@@ -173,15 +250,27 @@ func buildMessageFromOutboxEvent(userID uuid.UUID, evt model.OutboxEventPayload)
 		evt.EventType = "SEND_MESSAGE"
 	}
 	if evt.EventType == "" {
+		shared.GetLogger().Warn("[OUTBOX-BUILD-1.2] missing event type, skipping",
+			"user_id", userID.String(),
+			"event_id", evt.EventID,
+		)
 		return nil, false, nil
 	}
 	if conversationID == nil || *conversationID == uuid.Nil {
+		shared.GetLogger().Warn("[OUTBOX-BUILD-1.3] missing conversation id, skipping",
+			"user_id", userID.String(),
+			"event_id", evt.EventID,
+		)
 		return nil, false, nil
 	}
 	if ciphertext == "" {
 		ciphertext = strings.TrimSpace(evt.Content)
 	}
 	if ciphertext == "" {
+		shared.GetLogger().Warn("[OUTBOX-BUILD-1.4] empty ciphertext, skipping",
+			"user_id", userID.String(),
+			"event_id", evt.EventID,
+		)
 		return nil, false, nil
 	}
 	if idempotencyKey == "" && evt.EventID != uuid.Nil {
@@ -197,14 +286,22 @@ func buildMessageFromOutboxEvent(userID uuid.UUID, evt model.OutboxEventPayload)
 		evt.SenderDeviceID = "unknown-device"
 	}
 
-	return &model.Message{
+	msg := &model.Message{
 		ConversationID:   *conversationID,
 		SenderID:         userID,
 		SenderDeviceID:   evt.SenderDeviceID,
 		Type:             messageType,
 		EncryptedPayload: []byte(ciphertext),
 		IdempotencyKey:   idempotencyKey,
-	}, true, nil
+	}
+	shared.GetLogger().Info("[OUTBOX-BUILD-1.5] message built from outbox event",
+		"user_id", userID.String(),
+		"conversation_id", msg.ConversationID.String(),
+		"signal_type", string(msg.Type),
+		"ciphertext_len", len(ciphertext),
+		"idempotency_key", idempotencyKey,
+	)
+	return msg, true, nil
 }
 
 // #endregion
@@ -214,16 +311,27 @@ func (s *messagingService) SendMessage(ctx context.Context, senderID uuid.UUID, 
 	if msg == nil {
 		return ErrInvalidSession
 	}
+
+	s.logger.Info("[MESSAGE-SEND-1] starting message persistence flow",
+		"user_id", senderID.String(),
+		"conversation_id", msg.ConversationID.String(),
+		"sender_device_id", msg.SenderDeviceID,
+		"ciphertext_len", len(msg.EncryptedPayload),
+	)
 	if strings.TrimSpace(msg.IdempotencyKey) == "" {
 		msg.IdempotencyKey = uuid.NewString()
 	}
 	if existing, err := s.repo.GetMessageByIdempotencyKey(ctx, msg.IdempotencyKey); err != nil {
 		return err
 	} else if existing != nil {
+		s.logger.Info("[MESSAGE-SEND-1.1] duplicate by idempotency key; skipping",
+			"user_id", senderID.String(),
+			"idempotency_key", msg.IdempotencyKey,
+		)
 		return nil
 	}
 
-	s.logger.Info("[CONVERSATION_DB_LOOKUP] resolving conversation before message insert",
+	s.logger.Info("[MESSAGE-SEND-1.2] validating sender device ownership",
 		"user_id", senderID.String(),
 		"conversation_id", msg.ConversationID.String(),
 		"sender_device_id", msg.SenderDeviceID,
@@ -235,7 +343,7 @@ func (s *messagingService) SendMessage(ctx context.Context, senderID uuid.UUID, 
 	}
 	msg.SenderID = senderID
 
-	s.logger.Info("[MESSAGE_DB_INSERT] creating message record",
+	s.logger.Info("[MESSAGE-SEND-1.3] persisting message record",
 		"user_id", senderID.String(),
 		"conversation_id", msg.ConversationID.String(),
 		"ciphertext_len", len(msg.EncryptedPayload),
@@ -244,16 +352,20 @@ func (s *messagingService) SendMessage(ctx context.Context, senderID uuid.UUID, 
 
 	if err := s.repo.CreateMessage(ctx, msg); err != nil {
 		if existing, lookupErr := s.repo.GetMessageByIdempotencyKey(ctx, msg.IdempotencyKey); lookupErr == nil && existing != nil {
+			s.logger.Info("[MESSAGE-SEND-1.4] message already persisted during race",
+				"user_id", senderID.String(),
+				"idempotency_key", msg.IdempotencyKey,
+			)
 			return nil
 		}
-		s.logger.Error("[MESSAGE_DB_INSERT_FAILED] failed to persist message",
+		s.logger.Error("[MESSAGE-SEND-1.5] failed to persist message",
 			"user_id", senderID.String(),
 			"conversation_id", msg.ConversationID.String(),
 			"error", err.Error())
 		return err
 	}
 
-	s.logger.Info("[MESSAGE_DB_INSERT_OK] message persisted",
+	s.logger.Info("[MESSAGE-SEND-1.6] message persisted successfully",
 		"user_id", senderID.String(),
 		"conversation_id", msg.ConversationID.String(),
 		"message_id", msg.ID.String(),
@@ -573,8 +685,12 @@ func ValidateSenderDeviceBinding(userID uuid.UUID, deviceID string, trustedDevic
 }
 
 func (s *messagingService) ValidateSenderDeviceOwnership(ctx context.Context, userID uuid.UUID, deviceID string) error {
+	s.logger.Info("[DEVICE-OWNERSHIP-1] validating sender device binding",
+		"user_id", userID.String(),
+		"device_id", deviceID,
+	)
 	if userID == uuid.Nil || strings.TrimSpace(deviceID) == "" {
-		s.logger.Error("[DEVICE_OWNERSHIP_INVALID] missing user or device id",
+		s.logger.Error("[DEVICE-OWNERSHIP-1.1] missing user or device id",
 			"user_id", userID.String(),
 			"device_id", deviceID,
 		)
@@ -582,25 +698,29 @@ func (s *messagingService) ValidateSenderDeviceOwnership(ctx context.Context, us
 	}
 	identity, err := s.repo.GetDeviceIdentity(ctx, userID, deviceID)
 	if err != nil || identity == nil {
-		s.logger.Error("[DEVICE_OWNERSHIP_MISMATCH] sender device not bound to authenticated user",
+		s.logger.Error("[DEVICE-OWNERSHIP-1.2] sender device not bound to authenticated user",
 			"user_id", userID.String(),
 			"device_id", deviceID,
 			"error", err,
 		)
 		return ErrInvalidSession
 	}
+	s.logger.Info("[DEVICE-OWNERSHIP-1.3] sender device ownership verified",
+		"user_id", userID.String(),
+		"device_id", deviceID,
+	)
 	return nil
 }
 
 func (s *messagingService) UploadDeviceKeys(ctx context.Context, userID uuid.UUID, req model.UploadDeviceKeysRequest) error {
 	req.Normalize()
-	s.logger.Info("[DEVICE_KEYS_UPLOAD_START] validating and persisting E2EE identity bundle",
+	s.logger.Info("[DEVICE-KEYS-1] validating and persisting E2EE identity bundle",
 		"user_id", userID.String(),
 		"device_id", req.DeviceID,
 		"pre_key_count", len(req.OneTimePreKeys),
 	)
 	if err := validateDeviceKeyUpload(req); err != nil {
-		s.logger.Error("[DEVICE_KEYS_UPLOAD_VALIDATION_FAILED] rejected malformed device keys",
+		s.logger.Error("[DEVICE-KEYS-1.1] rejected malformed device keys",
 			"user_id", userID.String(),
 			"device_id", req.DeviceID,
 			"error", err.Error(),
@@ -610,7 +730,7 @@ func (s *messagingService) UploadDeviceKeys(ctx context.Context, userID uuid.UUI
 
 	identity := BuildUserDeviceIdentity(userID, req)
 	if err := s.repo.SaveDeviceIdentity(ctx, identity); err != nil {
-		s.logger.Error("[DEVICE_KEYS_SAVE_FAILED] unable to persist device identity",
+		s.logger.Error("[DEVICE-KEYS-1.2] unable to persist device identity",
 			"user_id", userID.String(),
 			"device_id", req.DeviceID,
 			"error", err.Error(),
@@ -638,31 +758,65 @@ func (s *messagingService) UploadDeviceKeys(ctx context.Context, userID uuid.UUI
 		}
 	}
 
+	s.logger.Info("[DEVICE-KEYS-1.3] device identity bundle saved successfully",
+		"user_id", userID.String(),
+		"device_id", req.DeviceID,
+		"one_time_pre_keys_stored", len(req.OneTimePreKeys),
+	)
 	return nil
 }
 
 func (s *messagingService) GetUserKeyBundle(ctx context.Context, targetUserID string) (*model.PreKeyBundleDto, error) {
+	s.logger.Info("[KEY-BUNDLE-1] fetching pre-key bundle",
+		"target_user_id", targetUserID,
+	)
 	targetID, err := uuid.Parse(targetUserID)
 	if err != nil {
+		s.logger.Error("[KEY-BUNDLE-1.1] invalid target user id",
+			"target_user_id", targetUserID,
+			"error", err.Error(),
+		)
 		return nil, ErrInvalidUUID
 	}
 
 	identity, err := s.repo.GetLatestDeviceIdentityForUser(ctx, targetID)
 	if err != nil {
+		s.logger.Error("[KEY-BUNDLE-1.2] no device identity found for target user",
+			"target_user_id", targetUserID,
+			"error", err.Error(),
+		)
 		return nil, ErrDeviceNotFound
 	}
 
 	preKey, err := s.repo.PopPreKey(ctx, identity.UserID, identity.DeviceID)
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		s.logger.Error("[KEY-BUNDLE-1.3] failed to consume pre-key",
+			"target_user_id", targetUserID,
+			"device_id", identity.DeviceID,
+			"error", err.Error(),
+		)
 		return nil, err
 	}
 	if err != nil {
+		s.logger.Info("[KEY-BUNDLE-1.4] no remaining one-time pre-key; using identity/signed key only",
+			"target_user_id", targetUserID,
+			"device_id", identity.DeviceID,
+		)
 		return BuildPreKeyBundle(identity, nil), nil
 	}
-	return BuildPreKeyBundle(identity, preKey), nil
+	bundle := BuildPreKeyBundle(identity, preKey)
+	s.logger.Info("[KEY-BUNDLE-1.5] pre-key bundle resolved",
+		"target_user_id", targetUserID,
+		"device_id", identity.DeviceID,
+		"has_pre_key", bundle != nil && bundle.PreKeyID != nil,
+	)
+	return bundle, nil
 }
 
 func (s *messagingService) GetUserPreKeys(ctx context.Context, targetUserID string) (*model.UserPreKeysResponse, error) {
+	s.logger.Info("[KEY-PREKEYS-1] resolving user pre-keys",
+		"target_user_id", targetUserID,
+	)
 	bundle, err := s.GetUserKeyBundle(ctx, targetUserID)
 	if err != nil {
 		return nil, err
@@ -670,11 +824,19 @@ func (s *messagingService) GetUserPreKeys(ctx context.Context, targetUserID stri
 
 	targetID, err := uuid.Parse(targetUserID)
 	if err != nil {
+		s.logger.Error("[KEY-PREKEYS-1.1] invalid target user id during pre-key response",
+			"target_user_id", targetUserID,
+			"error", err.Error(),
+		)
 		return nil, ErrInvalidUUID
 	}
 
 	identity, err := s.repo.GetLatestDeviceIdentityForUser(ctx, targetID)
 	if err != nil {
+		s.logger.Error("[KEY-PREKEYS-1.2] latest device identity missing",
+			"target_user_id", targetUserID,
+			"error", err.Error(),
+		)
 		return nil, ErrDeviceNotFound
 	}
 
@@ -692,6 +854,11 @@ func (s *messagingService) GetUserPreKeys(ctx context.Context, targetUserID stri
 			res.OneTimePreKeyID = *bundle.PreKeyID
 		}
 	}
+	s.logger.Info("[KEY-PREKEYS-1.3] user pre-key response built",
+		"target_user_id", targetUserID,
+		"device_id", identity.DeviceID,
+		"has_otk", res.OneTimePreKey != nil,
+	)
 	return res, nil
 }
 
