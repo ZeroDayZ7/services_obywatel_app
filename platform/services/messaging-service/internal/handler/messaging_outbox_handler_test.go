@@ -217,6 +217,60 @@ func TestMessagingHandlerProcessOutbox_IgnoresEmptyConversationID(t *testing.T) 
 	}
 }
 
+func TestMessagingHandlerProcessOutbox_RejectsPlaintextContentAsCiphertext(t *testing.T) {
+	userID := uuid.New()
+	handler := NewMessagingHandler(&stubMessagingService{})
+	app := fiber.New()
+	app.Use(func(c *fiber.Ctx) error {
+		c.Locals(reqctx.FiberRequestContextKey, &reqctx.RequestContext{UserID: &userID})
+		return c.Next()
+	})
+	app.Post("/sync/outbox", handler.ProcessOutbox)
+
+	payload := fmt.Sprintf(`{"messages":[{"event_id":"%s","event_type":"SEND_MESSAGE","idempotency_key":"%s","conversation_id":"%s","sender_device_id":"device-1","ciphertext":"","content":"hello plaintext","type":1}]}`,
+		uuid.NewString(),
+		uuid.NewString(),
+		uuid.NewString(),
+	)
+	req := httptest.NewRequest(http.MethodPost, "/sync/outbox", bytes.NewBufferString(payload))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("app test: %v", err)
+	}
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestMessagingHandlerSendMessage_RejectsPlaintextContentInput(t *testing.T) {
+	userID := uuid.New()
+	conversationID := uuid.New()
+	handler := NewMessagingHandler(&stubMessagingService{})
+	app := fiber.New()
+	app.Use(func(c *fiber.Ctx) error {
+		c.Locals(reqctx.FiberRequestContextKey, &reqctx.RequestContext{UserID: &userID})
+		return c.Next()
+	})
+	app.Post("/conversations/:id/messages", handler.SendMessage)
+
+	payload := fmt.Sprintf(`{"conversation_id":"%s","sender_device_id":"device-1","content":"hello plaintext","type":1,"idempotency_key":"%s"}`,
+		conversationID,
+		uuid.NewString(),
+	)
+	req := httptest.NewRequest(http.MethodPost, "/conversations/"+conversationID.String()+"/messages", bytes.NewBufferString(payload))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("app test: %v", err)
+	}
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
 func TestMessagingHandlerSendMessage_PreservesSignalTypeFromRequest(t *testing.T) {
 	userID := uuid.New()
 	conversationID := uuid.New()

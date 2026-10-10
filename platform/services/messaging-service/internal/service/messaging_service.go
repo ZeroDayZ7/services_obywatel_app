@@ -263,15 +263,19 @@ func buildMessageFromOutboxEvent(userID uuid.UUID, evt model.OutboxEventPayload)
 		)
 		return nil, false, nil
 	}
-	if ciphertext == "" {
-		ciphertext = strings.TrimSpace(evt.Content)
-	}
-	if ciphertext == "" {
-		shared.GetLogger().Warn("[OUTBOX-BUILD-1.4] empty ciphertext, skipping",
+	if strings.TrimSpace(evt.Content) != "" {
+		shared.GetLogger().Warn("[OUTBOX-BUILD-1.4] plaintext content rejected as ciphertext",
 			"user_id", userID.String(),
 			"event_id", evt.EventID,
 		)
-		return nil, false, nil
+		return nil, false, apperr.ErrValidationFailed.WithMeta("detail", "ciphertext is required; plaintext content is rejected")
+	}
+	if ciphertext == "" {
+		shared.GetLogger().Warn("[OUTBOX-BUILD-1.5] empty ciphertext rejected",
+			"user_id", userID.String(),
+			"event_id", evt.EventID,
+		)
+		return nil, false, apperr.ErrValidationFailed.WithMeta("detail", "ciphertext is required")
 	}
 	if idempotencyKey == "" && evt.EventID != uuid.Nil {
 		idempotencyKey = evt.EventID.String()
@@ -294,12 +298,12 @@ func buildMessageFromOutboxEvent(userID uuid.UUID, evt model.OutboxEventPayload)
 		EncryptedPayload: []byte(ciphertext),
 		IdempotencyKey:   idempotencyKey,
 	}
-	shared.GetLogger().Info("[OUTBOX-BUILD-1.5] message built from outbox event",
+	shared.GetLogger().Info("[OUTBOX-BUILD-1.6] message built from outbox event",
 		"user_id", userID.String(),
 		"conversation_id", msg.ConversationID.String(),
 		"signal_type", string(msg.Type),
 		"ciphertext_len", len(ciphertext),
-		"idempotency_key", idempotencyKey,
+		"idempotency_key_present", idempotencyKey != "",
 	)
 	return msg, true, nil
 }

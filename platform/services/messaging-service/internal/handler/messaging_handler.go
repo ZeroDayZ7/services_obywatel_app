@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"strconv"
 	"strings"
 	"time"
@@ -65,38 +66,55 @@ func (h *MessagingHandler) ProcessOutbox(c *fiber.Ctx) error {
 		return apperr.SendAppError(c, apperr.ErrUnauthorized)
 	}
 
-	rawBody := string(c.Body())
-	shared.GetLogger().Info("[OUTBOX_DEBUG] raw request body",
-		"user_id", rc.UserID.String(),
-		"body", rawBody,
-	)
-
 	var req model.OutboxBatchRequest
 	if err := c.BodyParser(&req); err != nil {
 		shared.GetLogger().Error("[OUTBOX_DEBUG] failed to parse outbox JSON",
 			"user_id", rc.UserID.String(),
-			"body", rawBody,
+			"message_count", 0,
 			"error", err.Error(),
 		)
 		return apperr.SendAppError(c, apperr.ErrInvalidRequestBody)
+	}
+
+	for i, msg := range req.Messages {
+		if strings.TrimSpace(msg.Content) != "" {
+			shared.GetLogger().Warn("[OUTBOX_DEBUG] rejected plaintext content in outbox payload",
+				"user_id", rc.UserID.String(),
+				"index", i,
+				"event_id", msg.EventID,
+				"content_present", true,
+			)
+			return apperr.SendAppError(c, apperr.ErrValidationFailed.WithMeta("detail", "plaintext content is rejected; ciphertext is required"))
+		}
+		if len(msg.Payload) > 0 {
+			var payload map[string]any
+			if err := json.Unmarshal(msg.Payload, &payload); err == nil {
+				if rawContent, ok := payload["content"].(string); ok && strings.TrimSpace(rawContent) != "" {
+					shared.GetLogger().Warn("[OUTBOX_DEBUG] rejected plaintext in wrapped payload",
+						"user_id", rc.UserID.String(),
+						"index", i,
+						"event_id", msg.EventID,
+					)
+					return apperr.SendAppError(c, apperr.ErrValidationFailed.WithMeta("detail", "plaintext content is rejected; ciphertext is required"))
+				}
+			}
+		}
+		shared.GetLogger().Info("[OUTBOX_DEBUG] message item",
+			"index", i,
+			"event_id", msg.EventID,
+			"event_type", msg.EventType,
+			"conversation_id_present", msg.ConversationID != nil,
+			"sender_device_id_present", msg.SenderDeviceID != "",
+			"ciphertext_len", len(msg.Ciphertext),
+			"type", msg.Type,
+			"idempotency_key_present", msg.IdempotencyKey != "",
+		)
 	}
 
 	shared.GetLogger().Info("[OUTBOX_DEBUG] parsed request",
 		"user_id", rc.UserID.String(),
 		"message_count", len(req.Messages),
 	)
-	for i, msg := range req.Messages {
-		shared.GetLogger().Info("[OUTBOX_DEBUG] message item",
-			"index", i,
-			"event_id", msg.EventID,
-			"event_type", msg.EventType,
-			"conversation_id", msg.ConversationID,
-			"sender_device_id", msg.SenderDeviceID,
-			"ciphertext_len", len(msg.Ciphertext),
-			"type", msg.Type,
-			"idempotency_key", msg.IdempotencyKey,
-		)
-	}
 
 	resp, err := h.service.ProcessOutbox(ctx, *rc.UserID, req)
 	if err != nil {
@@ -153,7 +171,6 @@ func (h *MessagingHandler) SendMessage(c *fiber.Ctx) error {
 		"conversation_id", req.ConversationID.String(),
 		"sender_device_id", req.SenderDeviceID,
 		"ciphertext_len", len(req.Ciphertext),
-		"content_len", len(req.Content),
 	)
 
 	resolvedSignalType := req.Type
@@ -173,8 +190,8 @@ func (h *MessagingHandler) SendMessage(c *fiber.Ctx) error {
 		EncryptedPayload: req.Ciphertext,
 		IdempotencyKey:   strings.TrimSpace(req.IdempotencyKey),
 	}
-	if req.Content != "" {
-		msg.EncryptedPayload = []byte(req.Content)
+	if strings.TrimSpace(req.Content) != "" || len(req.Ciphertext) == 0 {
+		return apperr.SendAppError(c, apperr.ErrValidationFailed.WithMeta("detail", "ciphertext is required; plaintext content is rejected"))
 	}
 	if msg.IdempotencyKey == "" {
 		msg.IdempotencyKey = uuid.NewString()
