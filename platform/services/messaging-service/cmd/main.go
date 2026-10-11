@@ -15,7 +15,6 @@ import (
 	"github.com/zerodayz7/platform/services/messaging-service/internal/di"
 	"github.com/zerodayz7/platform/services/messaging-service/internal/router"
 	"github.com/zerodayz7/platform/services/messaging-service/internal/security"
-	"github.com/zerodayz7/platform/services/messaging-service/internal/websocket"
 )
 
 func main() {
@@ -57,12 +56,8 @@ func main() {
 	db, closeDB := config.MustInitDB(config.AppConfig.Database)
 	defer closeDB()
 
-	// 5. WebSocket Hub
-	wsHub := websocket.NewHub()
-	go wsHub.Run()
-
-	// 6. DI Container & App Setup
-	container := di.NewContainer(db, log, &config.AppConfig, wsHub, keyStore)
+	// 5. DI Container & App Setup
+	container := di.NewContainer(db, log, &config.AppConfig, keyStore)
 	messagingApp := app.NewApp(container)
 
 	router.SetupMessagingRoutes(messagingApp, container)

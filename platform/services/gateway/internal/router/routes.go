@@ -35,8 +35,6 @@ func SetupRoutes(app *fiber.App, container *di.Container) {
 	RegisterMessagingRoutes(app, container)
 	RegisterOfficerRoutes(app, container)
 
-	RegisterWsRoutes(app, container)
-
 	// 3. Handlery końcowe (Fallback / 404)
 	pkgRouter.SetupFallbackHandlers(app)
 }

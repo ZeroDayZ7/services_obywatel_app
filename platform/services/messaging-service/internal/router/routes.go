@@ -10,7 +10,6 @@ func SetupMessagingRoutes(app *fiber.App, container *di.Container) {
 	contactsH := container.ContactsHandler
 
 	SetupHealthRoutes(app)
-	SetupWsRoutes(app, container)
 
 	api := app.Group("/")
 

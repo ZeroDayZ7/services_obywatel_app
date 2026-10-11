@@ -7,7 +7,6 @@ import (
 	"github.com/zerodayz7/platform/services/messaging-service/internal/handler"
 	"github.com/zerodayz7/platform/services/messaging-service/internal/repository"
 	"github.com/zerodayz7/platform/services/messaging-service/internal/service"
-	internalWs "github.com/zerodayz7/platform/services/messaging-service/internal/websocket"
 	"gorm.io/gorm"
 )
 
@@ -15,7 +14,6 @@ type Container struct {
 	DB               *gorm.DB
 	Config           *config.Config
 	Logger           *shared.Logger
-	WsHub            *internalWs.Hub
 	KeyStore         *httpserver.KeyStore
 	MessagingSvc     service.MessagingService
 	ContactsSvc      service.ContactsService
@@ -23,7 +21,7 @@ type Container struct {
 	ContactsHandler  *handler.ContactsHandler
 }
 
-func NewContainer(db *gorm.DB, logger *shared.Logger, cfg *config.Config, wsHub *internalWs.Hub, keyStore *httpserver.KeyStore) *Container {
+func NewContainer(db *gorm.DB, logger *shared.Logger, cfg *config.Config, keyStore *httpserver.KeyStore) *Container {
 	messagingRepo := repository.NewMessagingRepository(db)
 	contactsRepo := repository.NewContactsRepository(db) // Nowy repozytorium
 
@@ -37,7 +35,6 @@ func NewContainer(db *gorm.DB, logger *shared.Logger, cfg *config.Config, wsHub 
 		DB:               db,
 		Config:           cfg,
 		Logger:           logger,
-		WsHub:            wsHub,
 		KeyStore:         keyStore,
 		MessagingSvc:     messagingSvc,
 		ContactsSvc:      contactsSvc,
