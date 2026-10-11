@@ -19,7 +19,7 @@ type userClaims struct {
 }
 
 type Handler struct {
-	hub         *hub.Hub
+	hub          *hub.Hub
 	sharedSecret string
 }
 
@@ -71,7 +71,7 @@ func (h *Handler) HandleWS(c fiber.Ctx) error {
 					"payload": string(message),
 					"ts":      time.Now().Unix(),
 				}); err != nil {
-					_ = conn.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("event publish failed: %v", err)))
+					_ = conn.WriteMessage(websocket.TextMessage, fmt.Appendf(nil, "event publish failed: %v", err))
 				}
 			}
 		}

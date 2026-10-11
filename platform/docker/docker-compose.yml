@@ -170,7 +170,7 @@ services:
       - go-build-cache:/root/.cache/go-build
       - go-mod-cache:/go/pkg/mod
     ports:
-      - "8087:8087"
+      - "8092:8092"
     env_file:
       - ../services/websocket-service/.env.dev
     networks:
