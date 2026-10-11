@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/services/messaging-service/internal/model"
@@ -17,9 +18,11 @@ type MessagingRepository interface {
 
 	// Messaging & Conversations
 	CreateMessage(ctx context.Context, msg *model.Message) error
+	GetMessageByIdempotencyKey(ctx context.Context, idempotencyKey string) (*model.Message, error)
 	GetMessagesByConversation(ctx context.Context, userID uuid.UUID, conversationID uuid.UUID, limit, offset int) ([]model.Message, error)
 	GetConversations(ctx context.Context, userID uuid.UUID) ([]model.Conversation, error)
 	GetConversationByID(ctx context.Context, userID, conversationID uuid.UUID) (*model.Conversation, error)
+	FindDirectConversationByUsers(ctx context.Context, userA, userB uuid.UUID) (*model.Conversation, error)
 	CreateConversation(ctx context.Context, conv *model.Conversation) error
 	UpdateLastReadSequence(ctx context.Context, userID, conversationID uuid.UUID, sequence uint64) error
 
@@ -32,6 +35,11 @@ type MessagingRepository interface {
 
 	// Contacts
 	UpsertContact(ctx context.Context, contact *model.Contact) error
+
+	// Messaging activation
+	GetActivationStatus(ctx context.Context, userID uuid.UUID) (*model.MessagingActivation, error)
+	GetOrCreateActivation(ctx context.Context, userID uuid.UUID, deviceID string) (*model.MessagingActivation, error)
+	SaveActivation(ctx context.Context, activation *model.MessagingActivation) error
 }
 
 type messagingRepository struct {
@@ -67,6 +75,22 @@ func (r *messagingRepository) GetMessagesSinceVersion(ctx context.Context, userI
 
 // #region MessagingAndConversations
 func (r *messagingRepository) CreateMessage(ctx context.Context, msg *model.Message) error {
+	if msg == nil {
+		return errors.New("message is nil")
+	}
+	if msg.ID == uuid.Nil {
+		msg.ID = uuid.Must(uuid.NewV7())
+	}
+	if strings.TrimSpace(msg.IdempotencyKey) == "" {
+		msg.IdempotencyKey = msg.ID.String()
+	}
+
+	if existing, err := r.GetMessageByIdempotencyKey(ctx, msg.IdempotencyKey); err != nil {
+		return err
+	} else if existing != nil {
+		return gorm.ErrDuplicatedKey
+	}
+
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var lastSeq uint64
 		err := tx.Model(&model.Conversation{}).
@@ -79,6 +103,14 @@ func (r *messagingRepository) CreateMessage(ctx context.Context, msg *model.Mess
 
 		msg.Sequence = lastSeq + 1
 
+		var lastVersion uint64
+		if err := tx.Model(&model.Message{}).
+			Select("COALESCE(MAX(version), 0)").
+			Scan(&lastVersion).Error; err != nil {
+			return err
+		}
+		msg.Version = lastVersion + 1
+
 		if err := tx.Create(msg).Error; err != nil {
 			return err
 		}
@@ -87,6 +119,21 @@ func (r *messagingRepository) CreateMessage(ctx context.Context, msg *model.Mess
 			Where("id = ?", msg.ConversationID).
 			Update("last_sequence", msg.Sequence).Error
 	})
+}
+
+func (r *messagingRepository) GetMessageByIdempotencyKey(ctx context.Context, idempotencyKey string) (*model.Message, error) {
+	if idempotencyKey == "" {
+		return nil, nil
+	}
+
+	var msg model.Message
+	if err := r.db.WithContext(ctx).Where("idempotency_key = ?", idempotencyKey).First(&msg).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &msg, nil
 }
 
 func (r *messagingRepository) GetMessagesByConversation(ctx context.Context, userID, conversationID uuid.UUID, limit, offset int) ([]model.Message, error) {
@@ -125,6 +172,30 @@ func (r *messagingRepository) GetConversationByID(ctx context.Context, userID, c
 	return &conv, nil
 }
 
+func (r *messagingRepository) FindDirectConversationByUsers(ctx context.Context, userA, userB uuid.UUID) (*model.Conversation, error) {
+	if userA == uuid.Nil || userB == uuid.Nil || userA == userB {
+		return nil, nil
+	}
+
+	var conv model.Conversation
+	err := r.db.WithContext(ctx).
+		Table("conversations").
+		Joins("JOIN conversation_members cm_a ON cm_a.conversation_id = conversations.id").
+		Joins("JOIN conversation_members cm_b ON cm_b.conversation_id = conversations.id").
+		Where("conversations.type = ?", model.ConversationTypeDirect).
+		Where("conversations.deleted_at IS NULL AND cm_a.deleted_at IS NULL AND cm_b.deleted_at IS NULL").
+		Where("(cm_a.user_id = ? AND cm_b.user_id = ?) OR (cm_a.user_id = ? AND cm_b.user_id = ?)", userA, userB, userB, userA).
+		Preload("Members").
+		First(&conv).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &conv, nil
+}
+
 func (r *messagingRepository) CreateConversation(ctx context.Context, conv *model.Conversation) error {
 	return r.db.WithContext(ctx).Create(conv).Error
 }
@@ -134,6 +205,51 @@ func (r *messagingRepository) UpdateLastReadSequence(ctx context.Context, userID
 		Model(&model.ConversationMember{}).
 		Where("user_id = ? AND conversation_id = ?", userID, conversationID).
 		Update("last_read_sequence", sequence).Error
+}
+
+func (r *messagingRepository) GetActivationStatus(ctx context.Context, userID uuid.UUID) (*model.MessagingActivation, error) {
+	var activation model.MessagingActivation
+	if err := r.db.WithContext(ctx).Where("user_id = ?", userID).Order("created_at DESC").First(&activation).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return &model.MessagingActivation{
+				UserID: userID,
+				Status: model.ActivationStatusNotStarted,
+			}, nil
+		}
+		return nil, err
+	}
+	return &activation, nil
+}
+
+func (r *messagingRepository) GetOrCreateActivation(ctx context.Context, userID uuid.UUID, deviceID string) (*model.MessagingActivation, error) {
+	activation, err := r.GetActivationStatus(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if activation.ID == uuid.Nil {
+		activation = &model.MessagingActivation{
+			UserID:   userID,
+			DeviceID: deviceID,
+			Status:   model.ActivationStatusNotStarted,
+		}
+		if err := r.db.WithContext(ctx).Create(activation).Error; err != nil {
+			return nil, err
+		}
+	}
+	if deviceID != "" && activation.DeviceID == "" {
+		activation.DeviceID = deviceID
+		if err := r.SaveActivation(ctx, activation); err != nil {
+			return nil, err
+		}
+	}
+	return activation, nil
+}
+
+func (r *messagingRepository) SaveActivation(ctx context.Context, activation *model.MessagingActivation) error {
+	if activation == nil {
+		return nil
+	}
+	return r.db.WithContext(ctx).Save(activation).Error
 }
 
 // #endregion
@@ -162,34 +278,68 @@ func (r *messagingRepository) SaveDeviceIdentity(ctx context.Context, identity *
 		return nil
 	}
 
-	var existing model.UserDeviceIdentity
-	err := r.db.WithContext(ctx).
-		Where("user_id = ? AND device_id = ?", identity.UserID, identity.DeviceID).
-		First(&existing).Error
-	if err == nil {
-		identity.ID = existing.ID
-		existing.RegistrationID = identity.RegistrationID
-		existing.PublicKey = identity.PublicKey
-		existing.SignedPreKey = identity.SignedPreKey
-		existing.SignedPreKeySig = identity.SignedPreKeySig
-		existing.SignedPreKeyID = identity.SignedPreKeyID
-		identity.RegistrationID = existing.RegistrationID
-		identity.PublicKey = existing.PublicKey
-		identity.SignedPreKey = existing.SignedPreKey
-		identity.SignedPreKeySig = existing.SignedPreKeySig
-		identity.SignedPreKeyID = existing.SignedPreKeyID
-		return r.db.WithContext(ctx).Save(&existing).Error
-	}
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return err
-	}
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var existing model.UserDeviceIdentity
+		err := tx.Unscoped().
+			Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("user_id = ? AND device_id = ?", identity.UserID, identity.DeviceID).
+			Order("created_at DESC").
+			First(&existing).Error
+		if err == nil {
+			existing.RegistrationID = identity.RegistrationID
+			if identity.SignalDeviceID != 0 {
+				existing.SignalDeviceID = identity.SignalDeviceID
+			}
+			existing.PublicKey = identity.PublicKey
+			existing.SignedPreKey = identity.SignedPreKey
+			existing.SignedPreKeySig = identity.SignedPreKeySig
+			existing.SignedPreKeyID = identity.SignedPreKeyID
+			existing.OneTimePreKeysCount = identity.OneTimePreKeysCount
+			existing.DeletedAt = gorm.DeletedAt{}
+			return tx.Unscoped().Save(&existing).Error
+		}
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
 
-	return r.db.WithContext(ctx).
-		Clauses(clause.OnConflict{
-			Columns:   []clause.Column{{Name: "user_id"}, {Name: "device_id"}},
-			DoUpdates: clause.AssignmentColumns([]string{"registration_id", "public_key", "signed_pre_key", "signed_pre_key_sig", "signed_pre_key_id", "updated_at"}),
-		}).
-		Create(identity).Error
+		if err := tx.Create(identity).Error; err != nil {
+			if !isUniqueConstraintError(err) {
+				return err
+			}
+
+			var competing model.UserDeviceIdentity
+			if err2 := tx.Unscoped().
+				Where("user_id = ? AND device_id = ?", identity.UserID, identity.DeviceID).
+				Order("created_at DESC").
+				First(&competing).Error; err2 != nil {
+				return err2
+			}
+
+			competing.RegistrationID = identity.RegistrationID
+			if identity.SignalDeviceID != 0 {
+				competing.SignalDeviceID = identity.SignalDeviceID
+			}
+			competing.PublicKey = identity.PublicKey
+			competing.SignedPreKey = identity.SignedPreKey
+			competing.SignedPreKeySig = identity.SignedPreKeySig
+			competing.SignedPreKeyID = identity.SignedPreKeyID
+			competing.OneTimePreKeysCount = identity.OneTimePreKeysCount
+			competing.DeletedAt = gorm.DeletedAt{}
+			return tx.Unscoped().Save(&competing).Error
+		}
+		return nil
+	})
+}
+
+func isUniqueConstraintError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "duplicate key") ||
+		strings.Contains(msg, "unique constraint") ||
+		strings.Contains(msg, "UNIQUE constraint failed") ||
+		strings.Contains(msg, "constraint") && strings.Contains(msg, "already exists")
 }
 
 func (r *messagingRepository) SavePreKeys(ctx context.Context, keys []model.UserPreKey) error {

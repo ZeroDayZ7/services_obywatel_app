@@ -16,6 +16,7 @@ func ToDocumentResponse(doc model.CitizenDocument, decryptedMetadata []byte) dto
 		DocumentType: doc.DocumentType,
 		Status:       string(doc.Status),
 		DocumentHash: doc.DocumentNumberHash,
+		Version:      doc.Version,
 		CreatedAt:    doc.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:    doc.UpdatedAt.Format(time.RFC3339),
 	}

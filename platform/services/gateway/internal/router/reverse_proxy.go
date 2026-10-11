@@ -62,8 +62,8 @@ func ReverseProxy(container *di.Container, serviceID string, target string) fibe
 			req.Header.Set(constants.HeaderRequestID, ctx.RequestID)
 			req.Header.Set(constants.HeaderXForwardedFor, ctx.IP)
 			req.Header.Set(constants.HeaderXRealIP, ctx.IP)
-			if ctx.DeviceID != "" {
-				req.Header.Set(constants.HeaderDeviceFingerprint, ctx.DeviceID)
+			if ctx.Fingerprint != "" {
+				req.Header.Set(constants.HeaderDeviceFingerprint, ctx.Fingerprint)
 			}
 
 			// Pobranie dedykowanego sekretu HMAC dla konkretnego serwisu
@@ -130,9 +130,8 @@ func ReverseProxySecure(container *di.Container, serviceID string, target string
 			req.Header.Set(constants.HeaderSessionID, ctx.SessionID.String())
 		}
 
-		if ctx.DeviceID != "" {
-			req.Header.Set(constants.HeaderDeviceFingerprint, ctx.DeviceID)
-			req.Header.Set(constants.HeaderDeviceID, ctx.DeviceID)
+		if ctx.Fingerprint != "" {
+			req.Header.Set(constants.HeaderDeviceFingerprint, ctx.Fingerprint)
 		}
 
 		// --- Zero trust: auth-related ---

@@ -2,16 +2,14 @@ package router
 
 import (
 	"github.com/gofiber/fiber/v2"
-	"github.com/zerodayz7/platform/pkg/shared"
+
 	"github.com/zerodayz7/platform/services/citizen-docs/internal/di"
 	"github.com/zerodayz7/platform/services/citizen-docs/internal/handler"
 )
 
 func SetupDocsRoutes(app *fiber.App, container *di.Container) {
-	log := shared.GetLogger()
 	h := handler.NewUserDocumentHandler(container.UserDocumentSvc)
 
-	log.Info("[router.SetupDocsRoutes] 1. Registering health and document routes")
 	SetupHealthRoutes(app)
 
 	api := app.Group("/api/v1")
@@ -32,5 +30,4 @@ func SetupDocsRoutes(app *fiber.App, container *di.Container) {
 	legacyDocs.Get("/:id/pdf", h.GetDocumentPDF)
 
 	SetupFallbackHandlers(app)
-	log.Info("[router.SetupDocsRoutes] 2. All routes and fallback handlers registered")
 }

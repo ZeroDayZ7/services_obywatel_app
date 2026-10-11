@@ -32,7 +32,15 @@ func SetupMessagingRoutes(app *fiber.App, container *di.Container) {
 	// --- DELTA SYNC & OUTBOX ---
 	sync := api.Group("/sync")
 	sync.Get("/delta", msgH.SyncDelta)
+	sync.Post("/delta", msgH.SyncDelta)
 	sync.Post("/outbox", msgH.ProcessOutbox)
+
+	// --- MESSAGING ACTIVATION & ONBOARDING ---
+	messagingActivation := api.Group("/messaging")
+	messagingActivation.Get("/terms", msgH.GetCurrentTerms)
+	messagingActivation.Get("/activation", msgH.GetActivationStatus)
+	messagingActivation.Post("/activation", msgH.ActivateMessaging)
+	messagingActivation.Post("/activation/consent", msgH.AcceptTerms)
 
 	// --- E2EE CRYPTO KEYS ---
 	crypto := api.Group("/crypto")

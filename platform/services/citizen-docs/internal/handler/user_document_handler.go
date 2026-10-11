@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -21,20 +22,13 @@ func NewUserDocumentHandler(s service.UserDocumentService) *UserDocumentHandler 
 	return &UserDocumentHandler{service: s}
 }
 
-func getRequestContextFromFiber(c *fiber.Ctx) (*reqctx.RequestContext, error) {
-	rc, ok := c.Locals(reqctx.FiberRequestContextKey).(*reqctx.RequestContext)
-	if !ok || rc == nil {
-		return nil, apperr.ErrUnauthorized
-	}
-	return rc, nil
-}
-
+// #region CreateDocument
 func (h *UserDocumentHandler) CreateDocument(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(c.UserContext(), 5*time.Second)
 	defer cancel()
 
-	rc, err := getRequestContextFromFiber(c)
-	if err != nil || rc.UserID == nil {
+	rc := reqctx.MustFromFiber(c)
+	if rc.UserID == nil {
 		return apperr.SendAppError(c, apperr.ErrUnauthorized)
 	}
 
@@ -57,6 +51,9 @@ func (h *UserDocumentHandler) CreateDocument(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(doc)
 }
 
+// #endregion
+
+// #region GetDocumentByID
 func (h *UserDocumentHandler) GetDocumentByID(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(c.UserContext(), 2*time.Second)
 	defer cancel()
@@ -74,64 +71,79 @@ func (h *UserDocumentHandler) GetDocumentByID(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(doc)
 }
 
+// #endregion
+
+// #region GetDocumentsByUserID
 func (h *UserDocumentHandler) GetDocumentsByUserID(c *fiber.Ctx) error {
 	log := shared.GetLogger()
 	ctx, cancel := context.WithTimeout(c.UserContext(), 2*time.Second)
 	defer cancel()
 
-	log.Info("[UserDocumentHandler.GetDocumentsByUserID] 1. Processing request for /users/:user_id/documents")
-
-	rc, err := getRequestContextFromFiber(c)
-	if err != nil || rc == nil || rc.UserID == nil {
-		log.WarnMap("[UserDocumentHandler.GetDocumentsByUserID] 2. Missing auth user context", map[string]any{"path": c.Path()})
+	rc := reqctx.MustFromFiber(c)
+	if rc.UserID == nil {
+		log.WarnMap("[UserDocumentHandler.GetDocumentsByUserID] Missing auth user context", map[string]any{"path": c.Path()})
 		return apperr.SendAppError(c, apperr.ErrUnauthorized)
 	}
 
 	userID, err := uuid.Parse(c.Params("user_id"))
 	if err != nil {
-		log.WarnMap("[UserDocumentHandler.GetDocumentsByUserID] 2.1. Invalid user_id in path", map[string]any{"user_id_param": c.Params("user_id"), "path": c.Path()})
+		log.WarnMap("[UserDocumentHandler.GetDocumentsByUserID] Invalid user_id in path", map[string]any{"user_id_param": c.Params("user_id"), "path": c.Path()})
 		return apperr.SendAppError(c, apperr.ErrInvalidRequestBody)
 	}
 	if userID != *rc.UserID && rc.Role != "ADMIN" {
-		log.WarnMap("[UserDocumentHandler.GetDocumentsByUserID] 2.2. Forbidden access to another user's documents", map[string]any{"request_user_id": userID.String(), "auth_user_id": rc.UserID.String(), "role": rc.Role})
+		log.WarnMap("[UserDocumentHandler.GetDocumentsByUserID] Forbidden access to another user's documents", map[string]any{"request_user_id": userID.String(), "auth_user_id": rc.UserID.String(), "role": rc.Role})
 		return apperr.SendAppError(c, apperr.ErrUnauthorized)
 	}
 
-	log.InfoMap("[UserDocumentHandler.GetDocumentsByUserID] 3. Fetching documents from service", map[string]any{"user_id": userID.String()})
 	docs, err := h.service.GetDocumentsByUserID(ctx, userID)
 	if err != nil {
-		log.ErrorMap("[UserDocumentHandler.GetDocumentsByUserID] 4. Service error while fetching documents", map[string]any{"user_id": userID.String(), "err": err.Error()})
+		log.ErrorMap("[UserDocumentHandler.GetDocumentsByUserID] Service error while fetching documents", map[string]any{"user_id": userID.String(), "err": err.Error()})
 		return apperr.SendAppError(c, err)
 	}
 
-	log.InfoMap("[UserDocumentHandler.GetDocumentsByUserID] 5. Returning documents", map[string]any{"user_id": userID.String(), "count": len(docs)})
 	return c.Status(fiber.StatusOK).JSON(docs)
 }
 
+// #endregion
+
+// #region GetDocumentsMe
 func (h *UserDocumentHandler) GetDocumentsMe(c *fiber.Ctx) error {
 	log := shared.GetLogger()
 	ctx, cancel := context.WithTimeout(c.UserContext(), 2*time.Second)
 	defer cancel()
 
-	log.Info("[UserDocumentHandler.GetDocumentsMe] 1. Processing request for /documents/me")
-
-	rc, err := getRequestContextFromFiber(c)
-	if err != nil || rc == nil || rc.UserID == nil {
-		log.WarnMap("[UserDocumentHandler.GetDocumentsMe] 2. Missing authenticated user ID in request context", map[string]any{"path": c.Path(), "headers": map[string]string{"X-Device-Fingerprint": c.Get("X-Device-Fingerprint"), "X-Request-Id": c.Get("X-Request-Id")}})
+	rc := reqctx.MustFromFiber(c)
+	if rc.UserID == nil {
 		return apperr.SendAppError(c, apperr.ErrUnauthorized)
 	}
 
-	log.InfoMap("[UserDocumentHandler.GetDocumentsMe] 3. Fetching documents for current user", map[string]any{"user_id": rc.UserID.String(), "role": rc.Role})
-	docs, err := h.service.GetDocumentsByUserID(ctx, *rc.UserID)
+	sinceVersion, err := strconv.ParseUint(c.Query("since_version", "0"), 10, 64)
 	if err != nil {
-		log.ErrorMap("[UserDocumentHandler.GetDocumentsMe] 4. Service error while fetching current user documents", map[string]any{"user_id": rc.UserID.String(), "err": err.Error()})
+		sinceVersion = 0
+	}
+	ifNoneMatch := c.Get(fiber.HeaderIfNoneMatch)
+
+	docs, etag, stateVersion, notModified, err := h.service.GetDocumentsByUserIDWithSyncState(ctx, *rc.UserID, sinceVersion, ifNoneMatch)
+	if err != nil {
+		log.ErrorMap("[UserDocumentHandler.GetDocumentsMe] Service error while fetching current user documents", map[string]any{"user_id": rc.UserID.String(), "err": err.Error()})
 		return apperr.SendAppError(c, err)
 	}
 
-	log.InfoMap("[UserDocumentHandler.GetDocumentsMe] 5. Returning current user documents", map[string]any{"user_id": rc.UserID.String(), "count": len(docs)})
+	if etag != "" {
+		c.Set(fiber.HeaderETag, strconv.Quote(etag))
+	}
+	c.Set("X-Document-State-Version", strconv.FormatUint(stateVersion, 10))
+
+	if notModified {
+		return c.SendStatus(fiber.StatusNotModified)
+	}
+
 	return c.Status(fiber.StatusOK).JSON(docs)
 }
 
+// #endregion
+
+// #region GetDocumentPDF
 func (h *UserDocumentHandler) GetDocumentPDF(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(c.UserContext(), 2*time.Second)
 	defer cancel()
@@ -148,3 +160,5 @@ func (h *UserDocumentHandler) GetDocumentPDF(c *fiber.Ctx) error {
 
 	return c.Type(contentType).Send(pdf)
 }
+
+// #endregion

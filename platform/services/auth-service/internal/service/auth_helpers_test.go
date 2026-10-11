@@ -1,12 +1,24 @@
 package service
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/services/auth-service/internal/model"
 )
+
+func TestHashRefreshTokenForLogoutUsesSHA256(t *testing.T) {
+	raw := "logout-refresh-token-123"
+	hash := hashRefreshTokenForLogout(raw)
+
+	expected := sha256.Sum256([]byte(raw))
+	if hash != hex.EncodeToString(expected[:]) {
+		t.Fatalf("expected SHA256 hash %s, got %s", hex.EncodeToString(expected[:]), hash)
+	}
+}
 
 func TestBuildUserSessionIncludesFullProfileData(t *testing.T) {
 	userID := uuid.New()
@@ -27,7 +39,7 @@ func TestBuildUserSessionIncludesFullProfileData(t *testing.T) {
 		},
 	}
 
-	session := (&authService{}).buildUserSession(user, "device-42", "fp-123", "pub-key-1", true)
+	session := (&authService{}).buildUserSession(user, "fp-123", "pub-key-1", true)
 
 	if session.UserID != userID.String() {
 		t.Fatalf("expected user id %s, got %s", userID, session.UserID)
@@ -35,8 +47,8 @@ func TestBuildUserSessionIncludesFullProfileData(t *testing.T) {
 	if session.Role != string(user.Role) {
 		t.Fatalf("expected role %s, got %s", user.Role, session.Role)
 	}
-	if session.DeviceID != "device-42" {
-		t.Fatalf("expected device id device-42, got %s", session.DeviceID)
+	if session.DeviceID != "fp-123" {
+		t.Fatalf("expected device id fp-123, got %s", session.DeviceID)
 	}
 	if session.Fingerprint != "fp-123" {
 		t.Fatalf("expected fingerprint fp-123, got %s", session.Fingerprint)

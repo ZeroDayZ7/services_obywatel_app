@@ -12,5 +12,6 @@ type UserDocumentRepo interface {
 	GetDocumentByID(ctx context.Context, id uuid.UUID) (*model.CitizenDocument, error)
 	GetDocumentByDocumentNumberHash(ctx context.Context, documentNumberHash string) (*model.CitizenDocument, error)
 	GetDocumentsByUserID(ctx context.Context, userID uuid.UUID) ([]model.CitizenDocument, error)
+	GetUserDocumentState(ctx context.Context, userID uuid.UUID) (*model.UserDocumentState, error)
 	UpdateDocumentStatus(ctx context.Context, id uuid.UUID, status model.DocumentStatus) (*model.CitizenDocument, error)
 }

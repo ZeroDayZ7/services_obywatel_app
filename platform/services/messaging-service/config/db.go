@@ -20,9 +20,9 @@ func MustInitDB(cfg viper.DBConfig) (*gorm.DB, func()) {
 		panic(err)
 	}
 
-	if err := SeedData(db); err != nil {
-		panic(err)
-	}
+	// if err := SeedData(db); err != nil {
+	// 	panic(err)
+	// }
 
 	return db, closeDB
 }

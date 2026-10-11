@@ -55,7 +55,7 @@ func InternalAuthMiddleware(keyStore *httpserver.KeyStore) fiber.Handler {
 			return apperr.SendAppError(c, apperr.ErrInternalContextCorruption)
 		}
 
-		log.DebugInfo("Context Dump", ctx)
+		// log.DebugInfo("Context Dump", ctx)
 		c.Locals(reqctx.FiberRequestContextKey, ctx)
 
 		return c.Next()

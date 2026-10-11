@@ -23,6 +23,16 @@ func mockBytes(size int, prefix string) []byte {
 	return buf
 }
 
+func CleanupDevE2EESeedData(db *gorm.DB) error {
+	if err := db.Exec("DELETE FROM user_pre_keys").Error; err != nil {
+		return fmt.Errorf("failed to clear stale one-time prekeys: %w", err)
+	}
+	if err := db.Exec("DELETE FROM user_device_identities").Error; err != nil {
+		return fmt.Errorf("failed to clear stale device identities: %w", err)
+	}
+	return nil
+}
+
 func SeedData(db *gorm.DB) error {
 	log := shared.GetLogger()
 
@@ -32,61 +42,14 @@ func SeedData(db *gorm.DB) error {
 	}
 
 	if count > 0 {
+		log.Info("[SEED] Existing E2EE device records detected; keeping user/contact/conversation seed state intact. Device key material must be registered by the client.")
 		return nil
 	}
 
-	log.Info("[SEED] Rozpoczynam zasiewanie bazy danych messaging-service (E2EE / Chats / Contacts)...")
+	log.Info("[SEED] Rozpoczynam zasiewanie bazy danych messaging-service (Users / Contacts / Conversations / Messages). Device crypto keys are not seeded by backend.")
 
 	// ==========================================
-	// 1. KRYPTOGRAFIA (E2EE Device Identity & PreKeys)
-	// ==========================================
-
-	// Dev1 - Jan Kowalski
-	devIdentity1 := model.UserDeviceIdentity{
-		ID:                  uuid.Must(uuid.NewV7()),
-		UserID:              testUserID1,
-		DeviceID:            "DEV-IOS-JAN-01",
-		PublicKey:           mockBytes(32, "PUBKEY_JAN_IDENTITY"),
-		SignedPreKey:        mockBytes(32, "SIGNED_PREKEY_JAN"),
-		SignedPreKeySig:     mockBytes(64, "SIG_JAN"),
-		SignedPreKeyID:      1,
-		OneTimePreKeysCount: 5,
-	}
-
-	// Dev2 - Anna Nowak
-	devIdentity2 := model.UserDeviceIdentity{
-		ID:                  uuid.Must(uuid.NewV7()),
-		UserID:              testUserID2,
-		DeviceID:            "DEV-ANDROID-ANNA-01",
-		PublicKey:           mockBytes(32, "PUBKEY_ANNA_IDENTITY"),
-		SignedPreKey:        mockBytes(32, "SIGNED_PREKEY_ANNA"),
-		SignedPreKeySig:     mockBytes(64, "SIG_ANNA"),
-		SignedPreKeyID:      1,
-		OneTimePreKeysCount: 5,
-	}
-
-	if err := db.Create(&devIdentity1).Error; err != nil {
-		return fmt.Errorf("failed to seed device identity 1: %w", err)
-	}
-	if err := db.Create(&devIdentity2).Error; err != nil {
-		return fmt.Errorf("failed to seed device identity 2: %w", err)
-	}
-
-	// PreKeys dla Jana Kowalskiego
-	for i := uint32(1); i <= 5; i++ {
-		preKey := model.UserPreKey{
-			ID:        uuid.Must(uuid.NewV7()),
-			DeviceID:  devIdentity1.ID,
-			KeyID:     i,
-			PublicKey: mockBytes(32, fmt.Sprintf("OTK_JAN_%d", i)),
-		}
-		if err := db.Create(&preKey).Error; err != nil {
-			return fmt.Errorf("failed to seed prekey for user 1: %w", err)
-		}
-	}
-
-	// ==========================================
-	// 2. DOMENA KONTAKTY (Contacts)
+	// 1. KONTAKTY (Contacts)
 	// ==========================================
 
 	// Jan Kowalski posiada w kontaktach Annę i Piotra
@@ -160,7 +123,7 @@ func SeedData(db *gorm.DB) error {
 		ID:               uuid.Must(uuid.NewV7()),
 		ConversationID:   convDirectID,
 		SenderID:         testUserID1,
-		SenderDeviceID:   devIdentity1.DeviceID,
+		SenderDeviceID:   "DEV-IOS-JAN-01",
 		Type:             model.MessageTypeText,
 		Sequence:         1,
 		EncryptedPayload: mockBytes(128, "E2EE_PAYLOAD_CZESC_ANNA"),
@@ -170,7 +133,7 @@ func SeedData(db *gorm.DB) error {
 		ID:               uuid.Must(uuid.NewV7()),
 		ConversationID:   convDirectID,
 		SenderID:         testUserID2,
-		SenderDeviceID:   devIdentity2.DeviceID,
+		SenderDeviceID:   "DEV-ANDROID-ANNA-01",
 		Type:             model.MessageTypeText,
 		Sequence:         2,
 		EncryptedPayload: mockBytes(128, "E2EE_PAYLOAD_HEJ_JAN"),
@@ -180,7 +143,7 @@ func SeedData(db *gorm.DB) error {
 		ID:               uuid.Must(uuid.NewV7()),
 		ConversationID:   convDirectID,
 		SenderID:         testUserID1,
-		SenderDeviceID:   devIdentity1.DeviceID,
+		SenderDeviceID:   "DEV-IOS-JAN-01",
 		Type:             model.MessageTypeMedia,
 		Sequence:         3,
 		EncryptedPayload: mockBytes(256, "E2EE_PAYLOAD_IMAGE_ATTACHMENT"),
@@ -234,7 +197,7 @@ func SeedData(db *gorm.DB) error {
 		ID:               uuid.Must(uuid.NewV7()),
 		ConversationID:   convGroupID,
 		SenderID:         testUserID1,
-		SenderDeviceID:   devIdentity1.DeviceID,
+		SenderDeviceID:   "DEV-IOS-JAN-01",
 		Type:             model.MessageTypeSystem,
 		Sequence:         1,
 		EncryptedPayload: mockBytes(64, "SYSTEM_GROUP_CREATED"),

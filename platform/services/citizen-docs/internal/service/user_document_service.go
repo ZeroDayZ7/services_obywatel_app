@@ -218,6 +218,64 @@ func (s *userDocumentService) GetDocumentsByUserID(ctx context.Context, userID u
 	return responses, nil
 }
 
+func (s *userDocumentService) GetDocumentsByUserIDWithSyncState(ctx context.Context, userID uuid.UUID, sinceVersion uint64, ifNoneMatch string) ([]dto.DocumentResponse, string, uint64, bool, error) {
+	if userID == uuid.Nil {
+		return nil, "", 0, false, fmt.Errorf("user_id is required")
+	}
+
+	state, err := s.docRepo.GetUserDocumentState(ctx, userID)
+	if err != nil {
+		return nil, "", 0, false, fmt.Errorf("failed to fetch document sync state for user %s: %w", userID, err)
+	}
+
+	currentEtag := ""
+	currentStateVersion := uint64(0)
+	if state != nil {
+		currentEtag = strings.Trim(strings.TrimSpace(state.AggregateHash), "\"")
+		currentStateVersion = state.StateVersion
+	}
+
+	if state == nil {
+		modelDocs, err := s.docRepo.GetDocumentsByUserID(ctx, userID)
+		if err != nil {
+			return nil, "", 0, false, err
+		}
+		currentEtag = repository.ComputeUserDocumentAggregateHash(modelDocs)
+		currentStateVersion = 0
+		if len(modelDocs) == 0 {
+			currentEtag = repository.ComputeUserDocumentAggregateHash(nil)
+		}
+
+		if sinceVersion > 0 {
+			return nil, currentEtag, currentStateVersion, true, nil
+		}
+
+		docs := make([]dto.DocumentResponse, 0, len(modelDocs))
+		for i := range modelDocs {
+			metadata, err := s.decryptDocumentMetadata(ctx, &modelDocs[i])
+			if err != nil {
+				return nil, currentEtag, currentStateVersion, false, err
+			}
+			docs = append(docs, mapper.ToDocumentResponse(modelDocs[i], metadata))
+		}
+		return docs, currentEtag, currentStateVersion, false, nil
+	}
+
+	normalizedEtag := strings.Trim(strings.TrimSpace(ifNoneMatch), "\"")
+	if normalizedEtag != "" && normalizedEtag == currentEtag {
+		return nil, currentEtag, currentStateVersion, true, nil
+	}
+	if sinceVersion > 0 && sinceVersion >= currentStateVersion {
+		return nil, currentEtag, currentStateVersion, true, nil
+	}
+
+	docs, err := s.GetDocumentsByUserID(ctx, userID)
+	if err != nil {
+		return nil, currentEtag, currentStateVersion, false, err
+	}
+	return docs, currentEtag, currentStateVersion, false, nil
+}
+
 func (s *userDocumentService) UpdateDocumentStatus(ctx context.Context, id uuid.UUID, status model.DocumentStatus) (*dto.DocumentResponse, error) {
 	if id == uuid.Nil {
 		return nil, fmt.Errorf("document id is required")
