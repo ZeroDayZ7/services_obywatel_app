@@ -718,6 +718,8 @@ func (r *SignalCiphertextEnvelope) Normalize() {
 
 // SendMessageRequest – request dla endpointu wysyłki wiadomości z obsługą zaszyfrowanych kopert Signal.
 type SendMessageRequest struct {
+	MessageID              string     `json:"messageId,omitempty"`
+	MessageIDSnake         string     `json:"message_id,omitempty"`
 	ConversationID         *uuid.UUID `json:"conversationId,omitempty"`
 	ConversationIDSnake    *uuid.UUID `json:"conversation_id,omitempty"`
 	SenderDeviceID         string     `json:"senderDeviceId,omitempty"`
@@ -734,6 +736,9 @@ type SendMessageRequest struct {
 }
 
 func (r *SendMessageRequest) Normalize() {
+	if r.MessageID == "" {
+		r.MessageID = r.MessageIDSnake
+	}
 	if r.ConversationID == nil {
 		r.ConversationID = r.ConversationIDSnake
 	}
@@ -748,6 +753,9 @@ func (r *SendMessageRequest) Normalize() {
 	}
 	if r.Type == 0 {
 		r.Type = r.TypeSnake
+	}
+	if r.MessageID != "" && r.IdempotencyKey == "" {
+		r.IdempotencyKey = r.MessageID
 	}
 	if r.IdempotencyKey == "" {
 		r.IdempotencyKey = uuid.NewString()

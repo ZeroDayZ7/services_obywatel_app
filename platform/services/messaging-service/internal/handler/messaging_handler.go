@@ -190,11 +190,24 @@ func (h *MessagingHandler) SendMessage(c *fiber.Ctx) error {
 		EncryptedPayload: req.Ciphertext,
 		IdempotencyKey:   strings.TrimSpace(req.IdempotencyKey),
 	}
+	if strings.TrimSpace(req.MessageID) != "" {
+		if parsedID, err := uuid.Parse(strings.TrimSpace(req.MessageID)); err == nil {
+			msg.ID = parsedID
+		} else {
+			logger.Warn("[MESSAGE_REQUEST_PARSE_WARNING] invalid client message_id; falling back to server-generated id",
+				"user_id", rc.UserID.String(),
+				"message_id", req.MessageID,
+			)
+		}
+	}
 	if strings.TrimSpace(req.Content) != "" || len(req.Ciphertext) == 0 {
 		return apperr.SendAppError(c, apperr.ErrValidationFailed.WithMeta("detail", "ciphertext is required; plaintext content is rejected"))
 	}
 	if msg.IdempotencyKey == "" {
-		msg.IdempotencyKey = uuid.NewString()
+		msg.IdempotencyKey = msg.ID.String()
+	}
+	if msg.ID == uuid.Nil {
+		msg.ID = uuid.Must(uuid.NewV7())
 	}
 
 	if err := h.service.SendMessage(ctx, *rc.UserID, msg); err != nil {

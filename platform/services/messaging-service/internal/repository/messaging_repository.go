@@ -78,8 +78,11 @@ func (r *messagingRepository) CreateMessage(ctx context.Context, msg *model.Mess
 	if msg == nil {
 		return errors.New("message is nil")
 	}
+	if msg.ID == uuid.Nil {
+		msg.ID = uuid.Must(uuid.NewV7())
+	}
 	if strings.TrimSpace(msg.IdempotencyKey) == "" {
-		msg.IdempotencyKey = uuid.NewString()
+		msg.IdempotencyKey = msg.ID.String()
 	}
 
 	if existing, err := r.GetMessageByIdempotencyKey(ctx, msg.IdempotencyKey); err != nil {
