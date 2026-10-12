@@ -5,28 +5,51 @@ import (
 	"time"
 
 	spfViper "github.com/spf13/viper"
+	"github.com/zerodayz7/platform/pkg/kms"
 	"github.com/zerodayz7/platform/pkg/shared"
 	pkgViper "github.com/zerodayz7/platform/pkg/viper"
 )
 
+type KeyTarget struct {
+	TargetKey string `mapstructure:"target_key"`
+	Algorithm string `mapstructure:"algorithm"`
+}
+
+type WebSocketHMACConfig struct {
+	TargetKeys map[string]KeyTarget `mapstructure:"HMAC_TARGET_KEYS"`
+}
+
 type Config struct {
-	Server        pkgViper.ServerConfig `mapstructure:",squash"`
-	Redis         pkgViper.RedisConfig  `mapstructure:",squash"`
-	SharedSecret  string                `mapstructure:"SHARED_SECRET" validate:"required"`
-	BroadcastKey  string                `mapstructure:"INTERNAL_BROADCAST_KEY" validate:"required"`
-	Shutdown      time.Duration         `mapstructure:"SHUTDOWN_TIMEOUT" validate:"required"`
+	Server       pkgViper.ServerConfig `mapstructure:",squash"`
+	Redis        pkgViper.RedisConfig  `mapstructure:",squash"`
+	KMS          pkgViper.KMSConfig    `mapstructure:",squash"`
+	HMAC         WebSocketHMACConfig   `mapstructure:",squash"`
+	SharedSecret string                `mapstructure:"SHARED_SECRET" validate:"required"`
+	BroadcastKey string                `mapstructure:"INTERNAL_BROADCAST_KEY" validate:"required"`
+	Shutdown     time.Duration         `mapstructure:"SHUTDOWN_TIMEOUT" validate:"required"`
 }
 
 var AppConfig Config
+
+func (c *Config) ToKMSServiceConfig() kms.Config {
+	return c.KMS.ToKMSServiceConfig()
+}
 
 func LoadConfigGlobal() error {
 	log := shared.GetLogger()
 
 	pkgViper.SetBaseDefaults("websocket-service")
 	pkgViper.SetRedisDefaults()
+	pkgViper.SetKMSDefaults()
 
 	spfViper.SetDefault("SHARED_SECRET", "dev-shared-secret")
 	spfViper.SetDefault("INTERNAL_BROADCAST_KEY", "dev-internal-broadcast-key")
+	spfViper.SetDefault("HMAC_TARGET_KEYS", map[string]KeyTarget{
+		"gateway": {
+			TargetKey: "hmac-gateway-websocket",
+			Algorithm: "HmacSha256",
+		},
+	})
 
 	if err := pkgViper.InitConfig(&AppConfig, "websocket-service"); err != nil {
 		return fmt.Errorf("failed to initialize config: %w", err)

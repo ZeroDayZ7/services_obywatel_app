@@ -7,20 +7,21 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	"github.com/zerodayz7/platform/pkg/httpserver"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/pkg/v3/server"
 	"github.com/zerodayz7/platform/services/websocket-service/app"
 	"github.com/zerodayz7/platform/services/websocket-service/internal/config"
+	"github.com/zerodayz7/platform/services/websocket-service/internal/di"
 	"github.com/zerodayz7/platform/services/websocket-service/internal/hub"
 	"github.com/zerodayz7/platform/services/websocket-service/internal/router"
+	"github.com/zerodayz7/platform/services/websocket-service/internal/security"
 )
 
 func main() {
-	// 0. Bootstrap logger setup
 	bootLog := shared.InitBootstrapLogger(os.Getenv("APP_ENV"), false)
 	defer func() { _ = bootLog.Sync() }()
 
-	// 1. Load configuration
 	if err := config.LoadConfigGlobal(); err != nil {
 		bootLog.Error("Config load failed", "error", err)
 		os.Exit(1)
@@ -28,7 +29,15 @@ func main() {
 
 	log := shared.InitLogger(config.AppConfig.Server.Env, false)
 
-	// 2. Redis connection for Pub/Sub
+	keyStore := httpserver.NewKeyStore()
+	securityCtx, cancelSecurity := context.WithTimeout(context.Background(), 10*time.Second)
+	if err := security.LoadSecurityKeys(securityCtx, &config.AppConfig, keyStore); err != nil {
+		bootLog.Error("KMS security bootstrap failed", "error", err)
+		cancelSecurity()
+		os.Exit(1)
+	}
+	cancelSecurity()
+
 	redisClient := redis.NewClient(&redis.Options{
 		Addr:     fmt.Sprintf("%s:%s", config.AppConfig.Redis.Host, config.AppConfig.Redis.Port),
 		Username: config.AppConfig.Redis.Username,
@@ -50,15 +59,13 @@ func main() {
 		log.Info("Redis Pub/Sub connected for websocket-service")
 	}
 
-	// 3. Hub & Subscriber background routine
 	hubManager := hub.NewHub(redisClient)
 	go hubManager.RunRedisSubscriber(context.Background())
 
-	// 4. Fiber App & Routes initialization
-	wsApp := app.NewApp(&config.AppConfig)
-	router.SetupRoutes(wsApp, hubManager, &config.AppConfig)
+	container := di.NewContainer(redisClient, hubManager, log, &config.AppConfig, keyStore)
+	wsApp := app.NewApp(container)
+	router.SetupRoutes(wsApp, container)
 
-	// 5. Start server using shared package/server v3 framework
 	server.Run(
 		wsApp,
 		server.Config{
