@@ -12,6 +12,7 @@ import (
 	fiber "github.com/gofiber/fiber/v3"
 	"github.com/valyala/fasthttp"
 	reqctx "github.com/zerodayz7/platform/pkg/context"
+	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/websocket-service/internal/hub"
 )
 
@@ -24,31 +25,51 @@ func NewHandler(h *hub.Hub) *Handler {
 }
 
 func (h *Handler) HandleWS(c fiber.Ctx) error {
+	log := shared.GetLogger()
+
 	reqCtx, ok := c.Locals(reqctx.FiberRequestContextKey).(*reqctx.RequestContext)
 	if !ok || reqCtx == nil || reqCtx.UserID == nil {
+		log.Warn("HandleWS: missing trusted request context or user ID", "path", c.Path())
 		return c.Status(fiber.StatusUnauthorized).SendString("missing trusted request context")
 	}
 	userID := reqCtx.UserID.String()
+	log.Info("HandleWS: attempting websocket upgrade for user", "user_id", userID)
 
 	upgrader := websocket.FastHTTPUpgrader{CheckOrigin: func(r *fasthttp.RequestCtx) bool {
-		return isAllowedOrigin(r)
+		allowed := isAllowedOrigin(r)
+		if !allowed {
+			log.Warn("HandleWS: origin rejected", "origin", string(r.Request.Header.Peek("Origin")), "host", string(r.Host()))
+		}
+		return allowed
 	}}
+
 	return upgrader.Upgrade(c.RequestCtx(), func(conn *websocket.Conn) {
+		log.Info("HandleWS: websocket connection established", "user_id", userID)
 		session := h.hub.RegisterSession(userID, conn)
-		defer h.hub.UnregisterSession(session)
+		defer func() {
+			log.Info("HandleWS: websocket session unregistered / closed", "user_id", userID)
+			h.hub.UnregisterSession(session)
+		}()
 
 		for {
 			messageType, message, err := conn.ReadMessage()
 			if err != nil {
+				log.Warn("HandleWS: client disconnected or read error", "user_id", userID, "error", err)
 				return
 			}
+
+			log.Info("HandleWS: received message from client", "user_id", userID, "type", messageType, "size", len(message))
+
 			if messageType == websocket.TextMessage || messageType == websocket.BinaryMessage {
 				if err := h.hub.PublishEvent("ws:events", map[string]any{
 					"user_id": userID,
 					"payload": string(message),
 					"ts":      time.Now().Unix(),
 				}); err != nil {
+					log.Error("HandleWS: failed to publish event to Redis", "user_id", userID, "error", err)
 					_ = conn.WriteMessage(websocket.TextMessage, fmt.Appendf(nil, "event publish failed: %v", err))
+				} else {
+					log.Info("HandleWS: event published to Redis successfully", "user_id", userID)
 				}
 			}
 		}
@@ -56,7 +77,10 @@ func (h *Handler) HandleWS(c fiber.Ctx) error {
 }
 
 func (h *Handler) HandleInternalBroadcast(c fiber.Ctx) error {
+	log := shared.GetLogger()
+
 	if _, ok := c.Locals(reqctx.FiberRequestContextKey).(*reqctx.RequestContext); !ok {
+		log.Warn("HandleInternalBroadcast: missing trusted request context")
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "missing trusted request context"})
 	}
 
@@ -66,8 +90,11 @@ func (h *Handler) HandleInternalBroadcast(c fiber.Ctx) error {
 		Message string `json:"message"`
 	}
 	if err := c.Bind().Body(&req); err != nil {
+		log.Warn("HandleInternalBroadcast: invalid request body", "error", err)
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request body"})
 	}
+
+	log.Info("HandleInternalBroadcast: processing request", "user_id", req.UserID, "channel", req.Channel)
 
 	payload := []byte(req.Message)
 	if req.UserID != "" {
