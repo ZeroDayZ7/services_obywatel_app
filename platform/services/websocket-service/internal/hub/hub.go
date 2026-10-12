@@ -3,6 +3,7 @@ package hub
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"sync"
 
 	"github.com/fasthttp/websocket"
@@ -17,9 +18,9 @@ type Session struct {
 }
 
 type Hub struct {
-	mu      sync.RWMutex
+	mu       sync.RWMutex
 	sessions map[string]map[*Session]struct{}
-	redis   *redis.Client
+	redis    *redis.Client
 }
 
 func NewHub(redisClient *redis.Client) *Hub {
@@ -84,20 +85,20 @@ func (h *Hub) BroadcastToUser(userID string, payload []byte) {
 }
 
 func (h *Hub) BroadcastToChannel(channel string, payload []byte) {
-	for _, clients := range h.sessions {
-		for session := range clients {
-			if session == nil {
-				continue
-			}
-			select {
-			case session.send <- payload:
-			default:
-				go h.UnregisterSession(session)
-			}
-		}
+	if strings.TrimSpace(channel) == "" {
+		return
 	}
 
-	_ = channel
+	if strings.HasPrefix(channel, "ws:user:") {
+		userID := strings.TrimPrefix(channel, "ws:user:")
+		h.BroadcastToUser(userID, payload)
+		return
+	}
+
+	if strings.HasPrefix(channel, "ws:conversation:") {
+		// Konwersacyjne kanały są prywatne i nie wolno rozsyłać do wszystkich sesji.
+		return
+	}
 }
 
 func (h *Hub) PublishEvent(channel string, payload any) error {
@@ -109,6 +110,56 @@ func (h *Hub) PublishEvent(channel string, payload any) error {
 		return err
 	}
 	return h.redis.Publish(context.Background(), channel, body).Err()
+}
+
+func (h *Hub) BroadcastToUsers(userIDs []string, payload []byte) {
+	if len(userIDs) == 0 {
+		return
+	}
+	seen := make(map[string]struct{}, len(userIDs))
+	for _, userID := range userIDs {
+		if strings.TrimSpace(userID) == "" {
+			continue
+		}
+		if _, exists := seen[userID]; exists {
+			continue
+		}
+		seen[userID] = struct{}{}
+		h.BroadcastToUser(userID, payload)
+	}
+}
+
+func (h *Hub) handleRedisEvent(payload []byte) {
+	if len(payload) == 0 {
+		return
+	}
+
+	var event map[string]any
+	if err := json.Unmarshal(payload, &event); err != nil {
+		return
+	}
+
+	body, err := json.Marshal(event)
+	if err != nil {
+		return
+	}
+
+	if targetUserIDs, ok := event["target_user_ids"].([]any); ok {
+		users := make([]string, 0, len(targetUserIDs))
+		for _, item := range targetUserIDs {
+			if userID, ok := item.(string); ok && strings.TrimSpace(userID) != "" {
+				users = append(users, userID)
+			}
+		}
+		if len(users) > 0 {
+			h.BroadcastToUsers(users, body)
+			return
+		}
+	}
+
+	if userID, ok := event["user_id"].(string); ok && strings.TrimSpace(userID) != "" {
+		h.BroadcastToUser(userID, body)
+	}
 }
 
 func (h *Hub) RunRedisSubscriber(ctx context.Context) {
@@ -131,10 +182,11 @@ func (h *Hub) RunRedisSubscriber(ctx context.Context) {
 			if msg == nil || len(msg.Payload) == 0 {
 				continue
 			}
-			if msg.Channel == "ws:events" {
+			if msg.Channel == "ws:internal" {
 				continue
 			}
-			if msg.Channel == "ws:internal" {
+			if msg.Channel == "ws:events" {
+				h.handleRedisEvent([]byte(msg.Payload))
 				continue
 			}
 			h.BroadcastToChannel(msg.Channel, []byte(msg.Payload))

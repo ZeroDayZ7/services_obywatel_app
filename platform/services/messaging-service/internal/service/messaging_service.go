@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	apperr "github.com/zerodayz7/platform/pkg/errors"
+	pkgredis "github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/messaging-service/config"
 	"github.com/zerodayz7/platform/services/messaging-service/internal/model"
@@ -56,16 +57,18 @@ type MessagingService interface {
 }
 
 type messagingService struct {
-	repo   repository.MessagingRepository
-	cfg    *config.Config
-	logger *shared.Logger
+	repo        repository.MessagingRepository
+	cfg         *config.Config
+	logger      *shared.Logger
+	redisClient *pkgredis.Client
 }
 
-func NewMessagingService(repo repository.MessagingRepository, cfg *config.Config, logger *shared.Logger) MessagingService {
+func NewMessagingService(repo repository.MessagingRepository, cfg *config.Config, logger *shared.Logger, redisClient *pkgredis.Client) MessagingService {
 	return &messagingService{
-		repo:   repo,
-		cfg:    cfg,
-		logger: logger,
+		repo:        repo,
+		cfg:         cfg,
+		logger:      logger,
+		redisClient: redisClient,
 	}
 }
 
@@ -167,6 +170,7 @@ func (s *messagingService) ProcessOutbox(ctx context.Context, userID uuid.UUID, 
 				"conversation_id", msg.ConversationID.String(),
 				"idempotency_key", msg.IdempotencyKey,
 			)
+			s.publishMessageEvent(ctx, msg)
 		} else if !errors.Is(err, gorm.ErrDuplicatedKey) {
 			s.logger.Error("[OUTBOX-1.7] message persistence failed",
 				"user_id", userID.String(),
@@ -369,12 +373,71 @@ func (s *messagingService) SendMessage(ctx context.Context, senderID uuid.UUID, 
 		return err
 	}
 
+	s.publishMessageEvent(ctx, msg)
+
 	s.logger.Info("[MESSAGE-SEND-1.6] message persisted successfully",
 		"user_id", senderID.String(),
 		"conversation_id", msg.ConversationID.String(),
 		"message_id", msg.ID.String(),
 	)
 	return nil
+}
+
+func (s *messagingService) publishMessageEvent(ctx context.Context, msg *model.Message) {
+	if s.redisClient == nil || msg == nil {
+		return
+	}
+
+	conversation, err := s.repo.GetConversationByID(ctx, msg.SenderID, msg.ConversationID)
+	if err != nil || conversation == nil {
+		s.logger.Warn("[MESSAGE-EVENT-1] failed to resolve conversation members for websocket fan-out",
+			"conversation_id", msg.ConversationID.String(),
+			"user_id", msg.SenderID.String(),
+			"error", err,
+		)
+		return
+	}
+
+	targetUsers := make([]string, 0, len(conversation.Members))
+	for _, member := range conversation.Members {
+		if member.UserID == uuid.Nil || member.UserID == msg.SenderID {
+			continue
+		}
+		targetUsers = append(targetUsers, member.UserID.String())
+	}
+	if len(targetUsers) == 0 {
+		return
+	}
+
+	evt := map[string]any{
+		"type":            "new_message",
+		"event_id":        uuid.NewString(),
+		"conversation_id": msg.ConversationID.String(),
+		"sender_user_id":  msg.SenderID.String(),
+		"target_user_ids": targetUsers,
+		"message_id":      msg.ID.String(),
+		"message_version": msg.Version,
+		"timestamp":       time.Now().UnixMilli(),
+		"source_service":  "messaging-service",
+	}
+
+	body, err := json.Marshal(evt)
+	if err != nil {
+		s.logger.Warn("[MESSAGE-EVENT-2] failed to marshal websocket event payload",
+			"conversation_id", msg.ConversationID.String(),
+			"error", err,
+		)
+		return
+	}
+
+	if err := s.redisClient.Publish(ctx, "ws:events", body).Err(); err != nil {
+		s.logger.Warn("[MESSAGE-EVENT-3] websocket event publication failed",
+			"conversation_id", msg.ConversationID.String(),
+			"event_type", "new_message",
+			"error", err,
+		)
+		return
+	}
 }
 
 func (s *messagingService) GetContacts(ctx context.Context, ownerID uuid.UUID, sinceVersion uint64) ([]model.Contact, error) {

@@ -27,6 +27,7 @@ type Config struct {
 	Database        viper.DBConfig      `mapstructure:",squash"`
 	OTEL            viper.OTELConfig    `mapstructure:",squash"`
 	KMS             viper.KMSConfig     `mapstructure:",squash"`
+	Redis           viper.RedisConfig   `mapstructure:",squash"`
 	HMAC            MessagingHMACConfig `mapstructure:",squash"`
 	RabbitMQEnabled bool                `mapstructure:"RABBITMQ_ENABLED"`
 	Shutdown        time.Duration       `mapstructure:"SHUTDOWN_TIMEOUT" validate:"required"`

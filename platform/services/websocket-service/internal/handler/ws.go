@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
-	"time"
 
 	"github.com/fasthttp/websocket"
 	fiber "github.com/gofiber/fiber/v3"
@@ -14,6 +13,12 @@ import (
 	reqctx "github.com/zerodayz7/platform/pkg/context"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/websocket-service/internal/hub"
+)
+
+const (
+	eventChannel = "ws:events"
+	pingMessage  = "ping"
+	pongMessage  = "pong"
 )
 
 type Handler struct {
@@ -35,13 +40,15 @@ func (h *Handler) HandleWS(c fiber.Ctx) error {
 	userID := reqCtx.UserID.String()
 	log.Info("HandleWS: attempting websocket upgrade for user", "user_id", userID)
 
-	upgrader := websocket.FastHTTPUpgrader{CheckOrigin: func(r *fasthttp.RequestCtx) bool {
-		allowed := isAllowedOrigin(r)
-		if !allowed {
-			log.Warn("HandleWS: origin rejected", "origin", string(r.Request.Header.Peek("Origin")), "host", string(r.Host()))
-		}
-		return allowed
-	}}
+	upgrader := websocket.FastHTTPUpgrader{
+		CheckOrigin: func(r *fasthttp.RequestCtx) bool {
+			allowed := isAllowedOrigin(r)
+			if !allowed {
+				log.Warn("HandleWS: origin rejected", "origin", string(r.Request.Header.Peek("Origin")), "host", string(r.Host()))
+			}
+			return allowed
+		},
+	}
 
 	return upgrader.Upgrade(c.RequestCtx(), func(conn *websocket.Conn) {
 		log.Info("HandleWS: websocket connection established", "user_id", userID)
@@ -58,20 +65,22 @@ func (h *Handler) HandleWS(c fiber.Ctx) error {
 				return
 			}
 
-			log.Info("HandleWS: received message from client", "user_id", userID, "type", messageType, "size", len(message))
-
-			if messageType == websocket.TextMessage || messageType == websocket.BinaryMessage {
-				if err := h.hub.PublishEvent("ws:events", map[string]any{
-					"user_id": userID,
-					"payload": string(message),
-					"ts":      time.Now().Unix(),
-				}); err != nil {
-					log.Error("HandleWS: failed to publish event to Redis", "user_id", userID, "error", err)
-					_ = conn.WriteMessage(websocket.TextMessage, fmt.Appendf(nil, "event publish failed: %v", err))
-				} else {
-					log.Info("HandleWS: event published to Redis successfully", "user_id", userID)
-				}
+			if messageType != websocket.TextMessage && messageType != websocket.BinaryMessage {
+				continue
 			}
+
+			msgStr := string(message)
+
+			// Obsługa heartbeat (ping/pong) - pomijamy Redisa dla optymalizacji
+			if msgStr == pingMessage {
+				if err := conn.WriteMessage(websocket.TextMessage, []byte(pongMessage)); err != nil {
+					log.Warn("HandleWS: failed to write pong response", "user_id", userID, "error", err)
+					return
+				}
+				continue
+			}
+
+			log.Debug("HandleWS: ignoring client business payload; backend owns websocket event routing", "user_id", userID, "type", messageType, "size", len(message))
 		}
 	})
 }

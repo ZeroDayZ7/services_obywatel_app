@@ -2,9 +2,12 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
+	pkgredis "github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/messaging-service/internal/model"
 	"github.com/zerodayz7/platform/services/messaging-service/internal/repository"
@@ -23,14 +26,16 @@ type ContactsService interface {
 }
 
 type contactsService struct {
-	repo   repository.ContactsRepository
-	logger *shared.Logger
+	repo        repository.ContactsRepository
+	logger      *shared.Logger
+	redisClient *pkgredis.Client
 }
 
-func NewContactsService(repo repository.ContactsRepository, logger *shared.Logger) ContactsService {
+func NewContactsService(repo repository.ContactsRepository, logger *shared.Logger, redisClient *pkgredis.Client) ContactsService {
 	return &contactsService{
-		repo:   repo,
-		logger: logger,
+		repo:        repo,
+		logger:      logger,
+		redisClient: redisClient,
 	}
 }
 
@@ -119,6 +124,17 @@ func (s *contactsService) SendRequest(ctx context.Context, ownerID, targetID uui
 		"target_id", targetID.String(),
 		"contact_id", newContact.ID.String(),
 	)
+
+	s.publishContactEvent(ctx, []uuid.UUID{ownerID, targetID}, map[string]any{
+		"type":           "contact_updated",
+		"event_id":       uuid.NewString(),
+		"contact_id":     newContact.ID.String(),
+		"owner_user_id":  ownerID.String(),
+		"target_user_id": targetID.String(),
+		"status":         string(newContact.Status),
+		"direction":      string(newContact.Direction),
+		"timestamp":      time.Now().UnixMilli(),
+	})
 
 	return newContact, nil
 }
@@ -209,5 +225,46 @@ func (s *contactsService) RespondToRequest(ctx context.Context, currentUserID, c
 		"contact_id", contactID.String(),
 	)
 
+	s.publishContactEvent(ctx, []uuid.UUID{contact.OwnerID, currentUserID}, map[string]any{
+		"type":           "contact_updated",
+		"event_id":       uuid.NewString(),
+		"contact_id":     contactID.String(),
+		"owner_user_id":  contact.OwnerID.String(),
+		"target_user_id": currentUserID.String(),
+		"status":         model.ContactStatusAccepted,
+		"timestamp":      time.Now().UnixMilli(),
+	})
+
 	return nil
+}
+
+func (s *contactsService) publishContactEvent(ctx context.Context, targetUserIDs []uuid.UUID, event map[string]any) {
+	if s.redisClient == nil || len(targetUserIDs) == 0 {
+		return
+	}
+	userIDs := make([]string, 0, len(targetUserIDs))
+	for _, userID := range targetUserIDs {
+		if userID != uuid.Nil {
+			userIDs = append(userIDs, userID.String())
+		}
+	}
+	if len(userIDs) == 0 {
+		return
+	}
+	payloadMap := map[string]any{
+		"target_user_ids": userIDs,
+		"source_service":  "messaging-service",
+	}
+	for key, value := range event {
+		payloadMap[key] = value
+	}
+
+	payload, err := json.Marshal(payloadMap)
+	if err != nil {
+		s.logger.Warn("[CONTACT-EVENT-1] failed to marshal contact event payload", "error", err)
+		return
+	}
+	if err := s.redisClient.Publish(ctx, "ws:events", payload).Err(); err != nil {
+		s.logger.Warn("[CONTACT-EVENT-2] contact event publication failed", "target_user_ids", userIDs, "error", err)
+	}
 }

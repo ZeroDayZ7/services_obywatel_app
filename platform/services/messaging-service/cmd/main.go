@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/zerodayz7/platform/pkg/httpserver"
+	pkgredis "github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/server"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/messaging-service/app"
@@ -38,7 +39,7 @@ func main() {
 	securityCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	// 3. Ładowanie Kluczy z KMS do KeyStore (użycie funkcji z internal/security)
+	// 3. Ładowanie Kluczy z KMS do KeyStore
 	rabbitHMACKey, err := security.LoadSecurityKeys(securityCtx, &config.AppConfig, keyStore)
 	if err != nil {
 		log.Error("❌ Nie udało się załadować kluczy bezpieczeństwa z KMS", "error", err)
@@ -56,8 +57,21 @@ func main() {
 	db, closeDB := config.MustInitDB(config.AppConfig.Database)
 	defer closeDB()
 
-	// 5. DI Container & App Setup
-	container := di.NewContainer(db, log, &config.AppConfig, keyStore)
+	// 5. Redis client for websocket event fan-out (spójne rzutowanie z pkg.viper/redis)
+	redisClient, err := pkgredis.New(pkgredis.Config(config.AppConfig.Redis))
+	if err != nil {
+		log.Warn("Redis is not available for messaging-service; websocket notifications will be skipped", "error", err)
+	} else {
+		defer func() {
+			if err := redisClient.Close(); err != nil {
+				log.Error("Failed to close Redis client cleanly", "error", err)
+			}
+		}()
+		log.Info("Redis connected for messaging-service websocket notifications", "host", config.AppConfig.Redis.Host, "db", config.AppConfig.Redis.DB)
+	}
+
+	// 6. DI Container & App Setup
+	container := di.NewContainer(db, redisClient, log, &config.AppConfig, keyStore)
 	messagingApp := app.NewApp(container)
 
 	router.SetupMessagingRoutes(messagingApp, container)
