@@ -2,6 +2,7 @@ package publisher
 
 import (
 	"context"
+	"maps"
 
 	"github.com/google/uuid"
 )
@@ -19,9 +20,7 @@ type EventPublisher interface {
 
 func NewEvent(targetUserIDs []uuid.UUID, payload map[string]any) Event {
 	event := make(Event, len(payload)+3)
-	for key, value := range payload {
-		event[key] = value
-	}
+	maps.Copy(event, payload)
 	event["source_service"] = SourceService
 	if len(targetUserIDs) > 0 {
 		users := make([]string, 0, len(targetUserIDs))

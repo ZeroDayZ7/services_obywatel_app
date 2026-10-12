@@ -25,7 +25,7 @@ func NewMessagingHandler(s service.MessagingService) *MessagingHandler {
 	return &MessagingHandler{service: s}
 }
 
-// // #region SyncDelta
+// #region SyncDelta
 func (h *MessagingHandler) SyncDelta(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(c.UserContext(), 5*time.Second)
 	defer cancel()
@@ -54,9 +54,9 @@ func (h *MessagingHandler) SyncDelta(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(resp)
 }
 
-// // #endregion
+// #endregion
 
-// // #region ProcessOutbox
+// #region ProcessOutbox
 func (h *MessagingHandler) ProcessOutbox(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(c.UserContext(), 5*time.Second)
 	defer cancel()
