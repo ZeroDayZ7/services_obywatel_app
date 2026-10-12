@@ -50,18 +50,18 @@ func VerifyEd25519Challenge(pubKeyBytes []byte, challengeB64 string, signatureB6
 	payload := ConstructChallengePayload(challengeBytes, domain)
 
 	// LOGI DIAGNOSTYCZNE
-	log.DebugMap("🔍 [DEBUG GO - STEP 2]", map[string]any{
-		"domain":         domain,
-		"challenge_b64":  challengeB64,
-		"challenge_hex":  fmt.Sprintf("%x", challengeBytes),
-		"payload_hex":    fmt.Sprintf("%x", payload),
-		"payload_string": string(payload),
-		"pubkey_hex":     fmt.Sprintf("%x", pubKeyBytes),
-		"pubkey_len":     len(pubKeyBytes),
-		"signature_b64":  signatureB64,
-		"signature_hex":  fmt.Sprintf("%x", sigBytes),
-		"signature_len":  len(sigBytes),
-	})
+	// log.DebugMap("🔍 [DEBUG GO - STEP 2]", map[string]any{
+	// 	"domain":         domain,
+	// 	"challenge_b64":  challengeB64,
+	// 	"challenge_hex":  fmt.Sprintf("%x", challengeBytes),
+	// 	"payload_hex":    fmt.Sprintf("%x", payload),
+	// 	"payload_string": string(payload),
+	// 	"pubkey_hex":     fmt.Sprintf("%x", pubKeyBytes),
+	// 	"pubkey_len":     len(pubKeyBytes),
+	// 	"signature_b64":  signatureB64,
+	// 	"signature_hex":  fmt.Sprintf("%x", sigBytes),
+	// 	"signature_len":  len(sigBytes),
+	// })
 
 	if !ed25519.Verify(pubKey, payload, sigBytes) {
 		log.Warn("[DEBUG GO] ed25519.Verify zwrócił FALSE!")
