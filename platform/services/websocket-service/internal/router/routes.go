@@ -7,7 +7,7 @@ import (
 )
 
 func SetupRoutes(app *fiber.App, container *di.Container) {
-	wsHandler := handler.NewHandler(container.Hub, container.Config.SharedSecret)
+	wsHandler := handler.NewHandler(container.Hub)
 
 	app.Get("/health", func(c fiber.Ctx) error {
 		return c.JSON(fiber.Map{"status": "ok"})

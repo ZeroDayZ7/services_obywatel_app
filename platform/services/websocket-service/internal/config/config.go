@@ -20,13 +20,11 @@ type WebSocketHMACConfig struct {
 }
 
 type Config struct {
-	Server       pkgViper.ServerConfig `mapstructure:",squash"`
-	Redis        pkgViper.RedisConfig  `mapstructure:",squash"`
-	KMS          pkgViper.KMSConfig    `mapstructure:",squash"`
-	HMAC         WebSocketHMACConfig   `mapstructure:",squash"`
-	SharedSecret string                `mapstructure:"SHARED_SECRET" validate:"required"`
-	BroadcastKey string                `mapstructure:"INTERNAL_BROADCAST_KEY" validate:"required"`
-	Shutdown     time.Duration         `mapstructure:"SHUTDOWN_TIMEOUT" validate:"required"`
+	Server   pkgViper.ServerConfig `mapstructure:",squash"`
+	Redis    pkgViper.RedisConfig  `mapstructure:",squash"`
+	KMS      pkgViper.KMSConfig    `mapstructure:",squash"`
+	HMAC     WebSocketHMACConfig   `mapstructure:",squash"`
+	Shutdown time.Duration         `mapstructure:"SHUTDOWN_TIMEOUT" validate:"required"`
 }
 
 var AppConfig Config
@@ -42,8 +40,6 @@ func LoadConfigGlobal() error {
 	pkgViper.SetRedisDefaults()
 	pkgViper.SetKMSDefaults()
 
-	spfViper.SetDefault("SHARED_SECRET", "dev-shared-secret")
-	spfViper.SetDefault("INTERNAL_BROADCAST_KEY", "dev-internal-broadcast-key")
 	spfViper.SetDefault("HMAC_TARGET_KEYS", map[string]KeyTarget{
 		"gateway": {
 			TargetKey: "hmac-gateway-websocket",

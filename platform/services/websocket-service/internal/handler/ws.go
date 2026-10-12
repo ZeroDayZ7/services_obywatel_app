@@ -11,25 +11,24 @@ import (
 	"github.com/fasthttp/websocket"
 	fiber "github.com/gofiber/fiber/v3"
 	"github.com/valyala/fasthttp"
-	"github.com/zerodayz7/platform/pkg/constants"
 	reqctx "github.com/zerodayz7/platform/pkg/context"
 	"github.com/zerodayz7/platform/services/websocket-service/internal/hub"
 )
 
 type Handler struct {
-	hub          *hub.Hub
-	sharedSecret string
+	hub *hub.Hub
 }
 
-func NewHandler(h *hub.Hub, sharedSecret string) *Handler {
-	return &Handler{hub: h, sharedSecret: sharedSecret}
+func NewHandler(h *hub.Hub) *Handler {
+	return &Handler{hub: h}
 }
 
 func (h *Handler) HandleWS(c fiber.Ctx) error {
-	userID, err := h.trustedUserIDFromRequest(c)
-	if err != nil {
-		return c.Status(fiber.StatusUnauthorized).SendString(err.Error())
+	reqCtx, ok := c.Locals(reqctx.FiberRequestContextKey).(*reqctx.RequestContext)
+	if !ok || reqCtx == nil || reqCtx.UserID == nil {
+		return c.Status(fiber.StatusUnauthorized).SendString("missing trusted request context")
 	}
+	userID := reqCtx.UserID.String()
 
 	upgrader := websocket.FastHTTPUpgrader{CheckOrigin: func(r *fasthttp.RequestCtx) bool {
 		return isAllowedOrigin(r)
@@ -57,9 +56,8 @@ func (h *Handler) HandleWS(c fiber.Ctx) error {
 }
 
 func (h *Handler) HandleInternalBroadcast(c fiber.Ctx) error {
-	providedKey := strings.TrimSpace(c.Get("X-Internal-Key"))
-	if providedKey == "" || providedKey != h.sharedSecret {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid internal key"})
+	if _, ok := c.Locals(reqctx.FiberRequestContextKey).(*reqctx.RequestContext); !ok {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "missing trusted request context"})
 	}
 
 	var req struct {
@@ -80,15 +78,6 @@ func (h *Handler) HandleInternalBroadcast(c fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{"ok": true, "user_id": req.UserID, "channel": req.Channel})
-}
-
-func (h *Handler) trustedUserIDFromRequest(c fiber.Ctx) (string, error) {
-	encodedCtx := strings.TrimSpace(c.Get(constants.HeaderInternalContext))
-	signature := strings.TrimSpace(c.Get(constants.HeaderInternalSignature))
-	if encodedCtx == "" || signature == "" {
-		return "", errors.New("missing trusted request context")
-	}
-	return trustedUserIDFromSignedContext(encodedCtx, signature, h.sharedSecret, strings.TrimSpace(c.Get(constants.HeaderUserID)))
 }
 
 func trustedUserIDFromSignedContext(encodedCtx, signature, secret, fallbackUserID string) (string, error) {
