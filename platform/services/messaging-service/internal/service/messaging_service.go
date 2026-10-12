@@ -12,10 +12,10 @@ import (
 
 	"github.com/google/uuid"
 	apperr "github.com/zerodayz7/platform/pkg/errors"
-	pkgredis "github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/messaging-service/config"
 	"github.com/zerodayz7/platform/services/messaging-service/internal/model"
+	pub "github.com/zerodayz7/platform/services/messaging-service/internal/publisher"
 	"github.com/zerodayz7/platform/services/messaging-service/internal/repository"
 	"gorm.io/gorm"
 )
@@ -57,18 +57,18 @@ type MessagingService interface {
 }
 
 type messagingService struct {
-	repo        repository.MessagingRepository
-	cfg         *config.Config
-	logger      *shared.Logger
-	redisClient *pkgredis.Client
+	repo      repository.MessagingRepository
+	cfg       *config.Config
+	logger    *shared.Logger
+	publisher pub.EventPublisher
 }
 
-func NewMessagingService(repo repository.MessagingRepository, cfg *config.Config, logger *shared.Logger, redisClient *pkgredis.Client) MessagingService {
+func NewMessagingService(repo repository.MessagingRepository, cfg *config.Config, logger *shared.Logger, publisher pub.EventPublisher) MessagingService {
 	return &messagingService{
-		repo:        repo,
-		cfg:         cfg,
-		logger:      logger,
-		redisClient: redisClient,
+		repo:      repo,
+		cfg:       cfg,
+		logger:    logger,
+		publisher: publisher,
 	}
 }
 
@@ -384,13 +384,13 @@ func (s *messagingService) SendMessage(ctx context.Context, senderID uuid.UUID, 
 }
 
 func (s *messagingService) publishMessageEvent(ctx context.Context, msg *model.Message) {
-	if s.redisClient == nil || msg == nil {
+	if s.publisher == nil || msg == nil {
 		return
 	}
 
 	conversation, err := s.repo.GetConversationByID(ctx, msg.SenderID, msg.ConversationID)
 	if err != nil || conversation == nil {
-		s.logger.Warn("[MESSAGE-EVENT-1] failed to resolve conversation members for websocket fan-out",
+		s.logger.Warn("failed to resolve conversation members for websocket fan-out",
 			"conversation_id", msg.ConversationID.String(),
 			"user_id", msg.SenderID.String(),
 			"error", err,
@@ -398,45 +398,31 @@ func (s *messagingService) publishMessageEvent(ctx context.Context, msg *model.M
 		return
 	}
 
-	targetUsers := make([]string, 0, len(conversation.Members))
+	targetUsers := make([]uuid.UUID, 0, len(conversation.Members))
 	for _, member := range conversation.Members {
 		if member.UserID == uuid.Nil || member.UserID == msg.SenderID {
 			continue
 		}
-		targetUsers = append(targetUsers, member.UserID.String())
+		targetUsers = append(targetUsers, member.UserID)
 	}
 	if len(targetUsers) == 0 {
 		return
 	}
 
-	evt := map[string]any{
+	if err := s.publisher.Publish(ctx, pub.NewEvent(targetUsers, map[string]any{
 		"type":            "new_message",
 		"event_id":        uuid.NewString(),
 		"conversation_id": msg.ConversationID.String(),
 		"sender_user_id":  msg.SenderID.String(),
-		"target_user_ids": targetUsers,
 		"message_id":      msg.ID.String(),
 		"message_version": msg.Version,
 		"timestamp":       time.Now().UnixMilli(),
-		"source_service":  "messaging-service",
-	}
-
-	body, err := json.Marshal(evt)
-	if err != nil {
-		s.logger.Warn("[MESSAGE-EVENT-2] failed to marshal websocket event payload",
-			"conversation_id", msg.ConversationID.String(),
-			"error", err,
-		)
-		return
-	}
-
-	if err := s.redisClient.Publish(ctx, "ws:events", body).Err(); err != nil {
-		s.logger.Warn("[MESSAGE-EVENT-3] websocket event publication failed",
+	})); err != nil {
+		s.logger.Warn("websocket event publication failed",
 			"conversation_id", msg.ConversationID.String(),
 			"event_type", "new_message",
 			"error", err,
 		)
-		return
 	}
 }
 

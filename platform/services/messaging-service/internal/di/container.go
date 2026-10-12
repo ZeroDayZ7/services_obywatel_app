@@ -6,6 +6,7 @@ import (
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/messaging-service/config"
 	"github.com/zerodayz7/platform/services/messaging-service/internal/handler"
+	pub "github.com/zerodayz7/platform/services/messaging-service/internal/publisher"
 	"github.com/zerodayz7/platform/services/messaging-service/internal/repository"
 	"github.com/zerodayz7/platform/services/messaging-service/internal/service"
 	"gorm.io/gorm"
@@ -26,9 +27,10 @@ type Container struct {
 func NewContainer(db *gorm.DB, redisClient *pkgredis.Client, logger *shared.Logger, cfg *config.Config, keyStore *httpserver.KeyStore) *Container {
 	messagingRepo := repository.NewMessagingRepository(db)
 	contactsRepo := repository.NewContactsRepository(db)
+	eventPublisher := pub.NewRedisPublisher(redisClient, logger)
 
-	messagingSvc := service.NewMessagingService(messagingRepo, cfg, logger, redisClient)
-	contactsSvc := service.NewContactsService(contactsRepo, logger, redisClient)
+	messagingSvc := service.NewMessagingService(messagingRepo, cfg, logger, eventPublisher)
+	contactsSvc := service.NewContactsService(contactsRepo, logger, eventPublisher)
 
 	messagingHandler := handler.NewMessagingHandler(messagingSvc)
 	contactsHandler := handler.NewContactsHandler(contactsSvc)

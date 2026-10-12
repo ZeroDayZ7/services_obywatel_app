@@ -2,14 +2,13 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"time"
 
 	"github.com/google/uuid"
-	pkgredis "github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/messaging-service/internal/model"
+	pub "github.com/zerodayz7/platform/services/messaging-service/internal/publisher"
 	"github.com/zerodayz7/platform/services/messaging-service/internal/repository"
 )
 
@@ -26,37 +25,25 @@ type ContactsService interface {
 }
 
 type contactsService struct {
-	repo        repository.ContactsRepository
-	logger      *shared.Logger
-	redisClient *pkgredis.Client
+	repo      repository.ContactsRepository
+	logger    *shared.Logger
+	publisher pub.EventPublisher
 }
 
-func NewContactsService(repo repository.ContactsRepository, logger *shared.Logger, redisClient *pkgredis.Client) ContactsService {
+func NewContactsService(repo repository.ContactsRepository, logger *shared.Logger, publisher pub.EventPublisher) ContactsService {
 	return &contactsService{
-		repo:        repo,
-		logger:      logger,
-		redisClient: redisClient,
+		repo:      repo,
+		logger:    logger,
+		publisher: publisher,
 	}
 }
 
 func (s *contactsService) GetContacts(ctx context.Context, userID uuid.UUID) ([]model.Contact, error) {
-	s.logger.Info("[SERVICE-CONTACTS-01] GetContacts: starting retrieval",
-		"user_id", userID.String(),
-	)
-
 	contacts, err := s.repo.GetContactsByUserID(ctx, userID)
 	if err != nil {
-		s.logger.Error("[SERVICE-CONTACTS-02] GetContacts: repository failed to fetch contacts",
-			"user_id", userID.String(),
-			"error", err,
-		)
+		s.logger.Error("failed to fetch contacts", "user_id", userID.String(), "error", err)
 		return nil, err
 	}
-
-	s.logger.Debug("[SERVICE-CONTACTS-03] GetContacts: raw contacts fetched successfully",
-		"user_id", userID.String(),
-		"count", len(contacts),
-	)
 
 	for i := range contacts {
 		if contacts[i].OwnerID == userID {
@@ -68,40 +55,20 @@ func (s *contactsService) GetContacts(ctx context.Context, userID uuid.UUID) ([]
 		}
 	}
 
-	s.logger.Info("[SERVICE-CONTACTS-04] GetContacts: directions normalized successfully",
-		"user_id", userID.String(),
-		"total_processed", len(contacts),
-	)
-
 	return contacts, nil
 }
 
 func (s *contactsService) SendRequest(ctx context.Context, ownerID, targetID uuid.UUID) (*model.Contact, error) {
-	s.logger.Info("[SERVICE-CONTACTS-05] SendRequest: initiating contact request creation",
-		"owner_id", ownerID.String(),
-		"target_id", targetID.String(),
-	)
-
-	// 1. Sprawdzamy czy relacja już istnieje w dowolnym kierunku
 	existing, err := s.repo.GetContactByOwnerAndTarget(ctx, ownerID, targetID)
 	if err != nil {
-		s.logger.Error("[SERVICE-CONTACTS-06] SendRequest: failed to check existing relation",
-			"owner_id", ownerID.String(),
-			"target_id", targetID.String(),
-			"error", err,
-		)
+		s.logger.Error("failed to check existing contact relation", "owner_id", ownerID.String(), "target_id", targetID.String(), "error", err)
 		return nil, err
 	}
 	if existing != nil {
-		s.logger.Warn("[SERVICE-CONTACTS-07] SendRequest: contact relation already exists",
-			"owner_id", ownerID.String(),
-			"target_id", targetID.String(),
-			"existing_contact_id", existing.ID.String(),
-		)
+		s.logger.Warn("contact relation already exists", "owner_id", ownerID.String(), "target_id", targetID.String())
 		return nil, ErrContactAlreadyExists
 	}
 
-	// 2. Tworzymy nowe zaproszenie ze stanem 'pending'
 	newContact := &model.Contact{
 		OwnerID:   ownerID,
 		ContactID: targetID,
@@ -111,160 +78,85 @@ func (s *contactsService) SendRequest(ctx context.Context, ownerID, targetID uui
 	}
 
 	if err := s.repo.CreateContact(ctx, newContact); err != nil {
-		s.logger.Error("[SERVICE-CONTACTS-08] SendRequest: failed to persist new contact request",
-			"owner_id", ownerID.String(),
-			"target_id", targetID.String(),
-			"error", err,
-		)
+		s.logger.Error("failed to persist contact request", "owner_id", ownerID.String(), "target_id", targetID.String(), "error", err)
 		return nil, err
 	}
 
-	s.logger.Info("[SERVICE-CONTACTS-09] SendRequest: contact request created successfully",
-		"owner_id", ownerID.String(),
-		"target_id", targetID.String(),
-		"contact_id", newContact.ID.String(),
-	)
-
-	s.publishContactEvent(ctx, []uuid.UUID{ownerID, targetID}, map[string]any{
-		"type":           "contact_updated",
-		"event_id":       uuid.NewString(),
-		"contact_id":     newContact.ID.String(),
-		"owner_user_id":  ownerID.String(),
-		"target_user_id": targetID.String(),
-		"status":         string(newContact.Status),
-		"direction":      string(newContact.Direction),
-		"timestamp":      time.Now().UnixMilli(),
-	})
+	if s.publisher != nil {
+		if err := s.publisher.Publish(ctx, pub.NewEvent([]uuid.UUID{ownerID, targetID}, map[string]any{
+			"type":           "contact_updated",
+			"event_id":       uuid.NewString(),
+			"contact_id":     newContact.ID.String(),
+			"owner_user_id":  ownerID.String(),
+			"target_user_id": targetID.String(),
+			"status":         string(newContact.Status),
+			"direction":      string(newContact.Direction),
+			"timestamp":      time.Now().UnixMilli(),
+		})); err != nil {
+			s.logger.Warn("contact event publication failed after persisting contact request",
+				"owner_id", ownerID.String(),
+				"target_id", targetID.String(),
+				"contact_id", newContact.ID.String(),
+				"error", err,
+			)
+		}
+	}
 
 	return newContact, nil
 }
 
 func (s *contactsService) RespondToRequest(ctx context.Context, currentUserID, contactID uuid.UUID, accept bool) error {
-	s.logger.Info("[SERVICE-CONTACTS-10] RespondToRequest: processing response for contact request",
-		"current_user_id", currentUserID.String(),
-		"contact_id", contactID.String(),
-		"accept", accept,
-	)
-
-	// 1. Pobieramy zaproszenie z bazy
 	contact, err := s.repo.GetContactByID(ctx, contactID)
 	if err != nil {
-		s.logger.Error("[SERVICE-CONTACTS-11] RespondToRequest: failed to fetch contact by id",
-			"current_user_id", currentUserID.String(),
-			"contact_id", contactID.String(),
-			"error", err,
-		)
+		s.logger.Error("failed to fetch contact for response", "current_user_id", currentUserID.String(), "contact_id", contactID.String(), "error", err)
 		return err
 	}
 	if contact == nil {
-		s.logger.Warn("[SERVICE-CONTACTS-12] RespondToRequest: contact request not found",
-			"current_user_id", currentUserID.String(),
-			"contact_id", contactID.String(),
-		)
+		s.logger.Warn("contact request not found", "current_user_id", currentUserID.String(), "contact_id", contactID.String())
 		return ErrContactNotFound
 	}
 
-	// 2. Tylko adresat zaproszenia (ContactID) może na nie odpowiedzieć
 	if contact.ContactID != currentUserID {
-		s.logger.Warn("[SERVICE-CONTACTS-13] RespondToRequest: unauthorized response attempt",
-			"current_user_id", currentUserID.String(),
-			"contact_id", contactID.String(),
-			"expected_recipient_id", contact.ContactID.String(),
-		)
+		s.logger.Warn("unauthorized contact response attempt", "current_user_id", currentUserID.String(), "contact_id", contactID.String(), "expected_recipient_id", contact.ContactID.String())
 		return ErrUnauthorizedAction
 	}
 
-	// 3. Obsługa odrzucenia
 	if !accept {
-		s.logger.Info("[SERVICE-CONTACTS-14] RespondToRequest: rejecting contact request (blocking)",
-			"current_user_id", currentUserID.String(),
-			"contact_id", contactID.String(),
-		)
 		if err := s.repo.UpdateContactStatus(ctx, contactID, model.ContactStatusBlocked); err != nil {
-			s.logger.Error("[SERVICE-CONTACTS-15] RespondToRequest: failed to update status to blocked",
-				"contact_id", contactID.String(),
-				"error", err,
-			)
+			s.logger.Error("failed to block contact request", "contact_id", contactID.String(), "error", err)
 			return err
 		}
-		s.logger.Info("[SERVICE-CONTACTS-16] RespondToRequest: contact request blocked successfully",
-			"contact_id", contactID.String(),
-		)
 		return nil
 	}
 
-	// 4. Obsługa akceptacji - zmiana stanu u nadawcy
-	s.logger.Info("[SERVICE-CONTACTS-17] RespondToRequest: accepting contact request",
-		"current_user_id", currentUserID.String(),
-		"contact_id", contactID.String(),
-	)
 	if err := s.repo.UpdateContactStatus(ctx, contactID, model.ContactStatusAccepted); err != nil {
-		s.logger.Error("[SERVICE-CONTACTS-18] RespondToRequest: failed to update status to accepted",
-			"contact_id", contactID.String(),
-			"error", err,
-		)
+		s.logger.Error("failed to accept contact request", "contact_id", contactID.String(), "error", err)
 		return err
 	}
 
-	// 5. Utworzenie/zaktualizowanie relacji u odbiorcy (staje się symetryczna)
-	s.logger.Info("[SERVICE-CONTACTS-19] RespondToRequest: creating symmetric contact relation",
-		"current_user_id", currentUserID.String(),
-		"owner_id", contact.OwnerID.String(),
-	)
 	if err := s.repo.CreateSymmetricContact(ctx, currentUserID, contact.OwnerID, model.ContactStatusAccepted); err != nil {
-		s.logger.Error("[SERVICE-CONTACTS-20] RespondToRequest: failed to create symmetric contact",
-			"current_user_id", currentUserID.String(),
-			"owner_id", contact.OwnerID.String(),
-			"error", err,
-		)
+		s.logger.Error("failed to create symmetric contact relation", "current_user_id", currentUserID.String(), "owner_id", contact.OwnerID.String(), "error", err)
 		return err
 	}
 
-	s.logger.Info("[SERVICE-CONTACTS-21] RespondToRequest: contact request successfully accepted and symmetrized",
-		"current_user_id", currentUserID.String(),
-		"contact_id", contactID.String(),
-	)
-
-	s.publishContactEvent(ctx, []uuid.UUID{contact.OwnerID, currentUserID}, map[string]any{
-		"type":           "contact_updated",
-		"event_id":       uuid.NewString(),
-		"contact_id":     contactID.String(),
-		"owner_user_id":  contact.OwnerID.String(),
-		"target_user_id": currentUserID.String(),
-		"status":         model.ContactStatusAccepted,
-		"timestamp":      time.Now().UnixMilli(),
-	})
-
-	return nil
-}
-
-func (s *contactsService) publishContactEvent(ctx context.Context, targetUserIDs []uuid.UUID, event map[string]any) {
-	if s.redisClient == nil || len(targetUserIDs) == 0 {
-		return
-	}
-	userIDs := make([]string, 0, len(targetUserIDs))
-	for _, userID := range targetUserIDs {
-		if userID != uuid.Nil {
-			userIDs = append(userIDs, userID.String())
+	if s.publisher != nil {
+		if err := s.publisher.Publish(ctx, pub.NewEvent([]uuid.UUID{contact.OwnerID, currentUserID}, map[string]any{
+			"type":           "contact_updated",
+			"event_id":       uuid.NewString(),
+			"contact_id":     contactID.String(),
+			"owner_user_id":  contact.OwnerID.String(),
+			"target_user_id": currentUserID.String(),
+			"status":         model.ContactStatusAccepted,
+			"timestamp":      time.Now().UnixMilli(),
+		})); err != nil {
+			s.logger.Warn("contact event publication failed after accepting contact request",
+				"current_user_id", currentUserID.String(),
+				"contact_id", contactID.String(),
+				"owner_id", contact.OwnerID.String(),
+				"error", err,
+			)
 		}
 	}
-	if len(userIDs) == 0 {
-		return
-	}
-	payloadMap := map[string]any{
-		"target_user_ids": userIDs,
-		"source_service":  "messaging-service",
-	}
-	for key, value := range event {
-		payloadMap[key] = value
-	}
 
-	payload, err := json.Marshal(payloadMap)
-	if err != nil {
-		s.logger.Warn("[CONTACT-EVENT-1] failed to marshal contact event payload", "error", err)
-		return
-	}
-	if err := s.redisClient.Publish(ctx, "ws:events", payload).Err(); err != nil {
-		s.logger.Warn("[CONTACT-EVENT-2] contact event publication failed", "target_user_ids", userIDs, "error", err)
-	}
+	return nil
 }
