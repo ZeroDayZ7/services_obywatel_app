@@ -9,7 +9,7 @@ docker compose --profile "*" logs -f
 
 docker compose --profile "*" logs -f --tail 100
 ## STRAT ONLY gateway, messaging-service, auth-service, cache-redis
-docker compose up -d gateway auth-service messaging-service db-auth db-messaging cache-redis 
+docker compose up -d gateway auth-service messaging-service db-auth db-messaging cache-redis websocket-service
 
 # logs
 docker compose logs -f gateway auth-service messaging-service websocket-service --tail 100
