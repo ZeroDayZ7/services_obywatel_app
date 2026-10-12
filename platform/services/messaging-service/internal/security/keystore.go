@@ -2,6 +2,7 @@ package security
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/zerodayz7/platform/pkg/httpserver"
 	"github.com/zerodayz7/platform/pkg/kms"
@@ -9,16 +10,30 @@ import (
 	"github.com/zerodayz7/platform/services/messaging-service/config"
 )
 
-func LoadSecurityKeys(ctx context.Context, app *config.Config, keyStore *httpserver.KeyStore) ([]byte, error) {
+func LoadSecurityKeys(ctx context.Context, cfg *config.Config, keyStore *httpserver.KeyStore) ([]byte, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("config is nil")
+	}
+	if keyStore == nil {
+		return nil, fmt.Errorf("keystore is nil")
+	}
+
 	log := shared.GetLogger()
-	kmsCfg := app.ToKMSServiceConfig()
+	kmsCfg := cfg.ToKMSServiceConfig()
 
 	log.Info("🔍 Sprawdzanie stanu serwisu KMS...")
 	if err := kms.HealthCheck(ctx, kmsCfg); err != nil {
-		return nil, err
+		log.Error("❌ KMS jest niedostępny podczas inicjalizacji", "error", err)
+		return nil, fmt.Errorf("kms health check: %w", err)
 	}
 
-	loadKey := func(alias string, target config.KeyTarget) error {
+	for alias, target := range cfg.GetAllSecurityKeys() {
+		// Jeśli RabbitMQ jest wyłączony, pomijamy pobieranie jego klucza z KMS
+		if alias == "rabbitmq" && !cfg.RabbitMQEnabled {
+			log.Warn("RabbitMQ jest wyłączony. Pomijam pobieranie klucza RabbitMQ z KMS.")
+			continue
+		}
+
 		keyBytes, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, target.TargetKey, 1, target.Algorithm)
 		if err != nil {
 			log.Error("❌ Nie udało się pobrać klucza z KMS",
@@ -27,7 +42,7 @@ func LoadSecurityKeys(ctx context.Context, app *config.Config, keyStore *httpser
 				"algorithm", target.Algorithm,
 				"error", err,
 			)
-			return err
+			return nil, fmt.Errorf("fetch key %s (%s): %w", alias, target.TargetKey, err)
 		}
 
 		keyStore.SetKey(alias, keyBytes, uint32(version))
@@ -37,26 +52,15 @@ func LoadSecurityKeys(ctx context.Context, app *config.Config, keyStore *httpser
 			"algorithm", target.Algorithm,
 			"version", version,
 		)
-		return nil
 	}
 
-	for senderID, keyTarget := range app.HMAC.TargetKeys {
-		if err := loadKey(senderID, keyTarget); err != nil {
-			return nil, err
+	// Pobieramy klucz rabbitmq bezpośrednio z keystore (jeśli włączony) na potrzeby main.go
+	var rabbitHMACKey []byte
+	if cfg.RabbitMQEnabled {
+		if key, _, ok := keyStore.GetKey("rabbitmq"); ok {
+			rabbitHMACKey = key
 		}
 	}
-
-	if !app.RabbitMQEnabled {
-		log.Warn("RabbitMQ jest wyłączony. Pomijam pobieranie klucza RabbitMQ z KMS.")
-		return nil, nil
-	}
-
-	rabbitTarget := app.HMAC.RabbitMQKey
-	rabbitHMACKey, version, err := kms.FetchSymmetricKeyWithVersion(ctx, kmsCfg, rabbitTarget.TargetKey, 1, rabbitTarget.Algorithm)
-	if err != nil {
-		return nil, err
-	}
-	log.Info("✅ Klucz HMAC dla RabbitMQ pobrany pomyślnie z KMS", "target", rabbitTarget.TargetKey, "version", version)
 
 	return rabbitHMACKey, nil
 }

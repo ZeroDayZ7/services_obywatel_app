@@ -1,0 +1,9 @@
+HMAC_TARGET_KEYS:
+  gateway:
+    target_key: hmac-gateway-messaging
+    algorithm: HmacSha256
+
+HMAC_INTERNAL_KEYS:
+  rabbitmq:
+    target_key: hmac-messaging-rabbitmq
+    algorithm: HmacSha256

@@ -21,7 +21,7 @@ docker compose up -d --force-recreate messaging-service
 docker compose logs -f gateway auth-service messaging-service websocket-service --tail 100
 
 
-docker compose logs -f gateway auth-service messaging-service notification-service citizen-docs identity-service officer-bff document-renderer --tail 100
+docker compose logs -f gateway auth-service messaging-service notification-service citizen-docs identity-service officer-bff document-renderer websocket-service --tail 100
 
 
 

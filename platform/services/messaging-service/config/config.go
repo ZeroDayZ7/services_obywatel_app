@@ -1,9 +1,8 @@
-// cmdr: config\config.go
-
 package config
 
 import (
 	"fmt"
+	"maps"
 	"time"
 
 	spfViper "github.com/spf13/viper"
@@ -18,8 +17,8 @@ type KeyTarget struct {
 }
 
 type MessagingHMACConfig struct {
-	TargetKeys  map[string]KeyTarget `mapstructure:"HMAC_TARGET_KEYS"`
-	RabbitMQKey KeyTarget            `mapstructure:"HMAC_RABBITMQ_KEY"`
+	TargetKeys   map[string]KeyTarget `mapstructure:"HMAC_TARGET_KEYS" validate:"required"`
+	InternalKeys map[string]KeyTarget `mapstructure:"HMAC_INTERNAL_KEYS" validate:"required"`
 }
 
 type Config struct {
@@ -39,6 +38,13 @@ func (c *Config) ToKMSServiceConfig() kms.Config {
 	return c.KMS.ToKMSServiceConfig()
 }
 
+func (c *Config) GetAllSecurityKeys() map[string]KeyTarget {
+	allKeys := make(map[string]KeyTarget)
+	maps.Copy(allKeys, c.HMAC.TargetKeys)
+	maps.Copy(allKeys, c.HMAC.InternalKeys)
+	return allKeys
+}
+
 func LoadConfigGlobal() error {
 	log := shared.GetLogger()
 
@@ -47,19 +53,17 @@ func LoadConfigGlobal() error {
 	viper.SetRedisDefaults()
 	viper.SetKMSDefaults()
 
-	// Nadawcy zewnętrzni (Gateway)
-	spfViper.SetDefault("HMAC_TARGET_KEYS", map[string]KeyTarget{
-		"gateway": {
-			TargetKey: "hmac-gateway-messaging",
-			Algorithm: "HmacSha256",
-		},
-	})
+	spfViper.SetConfigName("config")
+	spfViper.SetConfigType("yaml")
+	spfViper.AddConfigPath(".")
+	spfViper.AddConfigPath("./config")
 
-	spfViper.SetDefault("HMAC_RABBITMQ_KEY", KeyTarget{
-		TargetKey: "hmac-messaging-rabbitmq",
-		Algorithm: "HmacSha256",
-	})
-	spfViper.SetDefault("RABBITMQ_ENABLED", false)
+	if err := spfViper.ReadInConfig(); err != nil {
+		if _, ok := err.(spfViper.ConfigFileNotFoundError); !ok {
+			return fmt.Errorf("failed to read config file: %w", err)
+		}
+		log.Warn("No config.yaml file found, falling back to environment variables and defaults")
+	}
 
 	if err := viper.InitConfig(&AppConfig, "messaging-service"); err != nil {
 		return fmt.Errorf("failed to initialize messaging-service config: %w", err)
