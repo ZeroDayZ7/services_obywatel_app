@@ -37,7 +37,9 @@ func Run(app *fiber.App, cfg Config, log shared.Logger, cleanup func()) {
 			"env":     cfg.Env,
 		})
 
-		return app.Listen(address)
+		return app.Listen(address, fiber.ListenConfig{
+			DisableStartupMessage: true,
+		})
 	})
 
 	g.Go(func() error {

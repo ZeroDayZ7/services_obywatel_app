@@ -176,7 +176,7 @@ services:
     networks:
       - gateway-net
       - cache-net
-      - events-net
+      - target-admin-net
     depends_on:
       cache-redis:
         condition: service_healthy

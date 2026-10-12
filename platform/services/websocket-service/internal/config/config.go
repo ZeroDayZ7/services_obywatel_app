@@ -40,12 +40,23 @@ func LoadConfigGlobal() error {
 	pkgViper.SetRedisDefaults()
 	pkgViper.SetKMSDefaults()
 
+	spfViper.SetConfigName("config")
+	spfViper.SetConfigType("yaml")
+	spfViper.AddConfigPath(".")
+
 	spfViper.SetDefault("HMAC_TARGET_KEYS", map[string]KeyTarget{
 		"gateway": {
 			TargetKey: "hmac-gateway-websocket",
 			Algorithm: "HmacSha256",
 		},
 	})
+
+	if err := spfViper.ReadInConfig(); err != nil {
+		if _, ok := err.(spfViper.ConfigFileNotFoundError); !ok {
+			return fmt.Errorf("failed to read config file: %w", err)
+		}
+		log.Warn("No config.yaml file found, falling back to environment variables and defaults")
+	}
 
 	if err := pkgViper.InitConfig(&AppConfig, "websocket-service"); err != nil {
 		return fmt.Errorf("failed to initialize config: %w", err)

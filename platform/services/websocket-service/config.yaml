@@ -1,0 +1,4 @@
+HMAC_TARGET_KEYS:
+  gateway:
+    target_key: hmac-gateway-websocket
+    algorithm: HmacSha256
