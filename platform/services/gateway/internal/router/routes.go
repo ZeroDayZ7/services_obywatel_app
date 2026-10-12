@@ -30,12 +30,12 @@ func SetupRoutes(app *fiber.App, container *di.Container) {
 	health.RegisterRoutes(app, checker)
 
 	// 2. Rejestracja modułów tras
+	RegisterWebSocketRoutes(app, container)
 	RegisterAuthRoutes(app, container)
 	RegisterDocumentRoutes(app, container)
 	RegisterNotifyRoutes(app, container)
 	RegisterMessagingRoutes(app, container)
 	RegisterOfficerRoutes(app, container)
-	RegisterWebSocketRoutes(app, container)
 
 	// 3. Handlery końcowe (Fallback / 404)
 	pkgRouter.SetupFallbackHandlers(app)
