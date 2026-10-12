@@ -5,7 +5,7 @@ go 1.27.0
 require (
 	github.com/fasthttp/websocket v1.5.12
 	github.com/gofiber/fiber/v3 v3.5.0
-	github.com/golang-jwt/jwt/v5 v5.3.1
+	github.com/google/uuid v1.6.0
 	github.com/redis/go-redis/v9 v9.23.0
 	github.com/spf13/viper v1.21.0
 	github.com/valyala/fasthttp v1.75.0
@@ -25,7 +25,6 @@ require (
 	github.com/gofiber/schema v1.8.3 // indirect
 	github.com/gofiber/utils/v2 v2.4.1 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/klauspost/compress v1.20.1 // indirect
 	github.com/leodido/go-urn v1.5.0 // indirect
 	github.com/mattn/go-colorable v0.1.16 // indirect
