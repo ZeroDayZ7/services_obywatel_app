@@ -89,7 +89,7 @@ func (s *stubMessagingService) GetUserKeyBundle(ctx context.Context, targetUserI
 	return nil, nil
 }
 
-func (s *stubMessagingService) GetUserPreKeys(ctx context.Context, targetUserID string) (*model.UserPreKeysResponse, error) {
+func (s *stubMessagingService) GetUserPreKeys(ctx context.Context, targetUserID string) (*model.PreKeyBundleDto, error) {
 	return nil, nil
 }
 

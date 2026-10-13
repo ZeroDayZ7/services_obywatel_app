@@ -2,6 +2,7 @@ package service
 
 import (
 	"bytes"
+	"encoding/json"
 	"testing"
 
 	"github.com/google/uuid"
@@ -143,6 +144,63 @@ func TestBuildPreKeyBundleWithoutOneTimePreKey(t *testing.T) {
 	}
 	if len(bundle.PreKeyPublic) != 0 {
 		t.Fatalf("expected empty prekey public payload, got %q", string(bundle.PreKeyPublic))
+	}
+}
+
+func TestBuildPreKeyBundleUsesCanonicalCamelCaseJSON(t *testing.T) {
+	identity := &model.UserDeviceIdentity{
+		ID:              uuid.New(),
+		UserID:          uuid.New(),
+		DeviceID:        "device-789",
+		SignalDeviceID:  9,
+		RegistrationID:  42,
+		PublicKey:       []byte("identity-key"),
+		SignedPreKey:    []byte("signed-pre-key"),
+		SignedPreKeySig: []byte("signed-signature"),
+		SignedPreKeyID:  5,
+	}
+	preKey := &model.UserPreKey{KeyID: 17, PublicKey: []byte("otk-value")}
+
+	bundle := BuildPreKeyBundle(identity, preKey)
+	payload, err := json.Marshal(bundle)
+	if err != nil {
+		t.Fatalf("marshal pre-key bundle: %v", err)
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(payload, &got); err != nil {
+		t.Fatalf("unmarshal pre-key bundle: %v", err)
+	}
+
+	if _, ok := got["registrationId"]; !ok {
+		t.Fatal("expected registrationId field in response")
+	}
+	if _, ok := got["deviceId"]; !ok {
+		t.Fatal("expected deviceId field in response")
+	}
+	if _, ok := got["signedPreKeyId"]; !ok {
+		t.Fatal("expected signedPreKeyId field in response")
+	}
+	if _, ok := got["signedPreKeyPublic"]; !ok {
+		t.Fatal("expected signedPreKeyPublic field in response")
+	}
+	if _, ok := got["signedPreKeySignature"]; !ok {
+		t.Fatal("expected signedPreKeySignature field in response")
+	}
+	if _, ok := got["identityKey"]; !ok {
+		t.Fatal("expected identityKey field in response")
+	}
+	if _, ok := got["preKeyId"]; !ok {
+		t.Fatal("expected preKeyId field in response when one-time key is present")
+	}
+	if _, ok := got["preKeyPublic"]; !ok {
+		t.Fatal("expected preKeyPublic field in response when one-time key is present")
+	}
+	if _, ok := got["signed_pre_key_id"]; ok {
+		t.Fatal("snake_case signed_pre_key_id must not appear in the canonical contract")
+	}
+	if got["deviceId"] != "9" {
+		t.Fatalf("expected deviceId 9, got %#v", got["deviceId"])
 	}
 }
 

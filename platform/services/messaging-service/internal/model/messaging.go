@@ -508,18 +508,6 @@ func (r *UploadDeviceKeysRequest) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// UserPreKeysResponse - Klucze publiczne użytkownika do zestawienia sesji E2EE (X3DH)
-type UserPreKeysResponse struct {
-	UserID          uuid.UUID `json:"userId"`
-	DeviceID        string    `json:"deviceId"`
-	IdentityKey     []byte    `json:"identityKey"`
-	SignedPreKey    []byte    `json:"signedPreKey"`
-	SignedPreKeySig []byte    `json:"signedPreKeySig"`
-	SignedPreKeyID  uint32    `json:"signedPreKeyId"`
-	OneTimePreKey   []byte    `json:"oneTimePreKey,omitempty"`
-	OneTimePreKeyID uint32    `json:"oneTimePreKeyId,omitempty"`
-}
-
 // PreKeyBundleDto - Bundle X3DH wymagany przez Signal Protocol po stronie klienta.
 type PreKeyBundleDto struct {
 	RegistrationID        uint32  `json:"registrationId"`

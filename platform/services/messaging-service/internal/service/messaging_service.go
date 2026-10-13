@@ -53,7 +53,7 @@ type MessagingService interface {
 	// E2EE Keys
 	UploadDeviceKeys(ctx context.Context, userID uuid.UUID, req model.UploadDeviceKeysRequest) error
 	GetUserKeyBundle(ctx context.Context, targetUserID string) (*model.PreKeyBundleDto, error)
-	GetUserPreKeys(ctx context.Context, targetUserID string) (*model.UserPreKeysResponse, error)
+	GetUserPreKeys(ctx context.Context, targetUserID string) (*model.PreKeyBundleDto, error)
 }
 
 type messagingService struct {
@@ -693,10 +693,15 @@ func validateDeviceKeyUpload(req model.UploadDeviceKeysRequest) error {
 }
 
 func BuildUserDeviceIdentity(userID uuid.UUID, req model.UploadDeviceKeysRequest) *model.UserDeviceIdentity {
+	signalDeviceID := req.SignalDeviceID
+	if signalDeviceID == 0 {
+		signalDeviceID = 1
+	}
+
 	return &model.UserDeviceIdentity{
 		UserID:              userID,
 		DeviceID:            req.DeviceID,
-		SignalDeviceID:      req.SignalDeviceID,
+		SignalDeviceID:      signalDeviceID,
 		RegistrationID:      req.RegistrationID,
 		PublicKey:           req.IdentityPublicKey,
 		SignedPreKey:        req.SignedPreKey,
@@ -852,6 +857,13 @@ func (s *messagingService) GetUserKeyBundle(ctx context.Context, targetUserID st
 		)
 		return nil, ErrDeviceNotFound
 	}
+	if identity.SignalDeviceID == 0 {
+		s.logger.Error("[KEY-BUNDLE-1.2a] missing signal device id for target user bundle",
+			"target_user_id", targetUserID,
+			"device_id", identity.DeviceID,
+		)
+		return nil, ErrInvalidSession
+	}
 
 	preKey, err := s.repo.PopPreKey(ctx, identity.UserID, identity.DeviceID)
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -878,56 +890,23 @@ func (s *messagingService) GetUserKeyBundle(ctx context.Context, targetUserID st
 	return bundle, nil
 }
 
-func (s *messagingService) GetUserPreKeys(ctx context.Context, targetUserID string) (*model.UserPreKeysResponse, error) {
-	s.logger.Info("[KEY-PREKEYS-1] resolving user pre-keys",
+func (s *messagingService) GetUserPreKeys(ctx context.Context, targetUserID string) (*model.PreKeyBundleDto, error) {
+	s.logger.Info("[KEY-PREKEYS-1] resolving canonical Signal pre-key bundle",
 		"target_user_id", targetUserID,
 	)
 	bundle, err := s.GetUserKeyBundle(ctx, targetUserID)
 	if err != nil {
 		return nil, err
 	}
-
-	targetID, err := uuid.Parse(targetUserID)
-	if err != nil {
-		s.logger.Error("[KEY-PREKEYS-1.1] invalid target user id during pre-key response",
-			"target_user_id", targetUserID,
-			"error", err.Error(),
-		)
-		return nil, ErrInvalidUUID
-	}
-
-	identity, err := s.repo.GetLatestDeviceIdentityForUser(ctx, targetID)
-	if err != nil {
-		s.logger.Error("[KEY-PREKEYS-1.2] latest device identity missing",
-			"target_user_id", targetUserID,
-			"error", err.Error(),
-		)
+	if bundle == nil {
 		return nil, ErrDeviceNotFound
 	}
-
-	res := &model.UserPreKeysResponse{
-		UserID:          identity.UserID,
-		DeviceID:        "",
-		IdentityKey:     identity.PublicKey,
-		SignedPreKey:    identity.SignedPreKey,
-		SignedPreKeySig: identity.SignedPreKeySig,
-		SignedPreKeyID:  identity.SignedPreKeyID,
-	}
-	if identity.SignalDeviceID > 0 {
-		res.DeviceID = strconv.FormatUint(uint64(identity.SignalDeviceID), 10)
-	}
-	if bundle != nil {
-		res.OneTimePreKey = bundle.PreKeyPublic
-		if bundle.PreKeyID != nil {
-			res.OneTimePreKeyID = *bundle.PreKeyID
-		}
-	}
-	s.logger.Info("[KEY-PREKEYS-1.3] user pre-key response built",
+	s.logger.Info("[KEY-PREKEYS-1.3] canonical pre-key bundle returned",
 		"target_user_id", targetUserID,
-		"device_id", identity.DeviceID,
-		"has_otk", res.OneTimePreKey != nil,
+		"device_id", bundle.DeviceID,
+		"has_otk", bundle.PreKeyID != nil,
 	)
-	return res, nil
+	return bundle, nil
 }
 
 // #endregion
