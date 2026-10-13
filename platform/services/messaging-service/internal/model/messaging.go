@@ -233,16 +233,19 @@ type Message struct {
 }
 
 func (m Message) MarshalJSON() ([]byte, error) {
-	type alias Message
-	ciphertext := base64.StdEncoding.EncodeToString(m.EncryptedPayload)
-	payload := struct {
-		alias
-		Ciphertext string `json:"ciphertext,omitempty"`
-		Encrypted  string `json:"encryptedPayload,omitempty"`
-	}{
-		alias:      alias(m),
-		Ciphertext: ciphertext,
-		Encrypted:  ciphertext,
+	payload := map[string]any{
+		"id":                m.ID,
+		"idempotency_key":   m.IdempotencyKey,
+		"conversation_id":   m.ConversationID,
+		"sender_id":         m.SenderID,
+		"sender_device_id":  m.SenderDeviceID,
+		"type":              m.Type,
+		"sequence":          m.Sequence,
+		"encrypted_payload": base64.StdEncoding.EncodeToString(m.EncryptedPayload),
+		"media_header":      m.MediaHeader,
+		"version":           m.Version,
+		"created_at":        m.CreatedAt,
+		"updated_at":        m.UpdatedAt,
 	}
 	return json.Marshal(payload)
 }
