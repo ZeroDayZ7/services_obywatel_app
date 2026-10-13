@@ -96,3 +96,36 @@ func TestMessageEnvelopeJSONUsesCamelCaseOnly(t *testing.T) {
 		t.Fatalf("expected camelCase conversationId; got %s", jsonText)
 	}
 }
+
+func TestUploadDeviceKeysRequestAcceptsLegacySnakeCaseAndCamelCase(t *testing.T) {
+	payload := []byte(`{
+		"device_id": "device-1",
+		"registration_id": 42,
+		"identity_public_key": "aWQtcHVibGljLWtleQ==",
+		"public_key": "aWQtcHVibGljLWtleQ==",
+		"signed_pre_key": "c2lnbmVkLXByZWs=",
+		"signed_pre_key_sig": "c2lnbmVkLXNpZw==",
+		"signed_pre_key_id": 9,
+		"one_time_pre_keys": [{"key_id": 1, "public_key": "b3RrLTE="}]
+	}`)
+
+	var req UploadDeviceKeysRequest
+	if err := json.Unmarshal(payload, &req); err != nil {
+		t.Fatalf("unmarshal legacy snake_case payload: %v", err)
+	}
+	if req.DeviceID != "device-1" {
+		t.Fatalf("expected deviceId to be parsed, got %q", req.DeviceID)
+	}
+	if req.RegistrationID != 42 {
+		t.Fatalf("expected registrationId 42, got %d", req.RegistrationID)
+	}
+	if len(req.IdentityPublicKey) == 0 {
+		t.Fatal("expected identityPublicKey to be populated from legacy payload")
+	}
+	if len(req.OneTimePreKeys) != 1 {
+		t.Fatalf("expected 1 one-time prekey, got %d", len(req.OneTimePreKeys))
+	}
+	if req.OneTimePreKeys[0].KeyID != 1 {
+		t.Fatalf("expected keyId 1, got %d", req.OneTimePreKeys[0].KeyID)
+	}
+}

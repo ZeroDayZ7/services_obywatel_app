@@ -369,6 +369,30 @@ func (h *MessagingHandler) UploadDeviceKeys(c *fiber.Ctx) error {
 	if len(req.IdentityPublicKey) == 0 && len(req.PublicKey) > 0 {
 		req.IdentityPublicKey = req.PublicKey
 	}
+	if len(req.PublicKey) == 0 && len(req.IdentityPublicKey) > 0 {
+		req.PublicKey = req.IdentityPublicKey
+	}
+	if len(req.IdentityPublicKey) == 0 {
+		shared.GetLogger().WarnObj("UploadDeviceKeys missing identityPublicKey", map[string]any{
+			"user_id":      rc.UserID.String(),
+			"device_id":    req.DeviceID,
+			"operation_id": rc.OperationID,
+		})
+	}
+	if len(req.SignedPreKey) == 0 {
+		shared.GetLogger().WarnObj("UploadDeviceKeys missing signedPreKey", map[string]any{
+			"user_id":      rc.UserID.String(),
+			"device_id":    req.DeviceID,
+			"operation_id": rc.OperationID,
+		})
+	}
+	if len(req.SignedPreKeySig) == 0 {
+		shared.GetLogger().WarnObj("UploadDeviceKeys missing signedPreKeySig", map[string]any{
+			"user_id":      rc.UserID.String(),
+			"device_id":    req.DeviceID,
+			"operation_id": rc.OperationID,
+		})
+	}
 
 	// Log a minimal, non-sensitive trace to help debug missing DB records in production.
 	// Do NOT log any key material.

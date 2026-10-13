@@ -176,29 +176,29 @@ func (a *MessagingActivation) ToResponse() *MessagingActivationStatusResponse {
 // #region Conversation & Message Entities
 // Conversation – Konwersacja prywatna lub grupowa
 type Conversation struct {
-	ID    uuid.UUID        `gorm:"type:uuid;primaryKey;default:uuidv7()"`
-	Type  ConversationType `gorm:"type:varchar(20);not null;default:'direct'"`
-	Title string           `gorm:"type:varchar(128)"` // Wypełniane tylko dla grup (może być zaszyfrowane)
+	ID    uuid.UUID        `gorm:"type:uuid;primaryKey;default:uuidv7()" json:"id"`
+	Type  ConversationType `gorm:"type:varchar(20);not null;default:'direct'" json:"type"`
+	Title string           `gorm:"type:varchar(128)" json:"title,omitempty"` // Wypełniane tylko dla grup (może być zaszyfrowane)
 
 	// Ostatnia sekwencja wiadomości w konwersacji (zwiększana monotonicznie przy każdej wiadomości)
-	LastSequence uint64 `gorm:"not null;default:0"`
+	LastSequence uint64 `gorm:"not null;default:0" json:"lastSequence"`
 
 	// Relacje GORM
-	Members  []ConversationMember `gorm:"foreignKey:ConversationID"`
-	Messages []Message            `gorm:"foreignKey:ConversationID"`
+	Members  []ConversationMember `gorm:"foreignKey:ConversationID" json:"members,omitempty"`
+	Messages []Message            `gorm:"foreignKey:ConversationID" json:"messages,omitempty"`
 
 	BaseModel
 }
 
 // ConversationMember – Uczestnicy danej konwersacji i ich stan przeczytania
 type ConversationMember struct {
-	ID             uuid.UUID `gorm:"type:uuid;primaryKey;default:uuidv7()"`
-	ConversationID uuid.UUID `gorm:"type:uuid;index:idx_conv_user,unique;not null"`
-	UserID         uuid.UUID `gorm:"type:uuid;index:idx_conv_user,unique;not null"`
-	Role           string    `gorm:"type:varchar(20);default:'member'"` // 'admin', 'member'
+	ID             uuid.UUID `gorm:"type:uuid;primaryKey;default:uuidv7()" json:"id"`
+	ConversationID uuid.UUID `gorm:"type:uuid;index:idx_conv_user,unique;not null" json:"conversationId"`
+	UserID         uuid.UUID `gorm:"type:uuid;index:idx_conv_user,unique;not null" json:"userId"`
+	Role           string    `gorm:"type:varchar(20);default:'member'" json:"role"` // 'admin', 'member'
 
 	// Wskaźnik synchronizacji: ostatnia odebrana/przeczytana sekwencja wiadomości przez tego użytkownika
-	LastReadSequence uint64 `gorm:"not null;default:0"`
+	LastReadSequence uint64 `gorm:"not null;default:0" json:"lastReadSequence"`
 
 	BaseModel
 }
@@ -369,6 +369,39 @@ type OneTimePreKeyUpload struct {
 	PublicKey []byte `json:"publicKey"`
 }
 
+func (k *OneTimePreKeyUpload) UnmarshalJSON(data []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	keyIDValue, ok := raw["keyId"]
+	if !ok {
+		keyIDValue, ok = raw["key_id"]
+	}
+	if ok {
+		var keyID uint32
+		if err := json.Unmarshal(keyIDValue, &keyID); err != nil {
+			return err
+		}
+		k.KeyID = keyID
+	}
+
+	publicKeyValue, ok := raw["publicKey"]
+	if !ok {
+		publicKeyValue, ok = raw["public_key"]
+	}
+	if ok {
+		var publicKey []byte
+		if err := json.Unmarshal(publicKeyValue, &publicKey); err != nil {
+			return err
+		}
+		k.PublicKey = publicKey
+	}
+
+	return nil
+}
+
 // UploadDeviceKeysRequest - Rejestracja kluczy E2EE dla urządzenia.
 type UploadDeviceKeysRequest struct {
 	DeviceID          string                `json:"deviceId,omitempty"`
@@ -380,6 +413,99 @@ type UploadDeviceKeysRequest struct {
 	SignedPreKeySig   []byte                `json:"signedPreKeySig,omitempty"`
 	SignedPreKeyID    uint32                `json:"signedPreKeyId,omitempty"`
 	OneTimePreKeys    []OneTimePreKeyUpload `json:"oneTimePreKeys,omitempty"`
+}
+
+func (r *UploadDeviceKeysRequest) UnmarshalJSON(data []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	decodeString := func(candidates ...string) (string, bool) {
+		for _, key := range candidates {
+			if value, ok := raw[key]; ok {
+				var decoded string
+				if err := json.Unmarshal(value, &decoded); err != nil {
+					return "", false
+				}
+				return decoded, true
+			}
+		}
+		return "", false
+	}
+	decodeBytes := func(candidates ...string) ([]byte, bool) {
+		for _, key := range candidates {
+			if value, ok := raw[key]; ok {
+				var decoded []byte
+				if err := json.Unmarshal(value, &decoded); err != nil {
+					return nil, false
+				}
+				return decoded, true
+			}
+		}
+		return nil, false
+	}
+	decodeUint32 := func(candidates ...string) (uint32, bool) {
+		for _, key := range candidates {
+			if value, ok := raw[key]; ok {
+				var decoded uint32
+				if err := json.Unmarshal(value, &decoded); err != nil {
+					return 0, false
+				}
+				return decoded, true
+			}
+		}
+		return 0, false
+	}
+	decodeNestedPreKeys := func(candidates ...string) ([]OneTimePreKeyUpload, bool) {
+		for _, key := range candidates {
+			if value, ok := raw[key]; ok {
+				var decoded []OneTimePreKeyUpload
+				if err := json.Unmarshal(value, &decoded); err != nil {
+					return nil, false
+				}
+				return decoded, true
+			}
+		}
+		return nil, false
+	}
+
+	if deviceID, ok := decodeString("deviceId", "device_id"); ok {
+		r.DeviceID = deviceID
+	}
+	if signalDeviceID, ok := decodeUint32("signalDeviceId", "signal_device_id"); ok {
+		r.SignalDeviceID = signalDeviceID
+	}
+	if registrationID, ok := decodeUint32("registrationId", "registration_id"); ok {
+		r.RegistrationID = registrationID
+	}
+	if identityPublicKey, ok := decodeBytes("identityPublicKey", "identity_public_key"); ok {
+		r.IdentityPublicKey = identityPublicKey
+	}
+	if publicKey, ok := decodeBytes("publicKey", "public_key"); ok {
+		r.PublicKey = publicKey
+	}
+	if signedPreKey, ok := decodeBytes("signedPreKey", "signed_pre_key"); ok {
+		r.SignedPreKey = signedPreKey
+	}
+	if signedPreKeySig, ok := decodeBytes("signedPreKeySig", "signed_pre_key_sig"); ok {
+		r.SignedPreKeySig = signedPreKeySig
+	}
+	if signedPreKeyID, ok := decodeUint32("signedPreKeyId", "signed_pre_key_id"); ok {
+		r.SignedPreKeyID = signedPreKeyID
+	}
+	if oneTimePreKeys, ok := decodeNestedPreKeys("oneTimePreKeys", "one_time_pre_keys"); ok {
+		r.OneTimePreKeys = oneTimePreKeys
+	}
+
+	if len(r.IdentityPublicKey) == 0 && len(r.PublicKey) > 0 {
+		r.IdentityPublicKey = r.PublicKey
+	}
+	if len(r.PublicKey) == 0 && len(r.IdentityPublicKey) > 0 {
+		r.PublicKey = r.IdentityPublicKey
+	}
+
+	return nil
 }
 
 // UserPreKeysResponse - Klucze publiczne użytkownika do zestawienia sesji E2EE (X3DH)
