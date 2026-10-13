@@ -8,30 +8,28 @@ import (
 	"github.com/zerodayz7/platform/services/messaging-service/internal/model"
 )
 
-func TestUploadDeviceKeysRequestNormalizeAcceptsSignalStyleFields(t *testing.T) {
+func TestUploadDeviceKeysRequestAcceptsSignalStyleFields(t *testing.T) {
 	req := model.UploadDeviceKeysRequest{
-		DeviceIDSnake:          "device-123",
-		RegistrationIDSnake:    42,
-		IdentityPublicKeySnake: []byte("identity-key"),
-		SignedPreKeySnake:      []byte("signed-pre-key"),
-		SignedPreKeySigSnake:   []byte("signature"),
-		SignedPreKeyIDSnake:    9,
-		OneTimePreKeysSnake: []model.OneTimePreKeyUpload{
+		DeviceID:          "device-123",
+		RegistrationID:    42,
+		IdentityPublicKey: []byte("identity-key"),
+		SignedPreKey:      []byte("signed-pre-key"),
+		SignedPreKeySig:   []byte("signature"),
+		SignedPreKeyID:    9,
+		OneTimePreKeys: []model.OneTimePreKeyUpload{
 			{KeyID: 1, PublicKey: []byte("otk-1")},
 			{KeyID: 2, PublicKey: []byte("otk-2")},
 		},
 	}
 
-	req.Normalize()
-
 	if req.DeviceID != "device-123" {
 		t.Fatalf("expected normalized device ID, got %q", req.DeviceID)
 	}
 	if req.RegistrationID != 42 {
-		t.Fatalf("expected normalized registration ID 42, got %d", req.RegistrationID)
+		t.Fatalf("expected registration ID 42, got %d", req.RegistrationID)
 	}
-	if len(req.PublicKey) == 0 {
-		t.Fatal("expected public key to be populated")
+	if len(req.IdentityPublicKey) == 0 {
+		t.Fatal("expected identity public key to be present")
 	}
 	if req.SignedPreKeyID != 9 {
 		t.Fatalf("expected signed prekey ID 9, got %d", req.SignedPreKeyID)

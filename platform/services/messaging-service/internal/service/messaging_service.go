@@ -204,14 +204,10 @@ func buildMessageFromOutboxEvent(userID uuid.UUID, evt model.OutboxEventPayload)
 		return nil, false, nil
 	}
 
-	evt.Normalize()
 	conversationID := evt.ConversationID
 	ciphertext := strings.TrimSpace(evt.Ciphertext)
 	idempotencyKey := strings.TrimSpace(evt.IdempotencyKey)
 	resolvedSignalType := evt.Type
-	if resolvedSignalType == 0 {
-		resolvedSignalType = evt.TypeAlt
-	}
 	messageType := model.MessageTypeText
 	if resolvedSignalType != 0 {
 		messageType = model.MessageType(strconv.Itoa(int(resolvedSignalType)))
@@ -286,9 +282,6 @@ func buildMessageFromOutboxEvent(userID uuid.UUID, evt model.OutboxEventPayload)
 	}
 	if idempotencyKey == "" {
 		idempotencyKey = uuid.NewString()
-	}
-	if evt.SenderDeviceID == "" {
-		evt.SenderDeviceID = evt.SenderDeviceIDAlt
 	}
 	if evt.SenderDeviceID == "" {
 		evt.SenderDeviceID = "unknown-device"
@@ -782,7 +775,6 @@ func (s *messagingService) ValidateSenderDeviceOwnership(ctx context.Context, us
 }
 
 func (s *messagingService) UploadDeviceKeys(ctx context.Context, userID uuid.UUID, req model.UploadDeviceKeysRequest) error {
-	req.Normalize()
 	s.logger.Info("[DEVICE-KEYS-1] validating and persisting E2EE identity bundle",
 		"user_id", userID.String(),
 		"device_id", req.DeviceID,

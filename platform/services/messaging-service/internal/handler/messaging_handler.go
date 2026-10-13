@@ -144,7 +144,15 @@ func (h *MessagingHandler) SendMessage(c *fiber.Ctx) error {
 			"error", err.Error())
 		return apperr.SendAppError(c, apperr.ErrInvalidRequestBody)
 	}
-	req.Normalize()
+	if req.MessageID == "" && req.IdempotencyKey != "" {
+		req.MessageID = req.IdempotencyKey
+	}
+	if req.IdempotencyKey == "" {
+		req.IdempotencyKey = req.MessageID
+	}
+	if req.IdempotencyKey == "" {
+		req.IdempotencyKey = uuid.NewString()
+	}
 
 	conversationIDStr := c.Params("id")
 	if req.ConversationID == nil && conversationIDStr != "" {
@@ -170,9 +178,6 @@ func (h *MessagingHandler) SendMessage(c *fiber.Ctx) error {
 	)
 
 	resolvedSignalType := req.Type
-	if resolvedSignalType == 0 {
-		resolvedSignalType = req.TypeSnake
-	}
 	messageType := model.MessageTypeText
 	if resolvedSignalType != 0 {
 		messageType = model.MessageType(strconv.Itoa(int(resolvedSignalType)))
@@ -361,7 +366,9 @@ func (h *MessagingHandler) UploadDeviceKeys(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return apperr.SendAppError(c, apperr.ErrInvalidRequestBody)
 	}
-	req.Normalize()
+	if len(req.IdentityPublicKey) == 0 && len(req.PublicKey) > 0 {
+		req.IdentityPublicKey = req.PublicKey
+	}
 
 	// Log a minimal, non-sensitive trace to help debug missing DB records in production.
 	// Do NOT log any key material.
