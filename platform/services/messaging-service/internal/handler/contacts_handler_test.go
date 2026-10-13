@@ -50,7 +50,7 @@ func TestRequestContactUsesAuthenticatedUserID(t *testing.T) {
 	})
 	app.Post("/contacts/request", handler.RequestContact)
 
-	payload := bytes.NewBufferString(fmt.Sprintf(`{"target_user_id":"%s"}`, targetID.String()))
+	payload := bytes.NewBufferString(fmt.Sprintf(`{"targetUserId":"%s"}`, targetID.String()))
 	req := httptest.NewRequest(http.MethodPost, "/contacts/request", payload)
 	req.Header.Set("Content-Type", "application/json")
 

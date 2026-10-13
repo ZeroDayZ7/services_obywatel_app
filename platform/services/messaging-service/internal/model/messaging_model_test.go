@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -94,6 +95,48 @@ func TestMessageEnvelopeJSONUsesCamelCaseOnly(t *testing.T) {
 	}
 	if !strings.Contains(jsonText, "\"conversationId\"") {
 		t.Fatalf("expected camelCase conversationId; got %s", jsonText)
+	}
+}
+
+func TestContactJSONUsesCamelCaseOnly(t *testing.T) {
+	contact := Contact{
+		ID:        uuid.New(),
+		OwnerID:   uuid.New(),
+		ContactID: uuid.New(),
+		Status:    ContactStatusPending,
+		Direction: ContactDirectionOutgoing,
+		Version:   1,
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+
+	payload, err := json.Marshal(contact)
+	if err != nil {
+		t.Fatalf("marshal contact: %v", err)
+	}
+
+	jsonText := string(payload)
+	for _, key := range []string{"\"ID\"", "\"OwnerID\"", "\"ContactID\"", "\"local_alias\"", "\"created_at\""} {
+		if strings.Contains(jsonText, key) {
+			t.Fatalf("legacy key %s should not be serialized in camelCase contract; got %s", key, jsonText)
+		}
+	}
+	for _, key := range []string{"\"id\"", "\"ownerId\"", "\"contactId\"", "\"status\"", "\"direction\"", "\"version\"", "\"createdAt\"", "\"updatedAt\""} {
+		if !strings.Contains(jsonText, key) {
+			t.Fatalf("expected camelCase key %s; got %s", key, jsonText)
+		}
+	}
+}
+
+func TestSendContactRequestUsesCamelCaseOnly(t *testing.T) {
+	payload := []byte(`{"targetUserId":"` + uuid.NewString() + `"}`)
+
+	var req SendContactRequest
+	if err := json.Unmarshal(payload, &req); err != nil {
+		t.Fatalf("unmarshal camelCase payload: %v", err)
+	}
+	if req.TargetUserID == uuid.Nil {
+		t.Fatal("expected targetUserId to be parsed")
 	}
 }
 
