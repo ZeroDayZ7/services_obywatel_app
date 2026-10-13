@@ -32,3 +32,5 @@ docker compose --profile app down messaging-service db-messaging -v && docker co
 docker compose --profile app rm -s -f -v messaging-service db-messaging && docker compose --profile app up -d --build messaging-service db-messaging
 
 docker compose --profile app rm -s -f -v citizen-docs db-citizen-docs && docker compose --profile app up -d --build citizen-docs db-citizen-docs
+
+find . -type f -name "combined.txt" -delete

@@ -52,7 +52,8 @@
     "**/Dockerfile": true,
     "**/.dockerignore": true,
     "**/obywatel-app.code-workspace": true,
-    "**/combined.txt": true
+    "**/combined.txt": true,
+
   },
   "[go]": {
     "editor.formatOnSave": true,
