@@ -23,6 +23,25 @@ type stubContactsRepo struct {
 	created *model.Contact
 }
 
+type stubTargetValidator struct{}
+
+func (s *stubTargetValidator) GetActivationStatus(ctx context.Context, userID uuid.UUID) (*model.MessagingActivation, error) {
+	return &model.MessagingActivation{
+		UserID:          userID,
+		Status:          model.ActivationStatusActive,
+		ConsentAccepted: true,
+		TermsVersion:    model.CurrentMessagingTerms().Version,
+	}, nil
+}
+
+func (s *stubTargetValidator) GetLatestDeviceIdentityForUser(ctx context.Context, userID uuid.UUID) (*model.UserDeviceIdentity, error) {
+	return &model.UserDeviceIdentity{
+		UserID:    userID,
+		DeviceID:  "device-1",
+		PublicKey: []byte{0x01, 0x02, 0x03},
+	}, nil
+}
+
 func (r *stubContactsRepo) GetContactsByUserID(ctx context.Context, userID uuid.UUID) ([]model.Contact, error) {
 	return nil, nil
 }
@@ -52,7 +71,7 @@ func TestContactsServiceUsesInjectedPublisherForContactEvents(t *testing.T) {
 	ownerID := uuid.New()
 	targetID := uuid.New()
 	pubs := &capturePublisher{}
-	svc := NewContactsService(&stubContactsRepo{}, shared.GetLogger(), pubs)
+	svc := NewContactsService(&stubContactsRepo{}, &stubTargetValidator{}, shared.GetLogger(), pubs)
 
 	_, err := svc.SendRequest(context.Background(), ownerID, targetID)
 	if err != nil {

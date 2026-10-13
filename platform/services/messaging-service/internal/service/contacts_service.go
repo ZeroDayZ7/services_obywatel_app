@@ -3,13 +3,16 @@ package service
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	apperr "github.com/zerodayz7/platform/pkg/errors"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/messaging-service/internal/model"
 	pub "github.com/zerodayz7/platform/services/messaging-service/internal/publisher"
 	"github.com/zerodayz7/platform/services/messaging-service/internal/repository"
+	"gorm.io/gorm"
 )
 
 var (
@@ -18,6 +21,11 @@ var (
 	ErrUnauthorizedAction   = errors.New("unauthorized to respond to this request")
 )
 
+type ContactTargetValidator interface {
+	GetActivationStatus(ctx context.Context, userID uuid.UUID) (*model.MessagingActivation, error)
+	GetLatestDeviceIdentityForUser(ctx context.Context, userID uuid.UUID) (*model.UserDeviceIdentity, error)
+}
+
 type ContactsService interface {
 	GetContacts(ctx context.Context, userID uuid.UUID) ([]model.Contact, error)
 	SendRequest(ctx context.Context, ownerID, targetID uuid.UUID) (*model.Contact, error)
@@ -25,16 +33,18 @@ type ContactsService interface {
 }
 
 type contactsService struct {
-	repo      repository.ContactsRepository
-	logger    *shared.Logger
-	publisher pub.EventPublisher
+	repo          repository.ContactsRepository
+	messagingRepo ContactTargetValidator
+	logger        *shared.Logger
+	publisher     pub.EventPublisher
 }
 
-func NewContactsService(repo repository.ContactsRepository, logger *shared.Logger, publisher pub.EventPublisher) ContactsService {
+func NewContactsService(repo repository.ContactsRepository, messagingRepo ContactTargetValidator, logger *shared.Logger, publisher pub.EventPublisher) ContactsService {
 	return &contactsService{
-		repo:      repo,
-		logger:    logger,
-		publisher: publisher,
+		repo:          repo,
+		messagingRepo: messagingRepo,
+		logger:        logger,
+		publisher:     publisher,
 	}
 }
 
@@ -58,7 +68,49 @@ func (s *contactsService) GetContacts(ctx context.Context, userID uuid.UUID) ([]
 	return contacts, nil
 }
 
+func (s *contactsService) validateTargetEligibility(ctx context.Context, ownerID, targetID uuid.UUID) error {
+	if ownerID == uuid.Nil || targetID == uuid.Nil {
+		return apperr.ErrValidationFailed.WithMeta("detail", "invalid user identifiers")
+	}
+	if ownerID == targetID {
+		return apperr.ErrValidationFailed.WithMeta("detail", "cannot send a contact request to yourself")
+	}
+	if s.messagingRepo == nil {
+		return apperr.ErrInternal.WithMeta("detail", "target user validation is unavailable")
+	}
+
+	activation, err := s.messagingRepo.GetActivationStatus(ctx, targetID)
+	if err != nil {
+		s.logger.Error("failed to read target activation state", "owner_id", ownerID.String(), "target_id", targetID.String(), "error", err)
+		return err
+	}
+	currentTerms := model.CurrentMessagingTerms()
+	if activation == nil || activation.Status != model.ActivationStatusActive || !activation.ConsentAccepted || strings.TrimSpace(activation.TermsVersion) == "" || activation.TermsVersion != currentTerms.Version {
+		return apperr.ErrValidationFailed.WithMeta("detail", "target user is not eligible for contact requests")
+	}
+
+	identity, err := s.messagingRepo.GetLatestDeviceIdentityForUser(ctx, targetID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return apperr.ErrValidationFailed.WithMeta("detail", "target user has no active device identity")
+		}
+		s.logger.Error("failed to read target device identity", "owner_id", ownerID.String(), "target_id", targetID.String(), "error", err)
+		return err
+	}
+	if identity == nil || len(identity.PublicKey) == 0 {
+		return apperr.ErrValidationFailed.WithMeta("detail", "target user has no active device identity")
+	}
+	return nil
+}
+
 func (s *contactsService) SendRequest(ctx context.Context, ownerID, targetID uuid.UUID) (*model.Contact, error) {
+	if ownerID == uuid.Nil || targetID == uuid.Nil {
+		return nil, apperr.ErrValidationFailed.WithMeta("detail", "invalid user identifiers")
+	}
+	if ownerID == targetID {
+		return nil, apperr.ErrValidationFailed.WithMeta("detail", "cannot send a contact request to yourself")
+	}
+
 	existing, err := s.repo.GetContactByOwnerAndTarget(ctx, ownerID, targetID)
 	if err != nil {
 		s.logger.Error("failed to check existing contact relation", "owner_id", ownerID.String(), "target_id", targetID.String(), "error", err)
@@ -67,6 +119,15 @@ func (s *contactsService) SendRequest(ctx context.Context, ownerID, targetID uui
 	if existing != nil {
 		s.logger.Warn("contact relation already exists", "owner_id", ownerID.String(), "target_id", targetID.String())
 		return nil, ErrContactAlreadyExists
+	}
+
+	if err := s.validateTargetEligibility(ctx, ownerID, targetID); err != nil {
+		s.logger.Warn("contact invite rejected for ineligible target",
+			"owner_id", ownerID.String(),
+			"target_id", targetID.String(),
+			"error", err,
+		)
+		return nil, err
 	}
 
 	newContact := &model.Contact{

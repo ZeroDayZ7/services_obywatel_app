@@ -30,7 +30,7 @@ func NewContainer(db *gorm.DB, redisClient *pkgredis.Client, logger *shared.Logg
 	eventPublisher := pub.NewRedisPublisher(redisClient, logger)
 
 	messagingSvc := service.NewMessagingService(messagingRepo, cfg, logger, eventPublisher)
-	contactsSvc := service.NewContactsService(contactsRepo, logger, eventPublisher)
+	contactsSvc := service.NewContactsService(contactsRepo, messagingRepo, logger, eventPublisher)
 
 	messagingHandler := handler.NewMessagingHandler(messagingSvc)
 	contactsHandler := handler.NewContactsHandler(contactsSvc)
