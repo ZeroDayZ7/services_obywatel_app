@@ -83,8 +83,8 @@ func main() {
 	if cfg.S3.Enabled {
 		log.Info("S3 Storage is ENABLED. Connecting...")
 		s3, err := storage.NewS3Storage(
-			cfg.S3.InternalAddress(),
-			cfg.S3.ExternalAddress(),
+			cfg.S3.InternalEndpoint,
+			cfg.S3.ExternalEndpoint,
 			cfg.S3.AccessKey,
 			cfg.S3.SecretKey,
 			cfg.S3.Bucket,

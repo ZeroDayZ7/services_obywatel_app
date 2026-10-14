@@ -55,34 +55,13 @@ type RedisConfig struct {
 // #region S3Config
 type S3Config struct {
 	Enabled          bool   `mapstructure:"S3_ENABLED"`
-	Endpoint         string `mapstructure:"S3_ENDPOINT"`
-	InternalEndpoint string `mapstructure:"MINIO_INTERNAL_ENDPOINT"`
-	ExternalEndpoint string `mapstructure:"MINIO_EXTERNAL_ENDPOINT"`
+	InternalEndpoint string `mapstructure:"MINIO_INTERNAL_ENDPOINT" validate:"required_if=Enabled true"`
+	ExternalEndpoint string `mapstructure:"MINIO_EXTERNAL_ENDPOINT" validate:"required_if=Enabled true"`
 	AccessKey        string `mapstructure:"S3_ACCESS_KEY" validate:"required_if=Enabled true"`
 	SecretKey        string `mapstructure:"S3_SECRET_KEY" validate:"required_if=Enabled true"`
 	Bucket           string `mapstructure:"S3_BUCKET" validate:"required_if=Enabled true"`
 	Region           string `mapstructure:"S3_REGION"`
 	UseSSL           bool   `mapstructure:"S3_USE_SSL"`
-}
-
-func (c S3Config) InternalAddress() string {
-	if strings.TrimSpace(c.InternalEndpoint) != "" {
-		return c.InternalEndpoint
-	}
-	if strings.TrimSpace(c.Endpoint) != "" {
-		return c.Endpoint
-	}
-	return "minio:9000"
-}
-
-func (c S3Config) ExternalAddress() string {
-	if strings.TrimSpace(c.ExternalEndpoint) != "" {
-		return c.ExternalEndpoint
-	}
-	if strings.TrimSpace(c.Endpoint) != "" {
-		return c.Endpoint
-	}
-	return "localhost:9000"
 }
 
 // #region InternalSecurityConfig

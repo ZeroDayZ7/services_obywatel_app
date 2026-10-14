@@ -71,7 +71,6 @@ func SetGatewayHMACDefaults() {
 // #region SetS3Defaults
 func SetS3Defaults() {
 	viper.SetDefault("S3_ENABLED", false)
-	viper.SetDefault("S3_ENDPOINT", "minio:9000")
 	viper.SetDefault("MINIO_INTERNAL_ENDPOINT", "minio:9000")
 	viper.SetDefault("MINIO_EXTERNAL_ENDPOINT", "localhost:9000")
 	viper.SetDefault("S3_ACCESS_KEY", "minioadmin")

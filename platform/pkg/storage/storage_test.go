@@ -5,25 +5,39 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-playground/validator/v10"
 	viperpkg "github.com/zerodayz7/platform/pkg/viper"
 )
 
-func TestS3ConfigResolvesInternalAndExternalEndpoints(t *testing.T) {
-	cfg := viperpkg.S3Config{InternalEndpoint: "minio:9000", ExternalEndpoint: "localhost:9000"}
-	if got := cfg.InternalAddress(); got != "minio:9000" {
-		t.Fatalf("internal endpoint mismatch: got %q", got)
-	}
-	if got := cfg.ExternalAddress(); got != "localhost:9000" {
-		t.Fatalf("external endpoint mismatch: got %q", got)
-	}
+func TestS3ConfigRequiresExplicitEndpointsWhenEnabled(t *testing.T) {
+	validate := validator.New()
 
-	legacy := viperpkg.S3Config{Endpoint: "minio:9000"}
-	if got := legacy.InternalAddress(); got != "minio:9000" {
-		t.Fatalf("legacy internal endpoint mismatch: got %q", got)
-	}
-	if got := legacy.ExternalAddress(); got != "minio:9000" {
-		t.Fatalf("legacy external endpoint fallback mismatch: got %q", got)
-	}
+	t.Run("valid endpoints pass", func(t *testing.T) {
+		cfg := viperpkg.S3Config{
+			Enabled:          true,
+			InternalEndpoint: "minio:9000",
+			ExternalEndpoint: "localhost:9000",
+			AccessKey:        "minioadmin",
+			SecretKey:        "minioadminpassword",
+			Bucket:           "citizens-data",
+		}
+		if err := validate.Struct(cfg); err != nil {
+			t.Fatalf("expected valid S3 config to pass validation: %v", err)
+		}
+	})
+
+	t.Run("missing external endpoint fails", func(t *testing.T) {
+		cfg := viperpkg.S3Config{
+			Enabled:          true,
+			InternalEndpoint: "minio:9000",
+			AccessKey:        "minioadmin",
+			SecretKey:        "minioadminpassword",
+			Bucket:           "citizens-data",
+		}
+		if err := validate.Struct(cfg); err == nil {
+			t.Fatal("expected validation to fail when external endpoint is missing")
+		}
+	})
 }
 
 func TestNoOpStoragePresignedURLsFailClosed(t *testing.T) {

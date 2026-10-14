@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/minio/minio-go/v7"
@@ -46,9 +47,9 @@ func NewS3Storage(internalEndpoint, externalEndpoint, access, secret, bucket str
 		}
 	}
 
-	presignEndpoint := externalEndpoint
+	presignEndpoint := strings.TrimSpace(externalEndpoint)
 	if presignEndpoint == "" {
-		presignEndpoint = internalEndpoint
+		return nil, fmt.Errorf("MINIO_EXTERNAL_ENDPOINT is required for presigned client URLs")
 	}
 	presignClient, err := newMinioClient(presignEndpoint, access, secret, useSSL)
 	if err != nil {
@@ -85,12 +86,15 @@ func (s *S3Storage) Download(ctx context.Context, key string) ([]byte, error) {
 
 // GetPresignedURL generuje tymczasowy link do bezpiecznego pobrania pliku przez obywatela/urzędnika
 // #region GetPresignedURL
-func (s *S3Storage) GetPresignedURL(ctx context.Context, key string, expires time.Duration) (string, error) {
-	client := s.client
+func (s *S3Storage) presignClientFor() *minio.Client {
 	if s.presignClient != nil {
-		client = s.presignClient
+		return s.presignClient
 	}
-	presignedURL, err := client.PresignedGetObject(ctx, s.bucket, key, expires, nil)
+	return s.client
+}
+
+func (s *S3Storage) GetPresignedURL(ctx context.Context, key string, expires time.Duration) (string, error) {
+	presignedURL, err := s.presignClientFor().PresignedGetObject(ctx, s.bucket, key, expires, nil)
 	if err != nil {
 		return "", err
 	}
@@ -98,11 +102,7 @@ func (s *S3Storage) GetPresignedURL(ctx context.Context, key string, expires tim
 }
 
 func (s *S3Storage) GetPresignedUploadURL(ctx context.Context, key string, expires time.Duration) (string, error) {
-	client := s.client
-	if s.presignClient != nil {
-		client = s.presignClient
-	}
-	presignedURL, err := client.PresignedPutObject(ctx, s.bucket, key, expires)
+	presignedURL, err := s.presignClientFor().PresignedPutObject(ctx, s.bucket, key, expires)
 	if err != nil {
 		return "", err
 	}
