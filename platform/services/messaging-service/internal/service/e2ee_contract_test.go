@@ -211,6 +211,18 @@ func TestValidateSenderDeviceBindingAllowsRegisteredDevice(t *testing.T) {
 	}
 }
 
+func TestAllocateSignalDeviceIDKeepsUniqueAssignments(t *testing.T) {
+	if got := allocateSignalDeviceID(0, 0); got != 1 {
+		t.Fatalf("expected first device id to start from 1, got %d", got)
+	}
+	if got := allocateSignalDeviceID(0, 7); got != 8 {
+		t.Fatalf("expected next per-user device id to be 8, got %d", got)
+	}
+	if got := allocateSignalDeviceID(19, 7); got != 19 {
+		t.Fatalf("expected explicit device id 19 to be preserved, got %d", got)
+	}
+}
+
 func TestValidateSenderDeviceBindingRejectsUnknownDevice(t *testing.T) {
 	userID := uuid.New()
 	if err := ValidateSenderDeviceBinding(userID, "device-999", []string{"device-42", "device-77"}); err == nil {

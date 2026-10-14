@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"strings"
 
@@ -35,6 +36,7 @@ type MessagingRepository interface {
 	// E2EE Keys & Identity
 	GetDeviceIdentity(ctx context.Context, userID uuid.UUID, deviceID string) (*model.UserDeviceIdentity, error)
 	GetLatestDeviceIdentityForUser(ctx context.Context, userID uuid.UUID) (*model.UserDeviceIdentity, error)
+	GetMaxSignalDeviceIDForUser(ctx context.Context, userID uuid.UUID) (uint32, error)
 	SaveDeviceIdentity(ctx context.Context, identity *model.UserDeviceIdentity) error
 	SavePreKeys(ctx context.Context, keys []model.UserPreKey) error
 	PopPreKey(ctx context.Context, userID uuid.UUID, deviceID string) (*model.UserPreKey, error)
@@ -337,6 +339,21 @@ func (r *messagingRepository) GetDeviceIdentity(ctx context.Context, userID uuid
 
 func (r *messagingRepository) GetLatestDeviceIdentityForUser(ctx context.Context, userID uuid.UUID) (*model.UserDeviceIdentity, error) {
 	return r.GetDeviceIdentity(ctx, userID, "")
+}
+
+func (r *messagingRepository) GetMaxSignalDeviceIDForUser(ctx context.Context, userID uuid.UUID) (uint32, error) {
+	var maxID sql.NullInt64
+	if err := r.db.WithContext(ctx).
+		Model(&model.UserDeviceIdentity{}).
+		Select("COALESCE(MAX(signal_device_id), 0)").
+		Where("user_id = ? AND deleted_at IS NULL", userID).
+		Scan(&maxID).Error; err != nil {
+		return 0, err
+	}
+	if !maxID.Valid {
+		return 0, nil
+	}
+	return uint32(maxID.Int64), nil
 }
 
 func (r *messagingRepository) SaveDeviceIdentity(ctx context.Context, identity *model.UserDeviceIdentity) error {

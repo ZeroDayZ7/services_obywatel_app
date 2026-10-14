@@ -43,7 +43,7 @@ type UserDeviceIdentity struct {
 	ID             uuid.UUID `gorm:"type:uuid;primaryKey;default:uuidv7()" json:"id"`
 	UserID         uuid.UUID `gorm:"type:uuid;not null;uniqueIndex:idx_user_device_identity_active" json:"userId"`
 	DeviceID       string    `gorm:"type:varchar(64);not null;uniqueIndex:idx_user_device_identity_active" json:"deviceId"`
-	SignalDeviceID uint32    `gorm:"not null;default:1" json:"signalDeviceId"`
+	SignalDeviceID uint32    `gorm:"not null;default:0" json:"signalDeviceId"`
 	RegistrationID uint32    `gorm:"not null;default:0" json:"registrationId"`
 	PublicKey      []byte    `gorm:"type:bytea;not null" json:"publicKey"`
 

@@ -701,16 +701,21 @@ func validateDeviceKeyUpload(req model.UploadDeviceKeysRequest) error {
 	return nil
 }
 
-func BuildUserDeviceIdentity(userID uuid.UUID, req model.UploadDeviceKeysRequest) *model.UserDeviceIdentity {
-	signalDeviceID := req.SignalDeviceID
-	if signalDeviceID == 0 {
-		signalDeviceID = 1
+func allocateSignalDeviceID(requested uint32, currentMax uint32) uint32 {
+	if requested > 0 {
+		return requested
 	}
+	if currentMax == 0 {
+		return 1
+	}
+	return currentMax + 1
+}
 
+func BuildUserDeviceIdentity(userID uuid.UUID, req model.UploadDeviceKeysRequest) *model.UserDeviceIdentity {
 	return &model.UserDeviceIdentity{
 		UserID:              userID,
 		DeviceID:            req.DeviceID,
-		SignalDeviceID:      signalDeviceID,
+		SignalDeviceID:      allocateSignalDeviceID(req.SignalDeviceID, 0),
 		RegistrationID:      req.RegistrationID,
 		PublicKey:           req.IdentityPublicKey,
 		SignedPreKey:        req.SignedPreKey,
@@ -803,6 +808,16 @@ func (s *messagingService) UploadDeviceKeys(ctx context.Context, userID uuid.UUI
 		return apperr.ErrValidationFailed.WithMeta("detail", err.Error())
 	}
 
+	currentMaxSignalDeviceID, err := s.repo.GetMaxSignalDeviceIDForUser(ctx, userID)
+	if err != nil {
+		s.logger.Error("[DEVICE-KEYS-1.1a] failed to resolve next signal device id",
+			"user_id", userID.String(),
+			"device_id", req.DeviceID,
+			"error", err.Error(),
+		)
+		return err
+	}
+	req.SignalDeviceID = allocateSignalDeviceID(req.SignalDeviceID, currentMaxSignalDeviceID)
 	identity := BuildUserDeviceIdentity(userID, req)
 	if err := s.repo.SaveDeviceIdentity(ctx, identity); err != nil {
 		s.logger.Error("[DEVICE-KEYS-1.2] unable to persist device identity",
