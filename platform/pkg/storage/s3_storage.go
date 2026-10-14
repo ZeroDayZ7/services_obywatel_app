@@ -11,12 +11,12 @@ import (
 )
 
 type S3Storage struct {
-	client *minio.Client
-	bucket string
+	client        *minio.Client
+	presignClient *minio.Client
+	bucket        string
 }
 
-//#region NewS3Storage
-func NewS3Storage(endpoint, access, secret, bucket string, useSSL bool) (*S3Storage, error) {
+func newMinioClient(endpoint, access, secret string, useSSL bool) (*minio.Client, error) {
 	client, err := minio.New(endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(access, secret, ""),
 		Secure: useSSL,
@@ -24,23 +24,41 @@ func NewS3Storage(endpoint, access, secret, bucket string, useSSL bool) (*S3Stor
 	if err != nil {
 		return nil, fmt.Errorf("failed to create minio client: %w", err)
 	}
+	return client, nil
+}
+
+// #region NewS3Storage
+func NewS3Storage(internalEndpoint, externalEndpoint, access, secret, bucket string, useSSL bool) (*S3Storage, error) {
+	internalClient, err := newMinioClient(internalEndpoint, access, secret, useSSL)
+	if err != nil {
+		return nil, err
+	}
 
 	ctx := context.Background()
-	exists, err := client.BucketExists(ctx, bucket)
+	exists, err := internalClient.BucketExists(ctx, bucket)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check bucket existence: %w", err)
 	}
 	if !exists {
-		err = client.MakeBucket(ctx, bucket, minio.MakeBucketOptions{})
+		err = internalClient.MakeBucket(ctx, bucket, minio.MakeBucketOptions{})
 		if err != nil {
 			return nil, fmt.Errorf("failed to create bucket: %w", err)
 		}
 	}
 
-	return &S3Storage{client: client, bucket: bucket}, nil
+	presignEndpoint := externalEndpoint
+	if presignEndpoint == "" {
+		presignEndpoint = internalEndpoint
+	}
+	presignClient, err := newMinioClient(presignEndpoint, access, secret, useSSL)
+	if err != nil {
+		return nil, err
+	}
+
+	return &S3Storage{client: internalClient, presignClient: presignClient, bucket: bucket}, nil
 }
 
-//#region Upload
+// #region Upload
 func (s *S3Storage) Upload(ctx context.Context, name string, reader io.Reader, size int64, contentType string) (string, error) {
 	opts := minio.PutObjectOptions{
 		ContentType: contentType, // np. "application/pdf"
@@ -49,12 +67,12 @@ func (s *S3Storage) Upload(ctx context.Context, name string, reader io.Reader, s
 	return name, err
 }
 
-//#region Delete
+// #region Delete
 func (s *S3Storage) Delete(ctx context.Context, key string) error {
 	return s.client.RemoveObject(ctx, s.bucket, key, minio.RemoveObjectOptions{})
 }
 
-//#region Download
+// #region Download
 func (s *S3Storage) Download(ctx context.Context, key string) ([]byte, error) {
 	object, err := s.client.GetObject(ctx, s.bucket, key, minio.GetObjectOptions{})
 	if err != nil {
@@ -66,9 +84,13 @@ func (s *S3Storage) Download(ctx context.Context, key string) ([]byte, error) {
 }
 
 // GetPresignedURL generuje tymczasowy link do bezpiecznego pobrania pliku przez obywatela/urzędnika
-//#region GetPresignedURL
+// #region GetPresignedURL
 func (s *S3Storage) GetPresignedURL(ctx context.Context, key string, expires time.Duration) (string, error) {
-	presignedURL, err := s.client.PresignedGetObject(ctx, s.bucket, key, expires, nil)
+	client := s.client
+	if s.presignClient != nil {
+		client = s.presignClient
+	}
+	presignedURL, err := client.PresignedGetObject(ctx, s.bucket, key, expires, nil)
 	if err != nil {
 		return "", err
 	}
@@ -76,7 +98,11 @@ func (s *S3Storage) GetPresignedURL(ctx context.Context, key string, expires tim
 }
 
 func (s *S3Storage) GetPresignedUploadURL(ctx context.Context, key string, expires time.Duration) (string, error) {
-	presignedURL, err := s.client.PresignedPutObject(ctx, s.bucket, key, expires)
+	client := s.client
+	if s.presignClient != nil {
+		client = s.presignClient
+	}
+	presignedURL, err := client.PresignedPutObject(ctx, s.bucket, key, expires)
 	if err != nil {
 		return "", err
 	}
