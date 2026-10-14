@@ -194,6 +194,7 @@ type Message struct {
 	ConversationID uuid.UUID   `gorm:"type:uuid;index:idx_conv_seq,unique;not null" json:"conversationId,omitempty"`
 	SenderID       uuid.UUID   `gorm:"type:uuid;index;not null" json:"senderId,omitempty"`
 	SenderDeviceID string      `gorm:"type:varchar(64);not null" json:"senderDeviceId,omitempty"`
+	AttachmentID   *uuid.UUID  `gorm:"type:uuid;index" json:"attachmentId,omitempty"`
 	Type           MessageType `gorm:"type:varchar(20);not null;default:'text'" json:"type,omitempty"`
 	Sequence       uint64      `gorm:"index:idx_conv_seq,unique;not null" json:"sequence,omitempty"`
 
@@ -213,6 +214,7 @@ func (m Message) MarshalJSON() ([]byte, error) {
 		"conversationId":   m.ConversationID,
 		"senderId":         m.SenderID,
 		"senderDeviceId":   m.SenderDeviceID,
+		"attachmentId":     m.AttachmentID,
 		"type":             m.Type,
 		"sequence":         m.Sequence,
 		"encryptedPayload": base64.StdEncoding.EncodeToString(m.EncryptedPayload),
@@ -367,6 +369,7 @@ type SendMessageRequest struct {
 	SenderDeviceID    string     `json:"senderDeviceId,omitempty"`
 	RecipientUserID   uuid.UUID  `json:"recipientUserId,omitempty"`
 	RecipientDeviceID string     `json:"recipientDeviceId,omitempty"`
+	AttachmentID      *uuid.UUID `json:"attachmentId,omitempty"`
 	Ciphertext        []byte     `json:"ciphertext,omitempty"`
 	Type              uint8      `json:"type,omitempty"`
 	Content           string     `json:"content,omitempty"`

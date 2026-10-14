@@ -187,6 +187,7 @@ func (h *MessagingHandler) SendMessage(c *fiber.Ctx) error {
 		ConversationID:   *req.ConversationID,
 		SenderID:         *rc.UserID,
 		SenderDeviceID:   req.SenderDeviceID,
+		AttachmentID:     req.AttachmentID,
 		Type:             messageType,
 		EncryptedPayload: req.Ciphertext,
 		IdempotencyKey:   strings.TrimSpace(req.IdempotencyKey),
