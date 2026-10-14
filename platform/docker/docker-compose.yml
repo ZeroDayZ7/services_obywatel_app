@@ -547,6 +547,7 @@ services:
       - minio_root_pass
     networks:
       - cache-net
+      - gateway-net
     command: server /data --console-address ":9001"
     volumes:
       - minio_data:/data

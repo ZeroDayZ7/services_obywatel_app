@@ -20,5 +20,9 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.ConversationMember{},
 		&model.Message{},
 		&model.Attachment{},
+
+		// Private user space
+		&model.PersonalSpace{},
+		&model.PersonalSpaceItem{},
 	)
 }

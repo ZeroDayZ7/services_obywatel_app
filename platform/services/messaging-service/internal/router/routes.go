@@ -9,6 +9,7 @@ func SetupMessagingRoutes(app *fiber.App, container *di.Container) {
 	msgH := container.MessagingHandler
 	contactsH := container.ContactsHandler
 	attachmentH := container.AttachmentHandler
+	personalSpaceH := container.PersonalSpaceHandler
 
 	SetupHealthRoutes(app)
 
@@ -41,6 +42,15 @@ func SetupMessagingRoutes(app *fiber.App, container *di.Container) {
 	attachments.Post("/finalize", attachmentH.FinalizeUpload)
 	attachments.Get("/:id", attachmentH.GetAttachment)
 	attachments.Delete("/:id", attachmentH.DeleteAttachment)
+
+	// --- PRIVATE USER SPACE ---
+	personalSpace := api.Group("/personal-space")
+	personalSpace.Get("", personalSpaceH.GetOrCreateSpace)
+	personalSpace.Get("/items", personalSpaceH.ListItems)
+	personalSpace.Post("/items", personalSpaceH.CreateItem)
+	personalSpace.Get("/items/:id", personalSpaceH.GetItem)
+	personalSpace.Put("/items/:id", personalSpaceH.UpdateItem)
+	personalSpace.Delete("/items/:id", personalSpaceH.DeleteItem)
 
 	// --- MESSAGING ACTIVATION & ONBOARDING ---
 	messagingActivation := api.Group("/messaging")

@@ -8,7 +8,7 @@ import (
 
 const ServiceMessaging = "messaging-service"
 
-// RegisterMessagingRoutes podłącza grupy i endpointy dla kontaktów, konwersacji, wiadomości, sync, E2EE oraz załączników.
+// RegisterMessagingRoutes podłącza grupy i endpointy dla kontaktów, konwersacji, wiadomości, sync, E2EE, załączników oraz prywatnej przestrzeni użytkownika.
 func RegisterMessagingRoutes(app *fiber.App, container *di.Container) {
 	target := container.Config.Services.Messaging
 
@@ -42,6 +42,27 @@ func RegisterMessagingRoutes(app *fiber.App, container *di.Container) {
 		// gwMiddleware.RequirePermissions("messages.write"),
 		ReverseProxySecure(container, ServiceMessaging, target))
 	convs.Post("/:id/read",
+		// gwMiddleware.RequirePermissions("messages.write"),
+		ReverseProxySecure(container, ServiceMessaging, target))
+
+	// --- PRIVATE USER SPACE ---
+	personalSpace := app.Group("/personal-space")
+	personalSpace.Get("",
+		// gwMiddleware.RequirePermissions("messages.read"),
+		ReverseProxySecure(container, ServiceMessaging, target))
+	personalSpace.Get("/items",
+		// gwMiddleware.RequirePermissions("messages.read"),
+		ReverseProxySecure(container, ServiceMessaging, target))
+	personalSpace.Post("/items",
+		// gwMiddleware.RequirePermissions("messages.write"),
+		ReverseProxySecure(container, ServiceMessaging, target))
+	personalSpace.Get("/items/:id",
+		// gwMiddleware.RequirePermissions("messages.read"),
+		ReverseProxySecure(container, ServiceMessaging, target))
+	personalSpace.Put("/items/:id",
+		// gwMiddleware.RequirePermissions("messages.write"),
+		ReverseProxySecure(container, ServiceMessaging, target))
+	personalSpace.Delete("/items/:id",
 		// gwMiddleware.RequirePermissions("messages.write"),
 		ReverseProxySecure(container, ServiceMessaging, target))
 
