@@ -392,10 +392,18 @@ func (s *messagingService) publishMessageEvent(ctx context.Context, msg *model.M
 	}
 
 	targetUsers := make([]uuid.UUID, 0, len(conversation.Members))
+	seen := make(map[uuid.UUID]struct{}, len(conversation.Members))
 	for _, member := range conversation.Members {
-		if member.UserID == uuid.Nil || member.UserID == msg.SenderID {
+		if member.UserID == uuid.Nil {
 			continue
 		}
+		if member.UserID == msg.SenderID && len(conversation.Members) > 1 {
+			continue
+		}
+		if _, exists := seen[member.UserID]; exists {
+			continue
+		}
+		seen[member.UserID] = struct{}{}
 		targetUsers = append(targetUsers, member.UserID)
 	}
 	if len(targetUsers) == 0 {
@@ -512,12 +520,13 @@ func (s *messagingService) CreateConversation(ctx context.Context, userID uuid.U
 	}
 
 	for _, recipientID := range req.RecipientIDs {
-		if recipientID != userID {
-			conv.Members = append(conv.Members, model.ConversationMember{
-				UserID: recipientID,
-				Role:   "member",
-			})
+		if recipientID == userID {
+			continue
 		}
+		conv.Members = append(conv.Members, model.ConversationMember{
+			UserID: recipientID,
+			Role:   "member",
+		})
 	}
 
 	if err := s.repo.CreateConversation(ctx, conv); err != nil {

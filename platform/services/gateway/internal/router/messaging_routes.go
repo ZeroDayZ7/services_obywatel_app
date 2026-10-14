@@ -45,27 +45,6 @@ func RegisterMessagingRoutes(app *fiber.App, container *di.Container) {
 		// gwMiddleware.RequirePermissions("messages.write"),
 		ReverseProxySecure(container, ServiceMessaging, target))
 
-	// --- PRIVATE USER SPACE ---
-	personalSpace := app.Group("/personal-space")
-	personalSpace.Get("",
-		// gwMiddleware.RequirePermissions("messages.read"),
-		ReverseProxySecure(container, ServiceMessaging, target))
-	personalSpace.Get("/items",
-		// gwMiddleware.RequirePermissions("messages.read"),
-		ReverseProxySecure(container, ServiceMessaging, target))
-	personalSpace.Post("/items",
-		// gwMiddleware.RequirePermissions("messages.write"),
-		ReverseProxySecure(container, ServiceMessaging, target))
-	personalSpace.Get("/items/:id",
-		// gwMiddleware.RequirePermissions("messages.read"),
-		ReverseProxySecure(container, ServiceMessaging, target))
-	personalSpace.Put("/items/:id",
-		// gwMiddleware.RequirePermissions("messages.write"),
-		ReverseProxySecure(container, ServiceMessaging, target))
-	personalSpace.Delete("/items/:id",
-		// gwMiddleware.RequirePermissions("messages.write"),
-		ReverseProxySecure(container, ServiceMessaging, target))
-
 	// --- DELTA SYNC & OUTBOX ---
 	sync := app.Group("/sync")
 	sync.Get("/delta",

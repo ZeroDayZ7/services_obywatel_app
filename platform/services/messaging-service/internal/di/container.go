@@ -14,20 +14,18 @@ import (
 )
 
 type Container struct {
-	DB                   *gorm.DB
-	Config               *config.Config
-	Logger               *shared.Logger
-	KeyStore             *httpserver.KeyStore
-	Storage              storage.StorageClient
-	Redis                *pkgredis.Client
-	MessagingSvc         service.MessagingService
-	ContactsSvc          service.ContactsService
-	AttachmentSvc        service.AttachmentService
-	PersonalSpaceSvc     service.PersonalSpaceService
-	MessagingHandler     *handler.MessagingHandler
-	ContactsHandler      *handler.ContactsHandler
-	AttachmentHandler    *handler.AttachmentHandler
-	PersonalSpaceHandler *handler.PersonalSpaceHandler
+	DB                *gorm.DB
+	Config            *config.Config
+	Logger            *shared.Logger
+	KeyStore          *httpserver.KeyStore
+	Storage           storage.StorageClient
+	Redis             *pkgredis.Client
+	MessagingSvc      service.MessagingService
+	ContactsSvc       service.ContactsService
+	AttachmentSvc     service.AttachmentService
+	MessagingHandler  *handler.MessagingHandler
+	ContactsHandler   *handler.ContactsHandler
+	AttachmentHandler *handler.AttachmentHandler
 }
 
 func NewContainer(
@@ -40,33 +38,28 @@ func NewContainer(
 ) *Container {
 	messagingRepo := repository.NewMessagingRepository(db)
 	contactsRepo := repository.NewContactsRepository(db)
-	personalSpaceRepo := repository.NewPersonalSpaceRepository(db)
 	eventPublisher := pub.NewRedisPublisher(redisClient, logger)
 
 	messagingSvc := service.NewMessagingService(messagingRepo, cfg, logger, eventPublisher)
 	contactsSvc := service.NewContactsService(contactsRepo, messagingRepo, logger, eventPublisher)
 	attachmentSvc := service.NewAttachmentService(messagingRepo, fileStorage, logger, 25*1024*1024)
-	personalSpaceSvc := service.NewPersonalSpaceService(personalSpaceRepo)
 
 	messagingHandler := handler.NewMessagingHandler(messagingSvc)
 	contactsHandler := handler.NewContactsHandler(contactsSvc)
 	attachmentHandler := handler.NewAttachmentHandler(attachmentSvc)
-	personalSpaceHandler := handler.NewPersonalSpaceHandler(personalSpaceSvc)
 
 	return &Container{
-		DB:                   db,
-		Config:               cfg,
-		Logger:               logger,
-		KeyStore:             keyStore,
-		Storage:              fileStorage,
-		Redis:                redisClient,
-		MessagingSvc:         messagingSvc,
-		ContactsSvc:          contactsSvc,
-		AttachmentSvc:        attachmentSvc,
-		PersonalSpaceSvc:     personalSpaceSvc,
-		MessagingHandler:     messagingHandler,
-		ContactsHandler:      contactsHandler,
-		AttachmentHandler:    attachmentHandler,
-		PersonalSpaceHandler: personalSpaceHandler,
+		DB:                db,
+		Config:            cfg,
+		Logger:            logger,
+		KeyStore:          keyStore,
+		Storage:           fileStorage,
+		Redis:             redisClient,
+		MessagingSvc:      messagingSvc,
+		ContactsSvc:       contactsSvc,
+		AttachmentSvc:     attachmentSvc,
+		MessagingHandler:  messagingHandler,
+		ContactsHandler:   contactsHandler,
+		AttachmentHandler: attachmentHandler,
 	}
 }

@@ -179,8 +179,30 @@ func (r *messagingRepository) GetConversationByID(ctx context.Context, userID, c
 }
 
 func (r *messagingRepository) FindDirectConversationByUsers(ctx context.Context, userA, userB uuid.UUID) (*model.Conversation, error) {
-	if userA == uuid.Nil || userB == uuid.Nil || userA == userB {
+	if userA == uuid.Nil || userB == uuid.Nil {
 		return nil, nil
+	}
+
+	if userA == userB {
+		var conv model.Conversation
+		err := r.db.WithContext(ctx).
+			Table("conversations").
+			Joins("JOIN conversation_members cm ON cm.conversation_id = conversations.id").
+			Where("conversations.type = ?", model.ConversationTypeDirect).
+			Where("cm.user_id = ?", userA).
+			Where("conversations.deleted_at IS NULL AND cm.deleted_at IS NULL").
+			Preload("Members").
+			First(&conv).Error
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, nil
+			}
+			return nil, err
+		}
+		if len(conv.Members) > 1 {
+			return nil, nil
+		}
+		return &conv, nil
 	}
 
 	var conv model.Conversation
