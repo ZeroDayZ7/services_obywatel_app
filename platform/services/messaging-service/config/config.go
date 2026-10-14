@@ -25,6 +25,7 @@ type Config struct {
 	Server          viper.ServerConfig  `mapstructure:",squash"`
 	Database        viper.DBConfig      `mapstructure:",squash"`
 	OTEL            viper.OTELConfig    `mapstructure:",squash"`
+	S3              viper.S3Config      `mapstructure:",squash"`
 	KMS             viper.KMSConfig     `mapstructure:",squash"`
 	Redis           viper.RedisConfig   `mapstructure:",squash"`
 	HMAC            MessagingHMACConfig `mapstructure:",squash"`

@@ -11,6 +11,7 @@ import (
 	pkgredis "github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/server"
 	"github.com/zerodayz7/platform/pkg/shared"
+	"github.com/zerodayz7/platform/pkg/storage" // <-- Import paczki storage
 	"github.com/zerodayz7/platform/services/messaging-service/app"
 	"github.com/zerodayz7/platform/services/messaging-service/config"
 	"github.com/zerodayz7/platform/services/messaging-service/internal/di"
@@ -57,7 +58,7 @@ func main() {
 	db, closeDB := config.MustInitDB(config.AppConfig.Database)
 	defer closeDB()
 
-	// 5. Redis client for websocket event fan-out (spójne rzutowanie z pkg.viper/redis)
+	// 5. Redis client for websocket event fan-out
 	redisClient, err := pkgredis.New(pkgredis.Config(config.AppConfig.Redis))
 	if err != nil {
 		log.Warn("Redis is not available for messaging-service; websocket notifications will be skipped", "error", err)
@@ -70,8 +71,29 @@ func main() {
 		log.Info("Redis connected for messaging-service websocket notifications", "host", config.AppConfig.Redis.Host, "db", config.AppConfig.Redis.DB)
 	}
 
-	// 6. DI Container & App Setup
-	container := di.NewContainer(db, redisClient, log, &config.AppConfig, keyStore)
+	// 5.5. S3 / MinIO Storage Initialization (zgodnie z wzorcem z identity-service)
+	var fileStorage storage.StorageClient
+	if config.AppConfig.S3.Enabled {
+		log.Info("S3 Storage is ENABLED. Connecting...")
+		s3, err := storage.NewS3Storage(
+			config.AppConfig.S3.Endpoint,
+			config.AppConfig.S3.AccessKey,
+			config.AppConfig.S3.SecretKey,
+			config.AppConfig.S3.Bucket,
+			config.AppConfig.S3.UseSSL,
+		)
+		if err != nil {
+			log.Error("❌ S3 initialization failed", "error", err)
+			os.Exit(1)
+		}
+		fileStorage = s3
+	} else {
+		log.Warn("S3 Storage is DISABLED. Using No-Op storage.")
+		fileStorage = &storage.NoOpStorage{}
+	}
+
+	// 6. DI Container & App Setup (przekazujemy fileStorage)
+	container := di.NewContainer(db, redisClient, fileStorage, log, &config.AppConfig, keyStore)
 	messagingApp := app.NewApp(container)
 
 	router.SetupMessagingRoutes(messagingApp, container)
