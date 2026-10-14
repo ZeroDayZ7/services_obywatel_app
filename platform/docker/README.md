@@ -3,6 +3,8 @@ docker compose --profile web up -d
 docker compose --profile app up -d
 docker compose --profile full up -d
 
+adb -s 5200d78bfa479449 reverse tcp:8080 tcp:8080
+
 docker compose up -d --force-recreate rabbitmq
 
 docker compose --profile "*" logs -f
