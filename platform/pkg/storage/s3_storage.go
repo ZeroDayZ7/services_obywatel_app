@@ -30,6 +30,11 @@ func newMinioClient(endpoint, access, secret string, useSSL bool) (*minio.Client
 
 // #region NewS3Storage
 func NewS3Storage(internalEndpoint, externalEndpoint, access, secret, bucket string, useSSL bool) (*S3Storage, error) {
+	internalEndpoint = strings.TrimSpace(internalEndpoint)
+	if internalEndpoint == "" {
+		return nil, fmt.Errorf("MINIO_INTERNAL_ENDPOINT is required for internal MinIO access")
+	}
+
 	internalClient, err := newMinioClient(internalEndpoint, access, secret, useSSL)
 	if err != nil {
 		return nil, err
@@ -38,12 +43,12 @@ func NewS3Storage(internalEndpoint, externalEndpoint, access, secret, bucket str
 	ctx := context.Background()
 	exists, err := internalClient.BucketExists(ctx, bucket)
 	if err != nil {
-		return nil, fmt.Errorf("failed to check bucket existence: %w", err)
+		return nil, fmt.Errorf("failed to check bucket existence via internal endpoint %s: %w", internalEndpoint, err)
 	}
 	if !exists {
 		err = internalClient.MakeBucket(ctx, bucket, minio.MakeBucketOptions{})
 		if err != nil {
-			return nil, fmt.Errorf("failed to create bucket: %w", err)
+			return nil, fmt.Errorf("failed to create bucket via internal endpoint %s: %w", internalEndpoint, err)
 		}
 	}
 

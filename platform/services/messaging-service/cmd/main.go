@@ -74,7 +74,13 @@ func main() {
 	// 5.5. S3 / MinIO Storage Initialization (zgodnie z wzorcem z identity-service)
 	var fileStorage storage.StorageClient
 	if config.AppConfig.S3.Enabled {
-		log.Info("S3 Storage is ENABLED. Connecting...")
+		log.Info(
+			"S3 Storage is ENABLED. Connecting...",
+			"internal_endpoint", config.AppConfig.S3.InternalEndpoint,
+			"external_endpoint", config.AppConfig.S3.ExternalEndpoint,
+			"bucket", config.AppConfig.S3.Bucket,
+			"use_ssl", config.AppConfig.S3.UseSSL,
+		)
 		s3, err := storage.NewS3Storage(
 			config.AppConfig.S3.InternalEndpoint,
 			config.AppConfig.S3.ExternalEndpoint,

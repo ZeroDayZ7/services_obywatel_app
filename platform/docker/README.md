@@ -5,7 +5,7 @@ docker compose --profile full up -d
 
 adb -s 5200d78bfa479449 reverse tcp:8080 tcp:8080
 
-docker compose up -d --force-recreate rabbitmq
+docker compose up -d --force-recreate messaging-service 
 
 docker compose --profile "*" logs -f
 
@@ -14,7 +14,7 @@ docker compose --profile "*" logs -f --tail 100
 docker compose up -d --force-recreate gateway auth-service messaging-service websocket-service minio
 
 # logs
-docker compose logs -f gateway auth-service messaging-service websocket-service minio --tail 100
+docker compose logs -f gateway auth-service messaging-service websocket-service minio --tail 100 
 
 docker compose up -d gateway auth-service messaging-service websocket-service minio && docker compose logs -f gateway auth-service messaging-service websocket-service minio --tail 100
 
