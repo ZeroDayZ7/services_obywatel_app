@@ -26,6 +26,12 @@ type MessagingRepository interface {
 	CreateConversation(ctx context.Context, conv *model.Conversation) error
 	UpdateLastReadSequence(ctx context.Context, userID, conversationID uuid.UUID, sequence uint64) error
 
+	// Attachments
+	CreateAttachment(ctx context.Context, attachment *model.Attachment) error
+	GetAttachmentByID(ctx context.Context, attachmentID uuid.UUID) (*model.Attachment, error)
+	UpdateAttachment(ctx context.Context, attachment *model.Attachment) error
+	DeleteAttachment(ctx context.Context, attachmentID uuid.UUID) error
+
 	// E2EE Keys & Identity
 	GetDeviceIdentity(ctx context.Context, userID uuid.UUID, deviceID string) (*model.UserDeviceIdentity, error)
 	GetLatestDeviceIdentityForUser(ctx context.Context, userID uuid.UUID) (*model.UserDeviceIdentity, error)
@@ -205,6 +211,44 @@ func (r *messagingRepository) UpdateLastReadSequence(ctx context.Context, userID
 		Model(&model.ConversationMember{}).
 		Where("user_id = ? AND conversation_id = ?", userID, conversationID).
 		Update("last_read_sequence", sequence).Error
+}
+
+func (r *messagingRepository) CreateAttachment(ctx context.Context, attachment *model.Attachment) error {
+	if attachment == nil {
+		return errors.New("attachment is nil")
+	}
+	if attachment.ID == uuid.Nil {
+		attachment.ID = uuid.Must(uuid.NewV7())
+	}
+	return r.db.WithContext(ctx).Create(attachment).Error
+}
+
+func (r *messagingRepository) GetAttachmentByID(ctx context.Context, attachmentID uuid.UUID) (*model.Attachment, error) {
+	if attachmentID == uuid.Nil {
+		return nil, nil
+	}
+	var attachment model.Attachment
+	if err := r.db.WithContext(ctx).Where("id = ?", attachmentID).First(&attachment).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &attachment, nil
+}
+
+func (r *messagingRepository) UpdateAttachment(ctx context.Context, attachment *model.Attachment) error {
+	if attachment == nil {
+		return errors.New("attachment is nil")
+	}
+	return r.db.WithContext(ctx).Save(attachment).Error
+}
+
+func (r *messagingRepository) DeleteAttachment(ctx context.Context, attachmentID uuid.UUID) error {
+	if attachmentID == uuid.Nil {
+		return nil
+	}
+	return r.db.WithContext(ctx).Delete(&model.Attachment{}, "id = ?", attachmentID).Error
 }
 
 func (r *messagingRepository) GetActivationStatus(ctx context.Context, userID uuid.UUID) (*model.MessagingActivation, error) {

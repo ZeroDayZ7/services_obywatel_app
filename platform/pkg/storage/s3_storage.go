@@ -74,3 +74,24 @@ func (s *S3Storage) GetPresignedURL(ctx context.Context, key string, expires tim
 	}
 	return presignedURL.String(), nil
 }
+
+func (s *S3Storage) GetPresignedUploadURL(ctx context.Context, key string, expires time.Duration) (string, error) {
+	presignedURL, err := s.client.PresignedPutObject(ctx, s.bucket, key, expires)
+	if err != nil {
+		return "", err
+	}
+	return presignedURL.String(), nil
+}
+
+func (s *S3Storage) HeadObject(ctx context.Context, key string) (*ObjectMetadata, error) {
+	obj, err := s.client.StatObject(ctx, s.bucket, key, minio.StatObjectOptions{})
+	if err != nil {
+		return nil, err
+	}
+	return &ObjectMetadata{
+		ContentType:  obj.ContentType,
+		Size:         obj.Size,
+		ETag:         obj.ETag,
+		LastModified: obj.LastModified,
+	}, nil
+}

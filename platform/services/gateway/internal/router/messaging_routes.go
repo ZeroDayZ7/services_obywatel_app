@@ -8,7 +8,7 @@ import (
 
 const ServiceMessaging = "messaging-service"
 
-// RegisterMessagingRoutes podłącza grupy i endpointy dla kontaktów, konwersacji, wiadomości, sync i E2EE.
+// RegisterMessagingRoutes podłącza grupy i endpointy dla kontaktów, konwersacji, wiadomości, sync, E2EE oraz załączników.
 func RegisterMessagingRoutes(app *fiber.App, container *di.Container) {
 	target := container.Config.Services.Messaging
 
@@ -83,5 +83,20 @@ func RegisterMessagingRoutes(app *fiber.App, container *di.Container) {
 		ReverseProxySecure(container, ServiceMessaging, target))
 	e2ee.Get("/keys/bundle/:userId",
 		// gwMiddleware.RequirePermissions("messages.read"),
+		ReverseProxySecure(container, ServiceMessaging, target))
+
+	// --- ATTACHMENTS (S3 / MinIO Proxy) ---
+	attachments := app.Group("/attachments")
+	attachments.Post("/upload",
+		// gwMiddleware.RequirePermissions("messages.write"),
+		ReverseProxySecure(container, ServiceMessaging, target))
+	attachments.Post("/finalize",
+		// gwMiddleware.RequirePermissions("messages.write"),
+		ReverseProxySecure(container, ServiceMessaging, target))
+	attachments.Get("/:id",
+		// gwMiddleware.RequirePermissions("messages.read"),
+		ReverseProxySecure(container, ServiceMessaging, target))
+	attachments.Delete("/:id",
+		// gwMiddleware.RequirePermissions("messages.write"),
 		ReverseProxySecure(container, ServiceMessaging, target))
 }

@@ -14,16 +14,18 @@ import (
 )
 
 type Container struct {
-	DB               *gorm.DB
-	Config           *config.Config
-	Logger           *shared.Logger
-	KeyStore         *httpserver.KeyStore
-	Storage          storage.StorageClient
-	Redis            *pkgredis.Client
-	MessagingSvc     service.MessagingService
-	ContactsSvc      service.ContactsService
-	MessagingHandler *handler.MessagingHandler
-	ContactsHandler  *handler.ContactsHandler
+	DB                *gorm.DB
+	Config            *config.Config
+	Logger            *shared.Logger
+	KeyStore          *httpserver.KeyStore
+	Storage           storage.StorageClient
+	Redis             *pkgredis.Client
+	MessagingSvc      service.MessagingService
+	ContactsSvc       service.ContactsService
+	AttachmentSvc     service.AttachmentService
+	MessagingHandler  *handler.MessagingHandler
+	ContactsHandler   *handler.ContactsHandler
+	AttachmentHandler *handler.AttachmentHandler
 }
 
 func NewContainer(
@@ -40,19 +42,24 @@ func NewContainer(
 
 	messagingSvc := service.NewMessagingService(messagingRepo, cfg, logger, eventPublisher)
 	contactsSvc := service.NewContactsService(contactsRepo, messagingRepo, logger, eventPublisher)
+	attachmentSvc := service.NewAttachmentService(messagingRepo, fileStorage, logger, 25*1024*1024)
 
 	messagingHandler := handler.NewMessagingHandler(messagingSvc)
 	contactsHandler := handler.NewContactsHandler(contactsSvc)
+	attachmentHandler := handler.NewAttachmentHandler(attachmentSvc)
 
 	return &Container{
-		DB:               db,
-		Config:           cfg,
-		Logger:           logger,
-		KeyStore:         keyStore,
-		Redis:            redisClient,
-		MessagingSvc:     messagingSvc,
-		ContactsSvc:      contactsSvc,
-		MessagingHandler: messagingHandler,
-		ContactsHandler:  contactsHandler,
+		DB:                db,
+		Config:            cfg,
+		Logger:            logger,
+		KeyStore:          keyStore,
+		Storage:           fileStorage,
+		Redis:             redisClient,
+		MessagingSvc:      messagingSvc,
+		ContactsSvc:       contactsSvc,
+		AttachmentSvc:     attachmentSvc,
+		MessagingHandler:  messagingHandler,
+		ContactsHandler:   contactsHandler,
+		AttachmentHandler: attachmentHandler,
 	}
 }
