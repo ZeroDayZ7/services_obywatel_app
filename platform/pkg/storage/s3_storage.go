@@ -47,16 +47,21 @@ func NewS3Storage(internalEndpoint, externalEndpoint, access, secret, bucket str
 		}
 	}
 
-	presignEndpoint := strings.TrimSpace(externalEndpoint)
-	if presignEndpoint == "" {
+	externalEndpoint = strings.TrimSpace(externalEndpoint)
+	if externalEndpoint == "" {
 		return nil, fmt.Errorf("MINIO_EXTERNAL_ENDPOINT is required for presigned client URLs")
 	}
-	presignClient, err := newMinioClient(presignEndpoint, access, secret, useSSL)
+
+	presignClient, err := newMinioClient(externalEndpoint, access, secret, useSSL)
 	if err != nil {
 		return nil, err
 	}
 
-	return &S3Storage{client: internalClient, presignClient: presignClient, bucket: bucket}, nil
+	return &S3Storage{
+		client:        internalClient,
+		presignClient: presignClient,
+		bucket:        bucket,
+	}, nil
 }
 
 // #region Upload

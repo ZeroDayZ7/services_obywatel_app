@@ -85,6 +85,18 @@ func (s *attachmentService) PrepareUpload(ctx context.Context, userID uuid.UUID,
 	}
 	uploadURL, err := s.storage.GetPresignedUploadURL(ctx, attachment.FileKey, defaultAttachmentUploadTTL)
 	if err != nil {
+		if s.logger != nil {
+			s.logger.Error(
+				"[ATTACHMENT-UPLOAD-1] presigned upload URL generation failed",
+				"user_id", userID.String(),
+				"attachment_id", attachment.ID.String(),
+				"file_key", attachment.FileKey,
+				"file_name", req.FileName,
+				"content_type", req.ContentType,
+				"size_bytes", req.Size,
+				"error", err,
+			)
+		}
 		return nil, apperr.ErrInternal.WithMeta("detail", "failed to create upload url")
 	}
 
