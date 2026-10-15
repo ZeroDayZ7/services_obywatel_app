@@ -128,10 +128,6 @@ func (s *attachmentService) FinalizeUpload(ctx context.Context, userID uuid.UUID
 	if attachment.Status == model.AttachmentStatusDeleted {
 		return nil, apperr.ErrNotFound
 	}
-	if req.Size > 0 && attachment.Size != req.Size {
-		return nil, apperr.ErrValidationFailed.WithMeta("detail", "attachment size mismatch")
-	}
-
 	if s.storage != nil {
 		if _, err := s.storage.HeadObject(ctx, attachment.FileKey); err != nil {
 			return nil, apperr.ErrValidationFailed.WithMeta("detail", "attachment file has not been uploaded yet")
@@ -139,6 +135,19 @@ func (s *attachmentService) FinalizeUpload(ctx context.Context, userID uuid.UUID
 		payload, err := s.storage.Download(ctx, attachment.FileKey)
 		if err != nil {
 			return nil, apperr.ErrValidationFailed.WithMeta("detail", "failed to read uploaded attachment")
+		}
+		actualUploadedSize := int64(len(payload))
+		if req.Size > 0 && attachment.Size != req.Size {
+			if s.logger != nil {
+				s.logger.Warn(
+					"[ATTACHMENT-FINALIZE-1] attachment size mismatch",
+					"attachment_id", attachment.ID.String(),
+					"stored_original_size", attachment.Size,
+					"request_size", req.Size,
+					"uploaded_object_size", actualUploadedSize,
+				)
+			}
+			return nil, apperr.ErrValidationFailed.WithMeta("detail", "attachment size mismatch")
 		}
 		sum := sha256.Sum256(payload)
 		realHash := hex.EncodeToString(sum[:])

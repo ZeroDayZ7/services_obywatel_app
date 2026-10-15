@@ -235,6 +235,20 @@ func buildMessageFromOutboxEvent(userID uuid.UUID, evt model.OutboxEventPayload)
 					ciphertext = strings.TrimSpace(rawCiphertext)
 				}
 			}
+			if evt.AttachmentID == nil {
+				if rawAttachmentID, ok := payload["attachmentId"].(string); ok && rawAttachmentID != "" {
+					if parsed, err := uuid.Parse(rawAttachmentID); err == nil {
+						evt.AttachmentID = &parsed
+					}
+				}
+			}
+			if evt.AttachmentID == nil {
+				if rawAttachmentID, ok := payload["attachment_id"].(string); ok && rawAttachmentID != "" {
+					if parsed, err := uuid.Parse(rawAttachmentID); err == nil {
+						evt.AttachmentID = &parsed
+					}
+				}
+			}
 			if idempotencyKey == "" {
 				if rawKey, ok := payload["idempotency_key"].(string); ok {
 					idempotencyKey = strings.TrimSpace(rawKey)
@@ -291,6 +305,7 @@ func buildMessageFromOutboxEvent(userID uuid.UUID, evt model.OutboxEventPayload)
 		ConversationID:   *conversationID,
 		SenderID:         userID,
 		SenderDeviceID:   evt.SenderDeviceID,
+		AttachmentID:     evt.AttachmentID,
 		Type:             messageType,
 		EncryptedPayload: []byte(ciphertext),
 		IdempotencyKey:   idempotencyKey,

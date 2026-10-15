@@ -299,6 +299,7 @@ type OutboxEventPayload struct {
 	IdempotencyKey string         `json:"idempotencyKey,omitempty"`
 	EventType      string         `json:"eventType,omitempty"`
 	ConversationID *uuid.UUID     `json:"conversationId,omitempty"`
+	AttachmentID   *uuid.UUID     `json:"attachmentId,omitempty"`
 	Payload        datatypes.JSON `json:"payload,omitempty"`
 	CreatedAt      time.Time      `json:"createdAt,omitempty"`
 	MessageID      string         `json:"messageId,omitempty"`
