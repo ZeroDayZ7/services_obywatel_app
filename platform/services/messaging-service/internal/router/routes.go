@@ -39,6 +39,7 @@ func SetupMessagingRoutes(app *fiber.App, container *di.Container) {
 	attachments := api.Group("/attachments")
 	attachments.Post("/upload", attachmentH.PrepareUpload)
 	attachments.Post("/finalize", attachmentH.FinalizeUpload)
+	attachments.Get("/:id/download", attachmentH.GetAttachmentDownloadURL)
 	attachments.Get("/:id", attachmentH.GetAttachment)
 	attachments.Delete("/:id", attachmentH.DeleteAttachment)
 

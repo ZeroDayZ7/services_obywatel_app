@@ -93,6 +93,9 @@ func RegisterMessagingRoutes(app *fiber.App, container *di.Container) {
 	attachments.Post("/finalize",
 		// gwMiddleware.RequirePermissions("messages.write"),
 		ReverseProxySecure(container, ServiceMessaging, target))
+	attachments.Get("/:id/download",
+		// gwMiddleware.RequirePermissions("messages.read"),
+		ReverseProxySecure(container, ServiceMessaging, target))
 	attachments.Get("/:id",
 		// gwMiddleware.RequirePermissions("messages.read"),
 		ReverseProxySecure(container, ServiceMessaging, target))

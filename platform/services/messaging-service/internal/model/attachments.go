@@ -51,3 +51,10 @@ type AttachmentUploadResponse struct {
 	UploadURL  string      `json:"uploadUrl"`
 	ExpiresAt  time.Time   `json:"expiresAt"`
 }
+
+type AttachmentDownloadResponse struct {
+	AttachmentID uuid.UUID `json:"attachmentId"`
+	ContentType  string    `json:"contentType"`
+	DownloadURL  string    `json:"downloadUrl"`
+	ExpiresAt    time.Time `json:"expiresAt"`
+}

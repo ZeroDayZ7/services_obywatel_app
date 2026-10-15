@@ -18,6 +18,7 @@ import (
 )
 
 const defaultAttachmentUploadTTL = 15 * time.Minute
+const defaultAttachmentDownloadTTL = 15 * time.Minute
 
 var maxAttachmentSizeBytes int64 = 25 * 1024 * 1024
 
@@ -25,6 +26,7 @@ type AttachmentService interface {
 	PrepareUpload(ctx context.Context, userID uuid.UUID, req model.AttachmentUploadRequest) (*model.AttachmentUploadResponse, error)
 	FinalizeUpload(ctx context.Context, userID uuid.UUID, req model.AttachmentFinalizeRequest) (*model.Attachment, error)
 	GetAttachment(ctx context.Context, userID uuid.UUID, attachmentID uuid.UUID) (*model.Attachment, error)
+	GetAttachmentDownloadURL(ctx context.Context, userID uuid.UUID, attachmentID uuid.UUID) (*model.AttachmentDownloadResponse, error)
 	DeleteAttachment(ctx context.Context, userID uuid.UUID, attachmentID uuid.UUID) error
 }
 
@@ -184,6 +186,49 @@ func (s *attachmentService) GetAttachment(ctx context.Context, userID uuid.UUID,
 		return nil, apperr.ErrUnauthorized.WithMeta("detail", "attachment does not belong to this user")
 	}
 	return attachment, nil
+}
+
+func (s *attachmentService) GetAttachmentDownloadURL(ctx context.Context, userID uuid.UUID, attachmentID uuid.UUID) (*model.AttachmentDownloadResponse, error) {
+	if userID == uuid.Nil {
+		return nil, apperr.ErrUnauthorized
+	}
+	attachment, err := s.repo.GetAttachmentByID(ctx, attachmentID)
+	if err != nil {
+		return nil, err
+	}
+	if attachment == nil {
+		return nil, apperr.ErrNotFound
+	}
+	if attachment.UserID != userID {
+		return nil, apperr.ErrUnauthorized.WithMeta("detail", "attachment does not belong to this user")
+	}
+	if attachment.Status == model.AttachmentStatusDeleted {
+		return nil, apperr.ErrNotFound
+	}
+	if s.storage == nil {
+		return nil, apperr.ErrInternal.WithMeta("detail", "storage backend is not configured")
+	}
+
+	downloadURL, err := s.storage.GetPresignedURL(ctx, attachment.FileKey, defaultAttachmentDownloadTTL)
+	if err != nil {
+		if s.logger != nil {
+			s.logger.Error(
+				"[ATTACHMENT-DOWNLOAD-1] presigned download URL generation failed",
+				"user_id", userID.String(),
+				"attachment_id", attachment.ID.String(),
+				"file_key", attachment.FileKey,
+				"error", err,
+			)
+		}
+		return nil, apperr.ErrInternal.WithMeta("detail", "failed to create download url")
+	}
+
+	return &model.AttachmentDownloadResponse{
+		AttachmentID: attachment.ID,
+		ContentType:  attachment.ContentType,
+		DownloadURL:  downloadURL,
+		ExpiresAt:    time.Now().Add(defaultAttachmentDownloadTTL),
+	}, nil
 }
 
 func (s *attachmentService) DeleteAttachment(ctx context.Context, userID uuid.UUID, attachmentID uuid.UUID) error {

@@ -82,6 +82,26 @@ func (h *AttachmentHandler) GetAttachment(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(attachment)
 }
 
+func (h *AttachmentHandler) GetAttachmentDownloadURL(c *fiber.Ctx) error {
+	ctx, cancel := context.WithTimeout(c.UserContext(), 5*time.Second)
+	defer cancel()
+
+	rc := reqctx.MustFromFiber(c)
+	if rc.UserID == nil {
+		return apperr.SendAppError(c, apperr.ErrUnauthorized)
+	}
+
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return apperr.SendAppError(c, apperr.ErrInvalidParams)
+	}
+	response, err := h.service.GetAttachmentDownloadURL(ctx, *rc.UserID, id)
+	if err != nil {
+		return apperr.SendAppError(c, err)
+	}
+	return c.Status(fiber.StatusOK).JSON(response)
+}
+
 func (h *AttachmentHandler) DeleteAttachment(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(c.UserContext(), 5*time.Second)
 	defer cancel()

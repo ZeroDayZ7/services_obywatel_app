@@ -66,6 +66,7 @@ func TestAttachmentServiceFinalizeUpload_ValidatesSizeAndHash(t *testing.T) {
 		t.Fatalf("open sqlite: %v", err)
 	}
 	if err := db.Exec(`
+		DROP TABLE IF EXISTS attachments;
 		CREATE TABLE attachments (
 			id TEXT PRIMARY KEY,
 			user_id TEXT NOT NULL,
@@ -125,5 +126,60 @@ func TestAttachmentServiceFinalizeUpload_ValidatesSizeAndHash(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected size-mismatch validation to fail")
+	}
+}
+
+func TestAttachmentServiceGetDownloadURL_RequiresOwnership(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	if err := db.Exec(`
+		DROP TABLE IF EXISTS attachments;
+		CREATE TABLE attachments (
+			id TEXT PRIMARY KEY,
+			user_id TEXT NOT NULL,
+			conversation_id TEXT,
+			message_id TEXT,
+			file_key TEXT NOT NULL,
+			original_name TEXT NOT NULL,
+			content_type TEXT NOT NULL,
+			size INTEGER NOT NULL DEFAULT 0,
+			sha256 TEXT,
+			status TEXT NOT NULL DEFAULT 'pending',
+			metadata TEXT,
+			created_at DATETIME,
+			updated_at DATETIME,
+			deleted_at DATETIME
+		);
+	`).Error; err != nil {
+		t.Fatalf("migrate attachment schema: %v", err)
+	}
+
+	store := &fakeStorage{data: make(map[string][]byte)}
+	repo := repository.NewMessagingRepository(db)
+	service := NewAttachmentService(repo, store, nil, 25*1024*1024)
+	ownerID := uuid.New()
+	otherUserID := uuid.New()
+	attachmentID := uuid.New()
+
+	if err := repo.CreateAttachment(context.Background(), &model.Attachment{
+		ID:           attachmentID,
+		UserID:       ownerID,
+		FileKey:      "attachments/test-file.txt",
+		OriginalName: "test-file.txt",
+		ContentType:  "text/plain",
+		Size:         12,
+		Status:       model.AttachmentStatusUploaded,
+	}); err != nil {
+		t.Fatalf("create attachment: %v", err)
+	}
+
+	download, err := service.GetAttachmentDownloadURL(context.Background(), otherUserID, attachmentID)
+	if err == nil {
+		t.Fatal("expected ownership check to fail")
+	}
+	if download != nil {
+		t.Fatal("expected nil download response on unauthorized access")
 	}
 }
