@@ -4,6 +4,10 @@ docker compose --profile app up -d
 docker compose --profile full up -d
 
 adb -s 5200d78bfa479449 reverse tcp:8080 tcp:8080
+adb -s 5200d78bfa479449 reverse tcp:9000 tcp:9000
+adb -s 5200d78bfa479449 reverse tcp:9001 tcp:9001
+
+adb -s 5200d78bfa479449 reverse --list
 
 docker compose up -d --force-recreate messaging-service 
 
