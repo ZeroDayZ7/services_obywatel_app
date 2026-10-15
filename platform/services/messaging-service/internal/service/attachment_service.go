@@ -150,6 +150,9 @@ func (s *attachmentService) FinalizeUpload(ctx context.Context, userID uuid.UUID
 	if strings.TrimSpace(req.Sha256) != "" && attachment.Sha256 == "" {
 		attachment.Sha256 = strings.TrimSpace(req.Sha256)
 	}
+	if len(req.Metadata) > 0 {
+		attachment.Metadata = req.Metadata
+	}
 	attachment.Status = model.AttachmentStatusUploaded
 	if err := s.repo.UpdateAttachment(ctx, attachment); err != nil {
 		return nil, err

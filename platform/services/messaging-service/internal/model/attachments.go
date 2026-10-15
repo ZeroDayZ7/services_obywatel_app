@@ -40,9 +40,10 @@ type AttachmentUploadRequest struct {
 }
 
 type AttachmentFinalizeRequest struct {
-	AttachmentID uuid.UUID `json:"attachmentId"`
-	Size         int64     `json:"size"`
-	Sha256       string    `json:"sha256,omitempty"`
+	AttachmentID uuid.UUID      `json:"attachmentId"`
+	Size         int64          `json:"size"`
+	Sha256       string         `json:"sha256,omitempty"`
+	Metadata     datatypes.JSON `json:"metadata,omitempty"`
 }
 
 type AttachmentUploadResponse struct {
