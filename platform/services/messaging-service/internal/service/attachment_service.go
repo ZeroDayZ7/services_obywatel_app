@@ -19,9 +19,34 @@ import (
 const (
 	defaultAttachmentUploadTTL   = 15 * time.Minute
 	defaultAttachmentDownloadTTL = 15 * time.Minute
+	attachmentObjectKeyPrefix    = "messenger/attachments"
 )
 
 var maxAttachmentSizeBytes int64 = 25 * 1024 * 1024
+
+func buildAttachmentObjectKey(conversationID *uuid.UUID, attachmentID uuid.UUID, originalName string) string {
+	conversationSegment := "unknown-conversation"
+	if conversationID != nil && *conversationID != uuid.Nil {
+		conversationSegment = conversationID.String()
+	}
+
+	normalizedName := strings.TrimSpace(originalName)
+	extension := ""
+	if normalizedName != "" {
+		if idx := strings.LastIndex(normalizedName, "."); idx > 0 && idx < len(normalizedName)-1 {
+			extension = strings.ToLower(normalizedName[idx:])
+		}
+	}
+
+	return fmt.Sprintf(
+		"%s/%s/%s/%s%s",
+		attachmentObjectKeyPrefix,
+		conversationSegment,
+		attachmentID.String(),
+		uuid.NewString(),
+		extension,
+	)
+}
 
 type AttachmentService interface {
 	PrepareUpload(ctx context.Context, userID uuid.UUID, req model.AttachmentUploadRequest) (*model.AttachmentUploadResponse, error)
@@ -68,10 +93,7 @@ func (s *attachmentService) PrepareUpload(ctx context.Context, userID uuid.UUID,
 	}
 
 	attachmentID := uuid.New()
-
-	// ZMIANA: Zamiast oryginalnej/sanitizowanej nazwy w ścieżce S3, używamy stałego sufiksu "file".
-	// Dzięki temu unikamy problemów ze spacjami, nawiasami i URL encodingiem w MinIO.
-	fileKey := fmt.Sprintf("messaging/attachments/%s/%s/file", req.ConversationID.String(), attachmentID.String())
+	fileKey := buildAttachmentObjectKey(req.ConversationID, attachmentID, req.FileName)
 
 	attachment := &model.Attachment{
 		ID:             attachmentID,
@@ -212,16 +234,6 @@ func (s *attachmentService) GetAttachment(ctx context.Context, userID uuid.UUID,
 		return nil, apperr.ErrNotFound
 	}
 
-	// if attachment.UserID != userID {
-	// 	log.Warn(
-	// 		"[ATTACHMENT-GET-5] próba dostępu do cudzego załącznika (Unauthorized)",
-	// 		"owner_id", attachment.UserID.String(),
-	// 		"requester_id", userID.String(),
-	// 		"attachment_id", attachmentID.String(),
-	// 	)
-	// 	return nil, apperr.ErrUnauthorized.WithMeta("detail", "attachment does not belong to this user")
-	// }
-
 	log.Info(
 		"[ATTACHMENT-GET-OK] pomyślnie pobrano metadane załącznika",
 		"user_id", userID.String(),
@@ -265,16 +277,6 @@ func (s *attachmentService) GetAttachmentDownloadURL(ctx context.Context, userID
 		return nil, apperr.ErrNotFound
 	}
 
-	// if attachment.UserID != userID {
-	// 	log.Warn(
-	// 		"[ATTACHMENT-URL-5] odmowa dostępu do generowania URL dla cudzego załącznika",
-	// 		"owner_id", attachment.UserID.String(),
-	// 		"requester_id", userID.String(),
-	// 		"attachment_id", attachmentID.String(),
-	// 	)
-	// 	return nil, apperr.ErrUnauthorized.WithMeta("detail", "attachment does not belong to this user")
-	// }
-
 	if attachment.Status == model.AttachmentStatusDeleted {
 		log.Warn(
 			"[ATTACHMENT-URL-6] próba pobrania usuniętego załącznika",
@@ -304,6 +306,7 @@ func (s *attachmentService) GetAttachmentDownloadURL(ctx context.Context, userID
 			"attachment_id", attachment.ID.String(),
 			"file_key", attachment.FileKey,
 			"error", err,
+			"downloadURL", downloadURL,
 		)
 		return nil, apperr.ErrInternal.WithMeta("detail", "failed to create download url")
 	}

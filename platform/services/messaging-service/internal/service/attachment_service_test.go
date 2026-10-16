@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
+	"strings"
 	"testing"
 	"time"
 
@@ -129,6 +130,67 @@ func TestAttachmentServiceFinalizeUpload_ValidatesSizeAndHash(t *testing.T) {
 	}
 }
 
+func TestAttachmentServicePrepareUpload_UsesMessengerObjectKeyPrefix(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	if err := db.Exec(`
+		DROP TABLE IF EXISTS attachments;
+		CREATE TABLE attachments (
+			id TEXT PRIMARY KEY,
+			user_id TEXT NOT NULL,
+			conversation_id TEXT,
+			message_id TEXT,
+			file_key TEXT NOT NULL,
+			original_name TEXT NOT NULL,
+			content_type TEXT NOT NULL,
+			size INTEGER NOT NULL DEFAULT 0,
+			sha256 TEXT,
+			status TEXT NOT NULL DEFAULT 'pending',
+			metadata TEXT,
+			created_at DATETIME,
+			updated_at DATETIME,
+			deleted_at DATETIME
+		);
+	`).Error; err != nil {
+		t.Fatalf("migrate attachment schema: %v", err)
+	}
+
+	store := &fakeStorage{data: make(map[string][]byte)}
+	repo := repository.NewMessagingRepository(db)
+	service := NewAttachmentService(repo, store, nil, 25*1024*1024)
+	userID := uuid.New()
+	conversationID := uuid.New()
+
+	prepareResp, err := service.PrepareUpload(context.Background(), userID, model.AttachmentUploadRequest{
+		ConversationID: &conversationID,
+		FileName:      "invoice.pdf",
+		ContentType:   "application/pdf",
+		Size:          128,
+	})
+	if err != nil {
+		t.Fatalf("prepare upload: %v", err)
+	}
+
+	key := prepareResp.Attachment.FileKey
+	if !strings.Contains(key, "messenger/attachments/") {
+		t.Fatalf("expected messenger attachment prefix, got %q", key)
+	}
+	if !strings.Contains(key, conversationID.String()) {
+		t.Fatalf("expected conversation id in key, got %q", key)
+	}
+	if !strings.Contains(key, prepareResp.Attachment.ID.String()) {
+		t.Fatalf("expected attachment id in key, got %q", key)
+	}
+	if !strings.HasSuffix(key, ".pdf") {
+		t.Fatalf("expected original extension retained in the storage key, got %q", key)
+	}
+	if strings.Contains(key, "invoice") {
+		t.Fatalf("expected original file name not to be used as storage identifier, got %q", key)
+	}
+}
+
 func TestAttachmentServiceGetDownloadURL_RequiresOwnership(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
 	if err != nil {
@@ -166,7 +228,7 @@ func TestAttachmentServiceGetDownloadURL_RequiresOwnership(t *testing.T) {
 	if err := repo.CreateAttachment(context.Background(), &model.Attachment{
 		ID:           attachmentID,
 		UserID:       ownerID,
-		FileKey:      "attachments/test-file.txt",
+		FileKey:      "messenger/attachments/test/attachment/file.pdf",
 		OriginalName: "test-file.txt",
 		ContentType:  "text/plain",
 		Size:         12,
