@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -69,7 +68,11 @@ func (s *attachmentService) PrepareUpload(ctx context.Context, userID uuid.UUID,
 	}
 
 	attachmentID := uuid.New()
-	fileKey := fmt.Sprintf("attachments/%s/%s/%s", userID.String(), attachmentID.String(), sanitizeAttachmentFileName(req.FileName))
+
+	// ZMIANA: Zamiast oryginalnej/sanitizowanej nazwy w ścieżce S3, używamy stałego sufiksu "file".
+	// Dzięki temu unikamy problemów ze spacjami, nawiasami i URL encodingiem w MinIO.
+	fileKey := fmt.Sprintf("messaging/attachments/%s/%s/file", req.ConversationID.String(), attachmentID.String())
+
 	attachment := &model.Attachment{
 		ID:             attachmentID,
 		UserID:         userID,
@@ -80,6 +83,7 @@ func (s *attachmentService) PrepareUpload(ctx context.Context, userID uuid.UUID,
 		Size:           req.Size,
 		Status:         model.AttachmentStatusPending,
 	}
+
 	if err := s.repo.CreateAttachment(ctx, attachment); err != nil {
 		return nil, err
 	}
@@ -87,6 +91,7 @@ func (s *attachmentService) PrepareUpload(ctx context.Context, userID uuid.UUID,
 	if s.storage == nil {
 		return nil, apperr.ErrInternal.WithMeta("detail", "storage backend is not configured")
 	}
+
 	uploadURL, err := s.storage.GetPresignedUploadURL(ctx, attachment.FileKey, defaultAttachmentUploadTTL)
 	if err != nil {
 		if s.logger != nil {
@@ -343,12 +348,4 @@ func (s *attachmentService) DeleteAttachment(ctx context.Context, userID uuid.UU
 		return err
 	}
 	return nil
-}
-
-func sanitizeAttachmentFileName(fileName string) string {
-	base := filepath.Base(strings.TrimSpace(fileName))
-	if base == "." || base == "/" || base == "" {
-		base = "attachment.bin"
-	}
-	return base
 }
