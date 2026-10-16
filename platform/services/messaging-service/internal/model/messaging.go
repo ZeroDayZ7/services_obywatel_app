@@ -302,7 +302,6 @@ type OutboxEventPayload struct {
 	AttachmentID   *uuid.UUID     `json:"attachmentId,omitempty"`
 	Payload        datatypes.JSON `json:"payload,omitempty"`
 	CreatedAt      time.Time      `json:"createdAt,omitempty"`
-	MessageID      string         `json:"messageId,omitempty"`
 	Ciphertext     string         `json:"ciphertext,omitempty"`
 	SenderDeviceID string         `json:"senderDeviceId,omitempty"`
 	Content        string         `json:"content,omitempty"`

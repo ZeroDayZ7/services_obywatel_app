@@ -1,5 +1,5 @@
 # --- DB TEST RESET ---
-.PHONY:  redis-users rs start-services st log res
+.PHONY:  redis-users rs start-services st logs res
 
 redis-users:
 	@echo "Lista użytkowników Redis ACL:"
@@ -13,7 +13,7 @@ start-services:
 
 st: start-services
 
-log: 
+logs: 
 	docker compose logs -f gateway auth-service messaging-service websocket-service --tail 100
 
 res:
