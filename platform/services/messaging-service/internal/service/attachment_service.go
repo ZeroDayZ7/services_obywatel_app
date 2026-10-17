@@ -332,9 +332,12 @@ func (s *attachmentService) GetAttachmentDownloadURL(ctx context.Context, userID
 	}
 
 	log.Info(
-		"[ATTACHMENT-URL-OK] pomyślnie wygenerowano URL pobierania",
+		"[ATTACHMENT-URL-FAIL] generowanie presigned URL zakończone",
 		"user_id", userID.String(),
 		"attachment_id", attachment.ID.String(),
+		"file_key", attachment.FileKey,
+		"error", err,
+		"downloadURL", downloadURL,
 	)
 
 	expiresAt := time.Now().Add(defaultAttachmentDownloadTTL)
