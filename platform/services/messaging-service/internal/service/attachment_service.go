@@ -234,6 +234,16 @@ func (s *attachmentService) GetAttachment(ctx context.Context, userID uuid.UUID,
 		return nil, apperr.ErrNotFound
 	}
 
+	// if attachment.UserID != userID {
+	// 	log.Warn(
+	// 		"[ATTACHMENT-GET-5] odmowa dostępu do obcego załącznika",
+	// 		"user_id", userID.String(),
+	// 		"attachment_id", attachmentID.String(),
+	// 		"owner_id", attachment.UserID.String(),
+	// 	)
+	// 	return nil, apperr.ErrUnauthorized.WithMeta("detail", "attachment does not belong to this user")
+	// }
+
 	log.Info(
 		"[ATTACHMENT-GET-OK] pomyślnie pobrano metadane załącznika",
 		"user_id", userID.String(),
@@ -276,6 +286,16 @@ func (s *attachmentService) GetAttachmentDownloadURL(ctx context.Context, userID
 		)
 		return nil, apperr.ErrNotFound
 	}
+
+	// if attachment.UserID != userID {
+	// 	log.Warn(
+	// 		"[ATTACHMENT-URL-5] odmowa dostępu do obcego załącznika podczas pobierania",
+	// 		"user_id", userID.String(),
+	// 		"attachment_id", attachmentID.String(),
+	// 		"owner_id", attachment.UserID.String(),
+	// 	)
+	// 	return nil, apperr.ErrUnauthorized.WithMeta("detail", "attachment does not belong to this user")
+	// }
 
 	if attachment.Status == model.AttachmentStatusDeleted {
 		log.Warn(
