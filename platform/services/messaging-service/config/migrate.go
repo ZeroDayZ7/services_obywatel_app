@@ -19,5 +19,6 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.Conversation{},
 		&model.ConversationMember{},
 		&model.Message{},
+		&model.Attachment{},
 	)
 }

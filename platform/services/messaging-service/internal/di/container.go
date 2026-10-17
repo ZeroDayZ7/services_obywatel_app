@@ -2,46 +2,64 @@ package di
 
 import (
 	"github.com/zerodayz7/platform/pkg/httpserver"
+	pkgredis "github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/shared"
+	"github.com/zerodayz7/platform/pkg/storage"
 	"github.com/zerodayz7/platform/services/messaging-service/config"
 	"github.com/zerodayz7/platform/services/messaging-service/internal/handler"
+	pub "github.com/zerodayz7/platform/services/messaging-service/internal/publisher"
 	"github.com/zerodayz7/platform/services/messaging-service/internal/repository"
 	"github.com/zerodayz7/platform/services/messaging-service/internal/service"
-	internalWs "github.com/zerodayz7/platform/services/messaging-service/internal/websocket"
 	"gorm.io/gorm"
 )
 
 type Container struct {
-	DB               *gorm.DB
-	Config           *config.Config
-	Logger           *shared.Logger
-	WsHub            *internalWs.Hub
-	KeyStore         *httpserver.KeyStore
-	MessagingSvc     service.MessagingService
-	ContactsSvc      service.ContactsService
-	MessagingHandler *handler.MessagingHandler
-	ContactsHandler  *handler.ContactsHandler
+	DB                *gorm.DB
+	Config            *config.Config
+	Logger            *shared.Logger
+	KeyStore          *httpserver.KeyStore
+	Storage           storage.StorageClient
+	Redis             *pkgredis.Client
+	MessagingSvc      service.MessagingService
+	ContactsSvc       service.ContactsService
+	AttachmentSvc     service.AttachmentService
+	MessagingHandler  *handler.MessagingHandler
+	ContactsHandler   *handler.ContactsHandler
+	AttachmentHandler *handler.AttachmentHandler
 }
 
-func NewContainer(db *gorm.DB, logger *shared.Logger, cfg *config.Config, wsHub *internalWs.Hub, keyStore *httpserver.KeyStore) *Container {
+func NewContainer(
+	db *gorm.DB,
+	redisClient *pkgredis.Client,
+	fileStorage storage.StorageClient,
+	logger *shared.Logger,
+	cfg *config.Config,
+	keyStore *httpserver.KeyStore,
+) *Container {
 	messagingRepo := repository.NewMessagingRepository(db)
-	contactsRepo := repository.NewContactsRepository(db) // Nowy repozytorium
+	contactsRepo := repository.NewContactsRepository(db)
+	eventPublisher := pub.NewRedisPublisher(redisClient, logger)
 
-	messagingSvc := service.NewMessagingService(messagingRepo, cfg, logger)
-	contactsSvc := service.NewContactsService(contactsRepo, logger)
+	messagingSvc := service.NewMessagingService(messagingRepo, cfg, logger, eventPublisher)
+	contactsSvc := service.NewContactsService(contactsRepo, messagingRepo, logger, eventPublisher)
+	attachmentSvc := service.NewAttachmentService(messagingRepo, fileStorage, logger, 25*1024*1024)
 
 	messagingHandler := handler.NewMessagingHandler(messagingSvc)
 	contactsHandler := handler.NewContactsHandler(contactsSvc)
+	attachmentHandler := handler.NewAttachmentHandler(attachmentSvc)
 
 	return &Container{
-		DB:               db,
-		Config:           cfg,
-		Logger:           logger,
-		WsHub:            wsHub,
-		KeyStore:         keyStore,
-		MessagingSvc:     messagingSvc,
-		ContactsSvc:      contactsSvc,
-		MessagingHandler: messagingHandler,
-		ContactsHandler:  contactsHandler,
+		DB:                db,
+		Config:            cfg,
+		Logger:            logger,
+		KeyStore:          keyStore,
+		Storage:           fileStorage,
+		Redis:             redisClient,
+		MessagingSvc:      messagingSvc,
+		ContactsSvc:       contactsSvc,
+		AttachmentSvc:     attachmentSvc,
+		MessagingHandler:  messagingHandler,
+		ContactsHandler:   contactsHandler,
+		AttachmentHandler: attachmentHandler,
 	}
 }

@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"strings"
 
@@ -26,9 +27,16 @@ type MessagingRepository interface {
 	CreateConversation(ctx context.Context, conv *model.Conversation) error
 	UpdateLastReadSequence(ctx context.Context, userID, conversationID uuid.UUID, sequence uint64) error
 
+	// Attachments
+	CreateAttachment(ctx context.Context, attachment *model.Attachment) error
+	GetAttachmentByID(ctx context.Context, attachmentID uuid.UUID) (*model.Attachment, error)
+	UpdateAttachment(ctx context.Context, attachment *model.Attachment) error
+	DeleteAttachment(ctx context.Context, attachmentID uuid.UUID) error
+
 	// E2EE Keys & Identity
 	GetDeviceIdentity(ctx context.Context, userID uuid.UUID, deviceID string) (*model.UserDeviceIdentity, error)
 	GetLatestDeviceIdentityForUser(ctx context.Context, userID uuid.UUID) (*model.UserDeviceIdentity, error)
+	GetMaxSignalDeviceIDForUser(ctx context.Context, userID uuid.UUID) (uint32, error)
 	SaveDeviceIdentity(ctx context.Context, identity *model.UserDeviceIdentity) error
 	SavePreKeys(ctx context.Context, keys []model.UserPreKey) error
 	PopPreKey(ctx context.Context, userID uuid.UUID, deviceID string) (*model.UserPreKey, error)
@@ -173,8 +181,30 @@ func (r *messagingRepository) GetConversationByID(ctx context.Context, userID, c
 }
 
 func (r *messagingRepository) FindDirectConversationByUsers(ctx context.Context, userA, userB uuid.UUID) (*model.Conversation, error) {
-	if userA == uuid.Nil || userB == uuid.Nil || userA == userB {
+	if userA == uuid.Nil || userB == uuid.Nil {
 		return nil, nil
+	}
+
+	if userA == userB {
+		var conv model.Conversation
+		err := r.db.WithContext(ctx).
+			Table("conversations").
+			Joins("JOIN conversation_members cm ON cm.conversation_id = conversations.id").
+			Where("conversations.type = ?", model.ConversationTypeDirect).
+			Where("cm.user_id = ?", userA).
+			Where("conversations.deleted_at IS NULL AND cm.deleted_at IS NULL").
+			Preload("Members").
+			First(&conv).Error
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, nil
+			}
+			return nil, err
+		}
+		if len(conv.Members) > 1 {
+			return nil, nil
+		}
+		return &conv, nil
 	}
 
 	var conv model.Conversation
@@ -205,6 +235,44 @@ func (r *messagingRepository) UpdateLastReadSequence(ctx context.Context, userID
 		Model(&model.ConversationMember{}).
 		Where("user_id = ? AND conversation_id = ?", userID, conversationID).
 		Update("last_read_sequence", sequence).Error
+}
+
+func (r *messagingRepository) CreateAttachment(ctx context.Context, attachment *model.Attachment) error {
+	if attachment == nil {
+		return errors.New("attachment is nil")
+	}
+	if attachment.ID == uuid.Nil {
+		attachment.ID = uuid.Must(uuid.NewV7())
+	}
+	return r.db.WithContext(ctx).Create(attachment).Error
+}
+
+func (r *messagingRepository) GetAttachmentByID(ctx context.Context, attachmentID uuid.UUID) (*model.Attachment, error) {
+	if attachmentID == uuid.Nil {
+		return nil, nil
+	}
+	var attachment model.Attachment
+	if err := r.db.WithContext(ctx).Where("id = ?", attachmentID).First(&attachment).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &attachment, nil
+}
+
+func (r *messagingRepository) UpdateAttachment(ctx context.Context, attachment *model.Attachment) error {
+	if attachment == nil {
+		return errors.New("attachment is nil")
+	}
+	return r.db.WithContext(ctx).Save(attachment).Error
+}
+
+func (r *messagingRepository) DeleteAttachment(ctx context.Context, attachmentID uuid.UUID) error {
+	if attachmentID == uuid.Nil {
+		return nil
+	}
+	return r.db.WithContext(ctx).Delete(&model.Attachment{}, "id = ?", attachmentID).Error
 }
 
 func (r *messagingRepository) GetActivationStatus(ctx context.Context, userID uuid.UUID) (*model.MessagingActivation, error) {
@@ -271,6 +339,21 @@ func (r *messagingRepository) GetDeviceIdentity(ctx context.Context, userID uuid
 
 func (r *messagingRepository) GetLatestDeviceIdentityForUser(ctx context.Context, userID uuid.UUID) (*model.UserDeviceIdentity, error) {
 	return r.GetDeviceIdentity(ctx, userID, "")
+}
+
+func (r *messagingRepository) GetMaxSignalDeviceIDForUser(ctx context.Context, userID uuid.UUID) (uint32, error) {
+	var maxID sql.NullInt64
+	if err := r.db.WithContext(ctx).
+		Model(&model.UserDeviceIdentity{}).
+		Select("COALESCE(MAX(signal_device_id), 0)").
+		Where("user_id = ? AND deleted_at IS NULL", userID).
+		Scan(&maxID).Error; err != nil {
+		return 0, err
+	}
+	if !maxID.Valid {
+		return 0, nil
+	}
+	return uint32(maxID.Int64), nil
 }
 
 func (r *messagingRepository) SaveDeviceIdentity(ctx context.Context, identity *model.UserDeviceIdentity) error {

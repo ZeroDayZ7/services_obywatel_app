@@ -10,7 +10,7 @@ import (
 	"github.com/zerodayz7/platform/pkg/permissions"
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/auth-service/internal/model"
-	repo "github.com/zerodayz7/platform/services/auth-service/internal/repository" // DODANE: import interfejsu repozytorium
+	repo "github.com/zerodayz7/platform/services/auth-service/internal/repository"
 )
 
 type ConsumerService interface {
@@ -22,7 +22,7 @@ type consumerService struct {
 	log          *shared.Logger
 }
 
-//#region NewConsumerService
+// #region NewConsumerService
 func NewConsumerService(consumerRepo repo.ConsumerRepository) ConsumerService {
 	return &consumerService{
 		consumerRepo: consumerRepo,
@@ -30,7 +30,7 @@ func NewConsumerService(consumerRepo repo.ConsumerRepository) ConsumerService {
 	}
 }
 
-//#region CreateCitizenAccountFromEvent
+// #region CreateCitizenAccountFromEvent
 func (s *consumerService) CreateCitizenAccountFromEvent(ctx context.Context, citizenID uuid.UUID, agreementNumber string) error {
 	s.log.Info("🔄 Tworzenie konta obywatela na podstawie eventu z RabbitMQ",
 		"citizen_id", citizenID,

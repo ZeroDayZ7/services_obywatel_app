@@ -25,7 +25,7 @@ func NewMessagingHandler(s service.MessagingService) *MessagingHandler {
 	return &MessagingHandler{service: s}
 }
 
-// // #region SyncDelta
+// #region SyncDelta
 func (h *MessagingHandler) SyncDelta(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(c.UserContext(), 5*time.Second)
 	defer cancel()
@@ -54,9 +54,7 @@ func (h *MessagingHandler) SyncDelta(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(resp)
 }
 
-// // #endregion
-
-// // #region ProcessOutbox
+// #region ProcessOutbox
 func (h *MessagingHandler) ProcessOutbox(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(c.UserContext(), 5*time.Second)
 	defer cancel()
@@ -128,8 +126,6 @@ func (h *MessagingHandler) ProcessOutbox(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(resp)
 }
 
-// #endregion
-
 // #region SendMessage
 func (h *MessagingHandler) SendMessage(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(c.UserContext(), 5*time.Second)
@@ -148,7 +144,15 @@ func (h *MessagingHandler) SendMessage(c *fiber.Ctx) error {
 			"error", err.Error())
 		return apperr.SendAppError(c, apperr.ErrInvalidRequestBody)
 	}
-	req.Normalize()
+	if req.MessageID == "" && req.IdempotencyKey != "" {
+		req.MessageID = req.IdempotencyKey
+	}
+	if req.IdempotencyKey == "" {
+		req.IdempotencyKey = req.MessageID
+	}
+	if req.IdempotencyKey == "" {
+		req.IdempotencyKey = uuid.NewString()
+	}
 
 	conversationIDStr := c.Params("id")
 	if req.ConversationID == nil && conversationIDStr != "" {
@@ -174,9 +178,6 @@ func (h *MessagingHandler) SendMessage(c *fiber.Ctx) error {
 	)
 
 	resolvedSignalType := req.Type
-	if resolvedSignalType == 0 {
-		resolvedSignalType = req.TypeSnake
-	}
 	messageType := model.MessageTypeText
 	if resolvedSignalType != 0 {
 		messageType = model.MessageType(strconv.Itoa(int(resolvedSignalType)))
@@ -186,6 +187,7 @@ func (h *MessagingHandler) SendMessage(c *fiber.Ctx) error {
 		ConversationID:   *req.ConversationID,
 		SenderID:         *rc.UserID,
 		SenderDeviceID:   req.SenderDeviceID,
+		AttachmentID:     req.AttachmentID,
 		Type:             messageType,
 		EncryptedPayload: req.Ciphertext,
 		IdempotencyKey:   strings.TrimSpace(req.IdempotencyKey),
@@ -227,8 +229,6 @@ func (h *MessagingHandler) SendMessage(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(msg)
 }
 
-// #endregion
-
 // #region GetContacts
 func (h *MessagingHandler) GetContacts(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(c.UserContext(), 3*time.Second)
@@ -253,8 +253,6 @@ func (h *MessagingHandler) GetContacts(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{"contacts": contacts})
 }
 
-// #endregion
-
 // #region GetConversations
 func (h *MessagingHandler) GetConversations(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(c.UserContext(), 3*time.Second)
@@ -272,8 +270,6 @@ func (h *MessagingHandler) GetConversations(c *fiber.Ctx) error {
 
 	return c.Status(fiber.StatusOK).JSON(conversations)
 }
-
-// #endregion
 
 // #region CreateConversation
 func (h *MessagingHandler) CreateConversation(c *fiber.Ctx) error {
@@ -298,8 +294,6 @@ func (h *MessagingHandler) CreateConversation(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(conv)
 }
 
-// #endregion
-
 // #region GetConversationByID
 func (h *MessagingHandler) GetConversationByID(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(c.UserContext(), 3*time.Second)
@@ -318,8 +312,6 @@ func (h *MessagingHandler) GetConversationByID(c *fiber.Ctx) error {
 
 	return c.Status(fiber.StatusOK).JSON(conv)
 }
-
-// #endregion
 
 // #region GetMessages
 func (h *MessagingHandler) GetMessages(c *fiber.Ctx) error {
@@ -343,8 +335,6 @@ func (h *MessagingHandler) GetMessages(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(messages)
 }
 
-// #endregion
-
 // #region MarkAsRead
 func (h *MessagingHandler) MarkAsRead(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(c.UserContext(), 3*time.Second)
@@ -363,8 +353,6 @@ func (h *MessagingHandler) MarkAsRead(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{"status": "ok"})
 }
 
-// #endregion
-
 // #region UploadDeviceKeys
 func (h *MessagingHandler) UploadDeviceKeys(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(c.UserContext(), 5*time.Second)
@@ -379,7 +367,33 @@ func (h *MessagingHandler) UploadDeviceKeys(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return apperr.SendAppError(c, apperr.ErrInvalidRequestBody)
 	}
-	req.Normalize()
+	if len(req.IdentityPublicKey) == 0 && len(req.PublicKey) > 0 {
+		req.IdentityPublicKey = req.PublicKey
+	}
+	if len(req.PublicKey) == 0 && len(req.IdentityPublicKey) > 0 {
+		req.PublicKey = req.IdentityPublicKey
+	}
+	if len(req.IdentityPublicKey) == 0 {
+		shared.GetLogger().WarnObj("UploadDeviceKeys missing identityPublicKey", map[string]any{
+			"user_id":      rc.UserID.String(),
+			"device_id":    req.DeviceID,
+			"operation_id": rc.OperationID,
+		})
+	}
+	if len(req.SignedPreKey) == 0 {
+		shared.GetLogger().WarnObj("UploadDeviceKeys missing signedPreKey", map[string]any{
+			"user_id":      rc.UserID.String(),
+			"device_id":    req.DeviceID,
+			"operation_id": rc.OperationID,
+		})
+	}
+	if len(req.SignedPreKeySig) == 0 {
+		shared.GetLogger().WarnObj("UploadDeviceKeys missing signedPreKeySig", map[string]any{
+			"user_id":      rc.UserID.String(),
+			"device_id":    req.DeviceID,
+			"operation_id": rc.OperationID,
+		})
+	}
 
 	// Log a minimal, non-sensitive trace to help debug missing DB records in production.
 	// Do NOT log any key material.
@@ -409,8 +423,6 @@ func (h *MessagingHandler) UploadDeviceKeys(c *fiber.Ctx) error {
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{"status": "uploaded"})
 }
-
-// #endregion
 
 // #region GetUserPreKeys
 func (h *MessagingHandler) GetUserPreKeys(c *fiber.Ctx) error {
@@ -516,5 +528,3 @@ func (h *MessagingHandler) AcceptTerms(c *fiber.Ctx) error {
 	}
 	return c.Status(fiber.StatusOK).JSON(resp)
 }
-
-// #endregion

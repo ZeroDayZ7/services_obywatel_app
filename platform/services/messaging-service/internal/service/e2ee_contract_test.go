@@ -2,36 +2,35 @@ package service
 
 import (
 	"bytes"
+	"encoding/json"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/zerodayz7/platform/services/messaging-service/internal/model"
 )
 
-func TestUploadDeviceKeysRequestNormalizeAcceptsSignalStyleFields(t *testing.T) {
+func TestUploadDeviceKeysRequestAcceptsSignalStyleFields(t *testing.T) {
 	req := model.UploadDeviceKeysRequest{
-		DeviceIDSnake:          "device-123",
-		RegistrationIDSnake:    42,
-		IdentityPublicKeySnake: []byte("identity-key"),
-		SignedPreKeySnake:      []byte("signed-pre-key"),
-		SignedPreKeySigSnake:   []byte("signature"),
-		SignedPreKeyIDSnake:    9,
-		OneTimePreKeysSnake: []model.OneTimePreKeyUpload{
+		DeviceID:          "device-123",
+		RegistrationID:    42,
+		IdentityPublicKey: []byte("identity-key"),
+		SignedPreKey:      []byte("signed-pre-key"),
+		SignedPreKeySig:   []byte("signature"),
+		SignedPreKeyID:    9,
+		OneTimePreKeys: []model.OneTimePreKeyUpload{
 			{KeyID: 1, PublicKey: []byte("otk-1")},
 			{KeyID: 2, PublicKey: []byte("otk-2")},
 		},
 	}
 
-	req.Normalize()
-
 	if req.DeviceID != "device-123" {
 		t.Fatalf("expected normalized device ID, got %q", req.DeviceID)
 	}
 	if req.RegistrationID != 42 {
-		t.Fatalf("expected normalized registration ID 42, got %d", req.RegistrationID)
+		t.Fatalf("expected registration ID 42, got %d", req.RegistrationID)
 	}
-	if len(req.PublicKey) == 0 {
-		t.Fatal("expected public key to be populated")
+	if len(req.IdentityPublicKey) == 0 {
+		t.Fatal("expected identity public key to be present")
 	}
 	if req.SignedPreKeyID != 9 {
 		t.Fatalf("expected signed prekey ID 9, got %d", req.SignedPreKeyID)
@@ -148,10 +147,79 @@ func TestBuildPreKeyBundleWithoutOneTimePreKey(t *testing.T) {
 	}
 }
 
+func TestBuildPreKeyBundleUsesCanonicalCamelCaseJSON(t *testing.T) {
+	identity := &model.UserDeviceIdentity{
+		ID:              uuid.New(),
+		UserID:          uuid.New(),
+		DeviceID:        "device-789",
+		SignalDeviceID:  9,
+		RegistrationID:  42,
+		PublicKey:       []byte("identity-key"),
+		SignedPreKey:    []byte("signed-pre-key"),
+		SignedPreKeySig: []byte("signed-signature"),
+		SignedPreKeyID:  5,
+	}
+	preKey := &model.UserPreKey{KeyID: 17, PublicKey: []byte("otk-value")}
+
+	bundle := BuildPreKeyBundle(identity, preKey)
+	payload, err := json.Marshal(bundle)
+	if err != nil {
+		t.Fatalf("marshal pre-key bundle: %v", err)
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(payload, &got); err != nil {
+		t.Fatalf("unmarshal pre-key bundle: %v", err)
+	}
+
+	if _, ok := got["registrationId"]; !ok {
+		t.Fatal("expected registrationId field in response")
+	}
+	if _, ok := got["deviceId"]; !ok {
+		t.Fatal("expected deviceId field in response")
+	}
+	if _, ok := got["signedPreKeyId"]; !ok {
+		t.Fatal("expected signedPreKeyId field in response")
+	}
+	if _, ok := got["signedPreKeyPublic"]; !ok {
+		t.Fatal("expected signedPreKeyPublic field in response")
+	}
+	if _, ok := got["signedPreKeySignature"]; !ok {
+		t.Fatal("expected signedPreKeySignature field in response")
+	}
+	if _, ok := got["identityKey"]; !ok {
+		t.Fatal("expected identityKey field in response")
+	}
+	if _, ok := got["preKeyId"]; !ok {
+		t.Fatal("expected preKeyId field in response when one-time key is present")
+	}
+	if _, ok := got["preKeyPublic"]; !ok {
+		t.Fatal("expected preKeyPublic field in response when one-time key is present")
+	}
+	if _, ok := got["signed_pre_key_id"]; ok {
+		t.Fatal("snake_case signed_pre_key_id must not appear in the canonical contract")
+	}
+	if got["deviceId"] != "9" {
+		t.Fatalf("expected deviceId 9, got %#v", got["deviceId"])
+	}
+}
+
 func TestValidateSenderDeviceBindingAllowsRegisteredDevice(t *testing.T) {
 	userID := uuid.New()
 	if err := ValidateSenderDeviceBinding(userID, "device-42", []string{"device-42", "device-77"}); err != nil {
 		t.Fatalf("expected device to be accepted, got %v", err)
+	}
+}
+
+func TestAllocateSignalDeviceIDKeepsUniqueAssignments(t *testing.T) {
+	if got := allocateSignalDeviceID(0, 0); got != 1 {
+		t.Fatalf("expected first device id to start from 1, got %d", got)
+	}
+	if got := allocateSignalDeviceID(0, 7); got != 8 {
+		t.Fatalf("expected next per-user device id to be 8, got %d", got)
+	}
+	if got := allocateSignalDeviceID(19, 7); got != 19 {
+		t.Fatalf("expected explicit device id 19 to be preserved, got %d", got)
 	}
 }
 

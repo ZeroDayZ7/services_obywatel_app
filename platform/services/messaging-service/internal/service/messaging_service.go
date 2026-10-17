@@ -15,6 +15,7 @@ import (
 	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/messaging-service/config"
 	"github.com/zerodayz7/platform/services/messaging-service/internal/model"
+	pub "github.com/zerodayz7/platform/services/messaging-service/internal/publisher"
 	"github.com/zerodayz7/platform/services/messaging-service/internal/repository"
 	"gorm.io/gorm"
 )
@@ -52,20 +53,22 @@ type MessagingService interface {
 	// E2EE Keys
 	UploadDeviceKeys(ctx context.Context, userID uuid.UUID, req model.UploadDeviceKeysRequest) error
 	GetUserKeyBundle(ctx context.Context, targetUserID string) (*model.PreKeyBundleDto, error)
-	GetUserPreKeys(ctx context.Context, targetUserID string) (*model.UserPreKeysResponse, error)
+	GetUserPreKeys(ctx context.Context, targetUserID string) (*model.PreKeyBundleDto, error)
 }
 
 type messagingService struct {
-	repo   repository.MessagingRepository
-	cfg    *config.Config
-	logger *shared.Logger
+	repo      repository.MessagingRepository
+	cfg       *config.Config
+	logger    *shared.Logger
+	publisher pub.EventPublisher
 }
 
-func NewMessagingService(repo repository.MessagingRepository, cfg *config.Config, logger *shared.Logger) MessagingService {
+func NewMessagingService(repo repository.MessagingRepository, cfg *config.Config, logger *shared.Logger, publisher pub.EventPublisher) MessagingService {
 	return &messagingService{
-		repo:   repo,
-		cfg:    cfg,
-		logger: logger,
+		repo:      repo,
+		cfg:       cfg,
+		logger:    logger,
+		publisher: publisher,
 	}
 }
 
@@ -167,6 +170,7 @@ func (s *messagingService) ProcessOutbox(ctx context.Context, userID uuid.UUID, 
 				"conversation_id", msg.ConversationID.String(),
 				"idempotency_key", msg.IdempotencyKey,
 			)
+			s.publishMessageEvent(ctx, msg)
 		} else if !errors.Is(err, gorm.ErrDuplicatedKey) {
 			s.logger.Error("[OUTBOX-1.7] message persistence failed",
 				"user_id", userID.String(),
@@ -200,14 +204,10 @@ func buildMessageFromOutboxEvent(userID uuid.UUID, evt model.OutboxEventPayload)
 		return nil, false, nil
 	}
 
-	evt.Normalize()
 	conversationID := evt.ConversationID
 	ciphertext := strings.TrimSpace(evt.Ciphertext)
 	idempotencyKey := strings.TrimSpace(evt.IdempotencyKey)
 	resolvedSignalType := evt.Type
-	if resolvedSignalType == 0 {
-		resolvedSignalType = evt.TypeAlt
-	}
 	messageType := model.MessageTypeText
 	if resolvedSignalType != 0 {
 		messageType = model.MessageType(strconv.Itoa(int(resolvedSignalType)))
@@ -233,6 +233,20 @@ func buildMessageFromOutboxEvent(userID uuid.UUID, evt model.OutboxEventPayload)
 			if ciphertext == "" {
 				if rawCiphertext, ok := payload["ciphertext"].(string); ok {
 					ciphertext = strings.TrimSpace(rawCiphertext)
+				}
+			}
+			if evt.AttachmentID == nil {
+				if rawAttachmentID, ok := payload["attachmentId"].(string); ok && rawAttachmentID != "" {
+					if parsed, err := uuid.Parse(rawAttachmentID); err == nil {
+						evt.AttachmentID = &parsed
+					}
+				}
+			}
+			if evt.AttachmentID == nil {
+				if rawAttachmentID, ok := payload["attachment_id"].(string); ok && rawAttachmentID != "" {
+					if parsed, err := uuid.Parse(rawAttachmentID); err == nil {
+						evt.AttachmentID = &parsed
+					}
 				}
 			}
 			if idempotencyKey == "" {
@@ -284,9 +298,6 @@ func buildMessageFromOutboxEvent(userID uuid.UUID, evt model.OutboxEventPayload)
 		idempotencyKey = uuid.NewString()
 	}
 	if evt.SenderDeviceID == "" {
-		evt.SenderDeviceID = evt.SenderDeviceIDAlt
-	}
-	if evt.SenderDeviceID == "" {
 		evt.SenderDeviceID = "unknown-device"
 	}
 
@@ -294,6 +305,7 @@ func buildMessageFromOutboxEvent(userID uuid.UUID, evt model.OutboxEventPayload)
 		ConversationID:   *conversationID,
 		SenderID:         userID,
 		SenderDeviceID:   evt.SenderDeviceID,
+		AttachmentID:     evt.AttachmentID,
 		Type:             messageType,
 		EncryptedPayload: []byte(ciphertext),
 		IdempotencyKey:   idempotencyKey,
@@ -369,12 +381,65 @@ func (s *messagingService) SendMessage(ctx context.Context, senderID uuid.UUID, 
 		return err
 	}
 
+	s.publishMessageEvent(ctx, msg)
+
 	s.logger.Info("[MESSAGE-SEND-1.6] message persisted successfully",
 		"user_id", senderID.String(),
 		"conversation_id", msg.ConversationID.String(),
 		"message_id", msg.ID.String(),
 	)
 	return nil
+}
+
+func (s *messagingService) publishMessageEvent(ctx context.Context, msg *model.Message) {
+	if s.publisher == nil || msg == nil {
+		return
+	}
+
+	conversation, err := s.repo.GetConversationByID(ctx, msg.SenderID, msg.ConversationID)
+	if err != nil || conversation == nil {
+		s.logger.Warn("failed to resolve conversation members for websocket fan-out",
+			"conversation_id", msg.ConversationID.String(),
+			"user_id", msg.SenderID.String(),
+			"error", err,
+		)
+		return
+	}
+
+	targetUsers := make([]uuid.UUID, 0, len(conversation.Members))
+	seen := make(map[uuid.UUID]struct{}, len(conversation.Members))
+	for _, member := range conversation.Members {
+		if member.UserID == uuid.Nil {
+			continue
+		}
+		if member.UserID == msg.SenderID && len(conversation.Members) > 1 {
+			continue
+		}
+		if _, exists := seen[member.UserID]; exists {
+			continue
+		}
+		seen[member.UserID] = struct{}{}
+		targetUsers = append(targetUsers, member.UserID)
+	}
+	if len(targetUsers) == 0 {
+		return
+	}
+
+	if err := s.publisher.Publish(ctx, pub.NewEvent(targetUsers, map[string]any{
+		"type":            "new_message",
+		"event_id":        uuid.NewString(),
+		"conversation_id": msg.ConversationID.String(),
+		"sender_user_id":  msg.SenderID.String(),
+		"message_id":      msg.ID.String(),
+		"message_version": msg.Version,
+		"timestamp":       time.Now().UnixMilli(),
+	})); err != nil {
+		s.logger.Warn("websocket event publication failed",
+			"conversation_id", msg.ConversationID.String(),
+			"event_type", "new_message",
+			"error", err,
+		)
+	}
 }
 
 func (s *messagingService) GetContacts(ctx context.Context, ownerID uuid.UUID, sinceVersion uint64) ([]model.Contact, error) {
@@ -470,12 +535,13 @@ func (s *messagingService) CreateConversation(ctx context.Context, userID uuid.U
 	}
 
 	for _, recipientID := range req.RecipientIDs {
-		if recipientID != userID {
-			conv.Members = append(conv.Members, model.ConversationMember{
-				UserID: recipientID,
-				Role:   "member",
-			})
+		if recipientID == userID {
+			continue
 		}
+		conv.Members = append(conv.Members, model.ConversationMember{
+			UserID: recipientID,
+			Role:   "member",
+		})
 	}
 
 	if err := s.repo.CreateConversation(ctx, conv); err != nil {
@@ -650,11 +716,21 @@ func validateDeviceKeyUpload(req model.UploadDeviceKeysRequest) error {
 	return nil
 }
 
+func allocateSignalDeviceID(requested uint32, currentMax uint32) uint32 {
+	if requested > 0 {
+		return requested
+	}
+	if currentMax == 0 {
+		return 1
+	}
+	return currentMax + 1
+}
+
 func BuildUserDeviceIdentity(userID uuid.UUID, req model.UploadDeviceKeysRequest) *model.UserDeviceIdentity {
 	return &model.UserDeviceIdentity{
 		UserID:              userID,
 		DeviceID:            req.DeviceID,
-		SignalDeviceID:      req.SignalDeviceID,
+		SignalDeviceID:      allocateSignalDeviceID(req.SignalDeviceID, 0),
 		RegistrationID:      req.RegistrationID,
 		PublicKey:           req.IdentityPublicKey,
 		SignedPreKey:        req.SignedPreKey,
@@ -733,7 +809,6 @@ func (s *messagingService) ValidateSenderDeviceOwnership(ctx context.Context, us
 }
 
 func (s *messagingService) UploadDeviceKeys(ctx context.Context, userID uuid.UUID, req model.UploadDeviceKeysRequest) error {
-	req.Normalize()
 	s.logger.Info("[DEVICE-KEYS-1] validating and persisting E2EE identity bundle",
 		"user_id", userID.String(),
 		"device_id", req.DeviceID,
@@ -748,6 +823,16 @@ func (s *messagingService) UploadDeviceKeys(ctx context.Context, userID uuid.UUI
 		return apperr.ErrValidationFailed.WithMeta("detail", err.Error())
 	}
 
+	currentMaxSignalDeviceID, err := s.repo.GetMaxSignalDeviceIDForUser(ctx, userID)
+	if err != nil {
+		s.logger.Error("[DEVICE-KEYS-1.1a] failed to resolve next signal device id",
+			"user_id", userID.String(),
+			"device_id", req.DeviceID,
+			"error", err.Error(),
+		)
+		return err
+	}
+	req.SignalDeviceID = allocateSignalDeviceID(req.SignalDeviceID, currentMaxSignalDeviceID)
 	identity := BuildUserDeviceIdentity(userID, req)
 	if err := s.repo.SaveDeviceIdentity(ctx, identity); err != nil {
 		s.logger.Error("[DEVICE-KEYS-1.2] unable to persist device identity",
@@ -811,6 +896,13 @@ func (s *messagingService) GetUserKeyBundle(ctx context.Context, targetUserID st
 		)
 		return nil, ErrDeviceNotFound
 	}
+	if identity.SignalDeviceID == 0 {
+		s.logger.Error("[KEY-BUNDLE-1.2a] missing signal device id for target user bundle",
+			"target_user_id", targetUserID,
+			"device_id", identity.DeviceID,
+		)
+		return nil, ErrInvalidSession
+	}
 
 	preKey, err := s.repo.PopPreKey(ctx, identity.UserID, identity.DeviceID)
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -837,56 +929,23 @@ func (s *messagingService) GetUserKeyBundle(ctx context.Context, targetUserID st
 	return bundle, nil
 }
 
-func (s *messagingService) GetUserPreKeys(ctx context.Context, targetUserID string) (*model.UserPreKeysResponse, error) {
-	s.logger.Info("[KEY-PREKEYS-1] resolving user pre-keys",
+func (s *messagingService) GetUserPreKeys(ctx context.Context, targetUserID string) (*model.PreKeyBundleDto, error) {
+	s.logger.Info("[KEY-PREKEYS-1] resolving canonical Signal pre-key bundle",
 		"target_user_id", targetUserID,
 	)
 	bundle, err := s.GetUserKeyBundle(ctx, targetUserID)
 	if err != nil {
 		return nil, err
 	}
-
-	targetID, err := uuid.Parse(targetUserID)
-	if err != nil {
-		s.logger.Error("[KEY-PREKEYS-1.1] invalid target user id during pre-key response",
-			"target_user_id", targetUserID,
-			"error", err.Error(),
-		)
-		return nil, ErrInvalidUUID
-	}
-
-	identity, err := s.repo.GetLatestDeviceIdentityForUser(ctx, targetID)
-	if err != nil {
-		s.logger.Error("[KEY-PREKEYS-1.2] latest device identity missing",
-			"target_user_id", targetUserID,
-			"error", err.Error(),
-		)
+	if bundle == nil {
 		return nil, ErrDeviceNotFound
 	}
-
-	res := &model.UserPreKeysResponse{
-		UserID:          identity.UserID,
-		DeviceID:        "",
-		IdentityKey:     identity.PublicKey,
-		SignedPreKey:    identity.SignedPreKey,
-		SignedPreKeySig: identity.SignedPreKeySig,
-		SignedPreKeyID:  identity.SignedPreKeyID,
-	}
-	if identity.SignalDeviceID > 0 {
-		res.DeviceID = strconv.FormatUint(uint64(identity.SignalDeviceID), 10)
-	}
-	if bundle != nil {
-		res.OneTimePreKey = bundle.PreKeyPublic
-		if bundle.PreKeyID != nil {
-			res.OneTimePreKeyID = *bundle.PreKeyID
-		}
-	}
-	s.logger.Info("[KEY-PREKEYS-1.3] user pre-key response built",
+	s.logger.Info("[KEY-PREKEYS-1.3] canonical pre-key bundle returned",
 		"target_user_id", targetUserID,
-		"device_id", identity.DeviceID,
-		"has_otk", res.OneTimePreKey != nil,
+		"device_id", bundle.DeviceID,
+		"has_otk", bundle.PreKeyID != nil,
 	)
-	return res, nil
+	return bundle, nil
 }
 
 // #endregion

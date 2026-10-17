@@ -7,7 +7,7 @@ import (
 	"github.com/zerodayz7/platform/services/gateway/internal/di"
 )
 
-//#region SetupRoutes
+// #region SetupRoutes
 func SetupRoutes(app *fiber.App, container *di.Container) {
 	services := container.Config.Services
 
@@ -24,18 +24,18 @@ func SetupRoutes(app *fiber.App, container *di.Container) {
 			"identity":    services.Identity + "/health",
 			"officerBFF":  services.OfficerBFF + "/health",
 			"citizenDocs": services.CitizenDocs + "/health",
+			"websocket":   services.WS + "/health",
 		},
 	}
 	health.RegisterRoutes(app, checker)
 
 	// 2. Rejestracja modułów tras
+	RegisterWebSocketRoutes(app, container)
 	RegisterAuthRoutes(app, container)
 	RegisterDocumentRoutes(app, container)
 	RegisterNotifyRoutes(app, container)
 	RegisterMessagingRoutes(app, container)
 	RegisterOfficerRoutes(app, container)
-
-	RegisterWsRoutes(app, container)
 
 	// 3. Handlery końcowe (Fallback / 404)
 	pkgRouter.SetupFallbackHandlers(app)

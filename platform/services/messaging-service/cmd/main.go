@@ -8,14 +8,15 @@ import (
 	"time"
 
 	"github.com/zerodayz7/platform/pkg/httpserver"
+	pkgredis "github.com/zerodayz7/platform/pkg/redis"
 	"github.com/zerodayz7/platform/pkg/server"
 	"github.com/zerodayz7/platform/pkg/shared"
+	"github.com/zerodayz7/platform/pkg/storage" // <-- Import paczki storage
 	"github.com/zerodayz7/platform/services/messaging-service/app"
 	"github.com/zerodayz7/platform/services/messaging-service/config"
 	"github.com/zerodayz7/platform/services/messaging-service/internal/di"
 	"github.com/zerodayz7/platform/services/messaging-service/internal/router"
 	"github.com/zerodayz7/platform/services/messaging-service/internal/security"
-	"github.com/zerodayz7/platform/services/messaging-service/internal/websocket"
 )
 
 func main() {
@@ -39,7 +40,7 @@ func main() {
 	securityCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	// 3. Ładowanie Kluczy z KMS do KeyStore (użycie funkcji z internal/security)
+	// 3. Ładowanie Kluczy z KMS do KeyStore
 	rabbitHMACKey, err := security.LoadSecurityKeys(securityCtx, &config.AppConfig, keyStore)
 	if err != nil {
 		log.Error("❌ Nie udało się załadować kluczy bezpieczeństwa z KMS", "error", err)
@@ -57,12 +58,49 @@ func main() {
 	db, closeDB := config.MustInitDB(config.AppConfig.Database)
 	defer closeDB()
 
-	// 5. WebSocket Hub
-	wsHub := websocket.NewHub()
-	go wsHub.Run()
+	// 5. Redis client for websocket event fan-out
+	redisClient, err := pkgredis.New(pkgredis.Config(config.AppConfig.Redis))
+	if err != nil {
+		log.Warn("Redis is not available for messaging-service; websocket notifications will be skipped", "error", err)
+	} else {
+		defer func() {
+			if err := redisClient.Close(); err != nil {
+				log.Error("Failed to close Redis client cleanly", "error", err)
+			}
+		}()
+		log.Info("Redis connected for messaging-service websocket notifications", "host", config.AppConfig.Redis.Host, "db", config.AppConfig.Redis.DB)
+	}
 
-	// 6. DI Container & App Setup
-	container := di.NewContainer(db, log, &config.AppConfig, wsHub, keyStore)
+	// 5.5. S3 / MinIO Storage Initialization (zgodnie z wzorcem z identity-service)
+	var fileStorage storage.StorageClient
+	if config.AppConfig.S3.Enabled {
+		log.Info(
+			"S3 Storage is ENABLED. Connecting...",
+			"internal_endpoint", config.AppConfig.S3.InternalEndpoint,
+			"external_endpoint", config.AppConfig.S3.ExternalEndpoint,
+			"bucket", config.AppConfig.S3.Bucket,
+			"use_ssl", config.AppConfig.S3.UseSSL,
+		)
+		s3, err := storage.NewS3Storage(
+			config.AppConfig.S3.InternalEndpoint,
+			config.AppConfig.S3.ExternalEndpoint,
+			config.AppConfig.S3.AccessKey,
+			config.AppConfig.S3.SecretKey,
+			config.AppConfig.S3.Bucket,
+			config.AppConfig.S3.UseSSL,
+		)
+		if err != nil {
+			log.Error("❌ S3 initialization failed", "error", err)
+			os.Exit(1)
+		}
+		fileStorage = s3
+	} else {
+		log.Warn("S3 Storage is DISABLED. Using No-Op storage.")
+		fileStorage = &storage.NoOpStorage{}
+	}
+
+	// 6. DI Container & App Setup (przekazujemy fileStorage)
+	container := di.NewContainer(db, redisClient, fileStorage, log, &config.AppConfig, keyStore)
 	messagingApp := app.NewApp(container)
 
 	router.SetupMessagingRoutes(messagingApp, container)

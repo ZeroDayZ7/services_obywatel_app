@@ -8,9 +8,9 @@ import (
 func SetupMessagingRoutes(app *fiber.App, container *di.Container) {
 	msgH := container.MessagingHandler
 	contactsH := container.ContactsHandler
+	attachmentH := container.AttachmentHandler
 
 	SetupHealthRoutes(app)
-	SetupWsRoutes(app, container)
 
 	api := app.Group("/")
 
@@ -34,6 +34,14 @@ func SetupMessagingRoutes(app *fiber.App, container *di.Container) {
 	sync.Get("/delta", msgH.SyncDelta)
 	sync.Post("/delta", msgH.SyncDelta)
 	sync.Post("/outbox", msgH.ProcessOutbox)
+
+	// --- ATTACHMENTS ---
+	attachments := api.Group("/attachments")
+	attachments.Post("/upload", attachmentH.PrepareUpload)
+	attachments.Post("/finalize", attachmentH.FinalizeUpload)
+	attachments.Get("/:id/download", attachmentH.GetAttachmentDownloadURL)
+	attachments.Get("/:id", attachmentH.GetAttachment)
+	attachments.Delete("/:id", attachmentH.DeleteAttachment)
 
 	// --- MESSAGING ACTIVATION & ONBOARDING ---
 	messagingActivation := api.Group("/messaging")

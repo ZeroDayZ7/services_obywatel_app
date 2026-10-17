@@ -147,7 +147,40 @@ services:
     depends_on:
       db-notification:
         condition: service_healthy
-    
+
+  # region SVC WEBSOCKET
+  # --- WEBSOCKET SERVICE ---
+  websocket-service:
+    profiles: ["app", "full"]
+    build:
+      context: ../
+      dockerfile: services/websocket-service/Dockerfile.dev
+    image: websocket-service:dev
+    container_name: app-websocket-service
+    restart: ${DOCKER_RESTART_POLICY:-no}
+    working_dir: /app/services/websocket-service
+    environment:
+      - GOCACHE=/root/.cache/go-build
+      - GOWORK=off
+    volumes:
+      - ../services/websocket-service:/app/services/websocket-service
+      - ../pkg:/app/pkg
+      - ../go.work:/app/go.work
+      - ../go.work.sum:/app/go.work.sum
+      - go-build-cache:/root/.cache/go-build
+      - go-mod-cache:/go/pkg/mod
+    ports:
+      - "8092:8092"
+    env_file:
+      - ../services/websocket-service/.env.dev
+    networks:
+      - gateway-net
+      - cache-net
+      - target-admin-net
+    depends_on:
+      cache-redis:
+        condition: service_healthy
+
   # region SVC OFFICER-BFF
   # --- OFFICER BFF SERVICE ---
   officer-bff:
@@ -514,6 +547,7 @@ services:
       - minio_root_pass
     networks:
       - cache-net
+      - gateway-net
     command: server /data --console-address ":9001"
     volumes:
       - minio_data:/data

@@ -12,4 +12,5 @@ use (
 	./services/notification-service
 	./services/officer-bff
 	./services/version-service
+	./services/websocket-service
 )
