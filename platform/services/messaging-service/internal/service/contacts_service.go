@@ -145,14 +145,14 @@ func (s *contactsService) SendRequest(ctx context.Context, ownerID, targetID uui
 
 	if s.publisher != nil {
 		if err := s.publisher.Publish(ctx, pub.NewEvent([]uuid.UUID{ownerID, targetID}, map[string]any{
-			"type":           "contact_updated",
-			"event_id":       uuid.NewString(),
-			"contact_id":     newContact.ID.String(),
-			"owner_user_id":  ownerID.String(),
-			"target_user_id": targetID.String(),
-			"status":         string(newContact.Status),
-			"direction":      string(newContact.Direction),
-			"timestamp":      time.Now().UnixMilli(),
+			"type":          "contact_updated",
+			"eventId":       uuid.NewString(),
+			"contactId":     newContact.ID.String(),
+			"ownerUserId":   ownerID.String(),
+			"targetUserId":  targetID.String(),
+			"status":        string(newContact.Status),
+			"direction":     string(newContact.Direction),
+			"timestamp":     time.Now().UnixMilli(),
 		})); err != nil {
 			s.logger.Warn("contact event publication failed after persisting contact request",
 				"owner_id", ownerID.String(),
@@ -202,13 +202,13 @@ func (s *contactsService) RespondToRequest(ctx context.Context, currentUserID, c
 
 	if s.publisher != nil {
 		if err := s.publisher.Publish(ctx, pub.NewEvent([]uuid.UUID{contact.OwnerID, currentUserID}, map[string]any{
-			"type":           "contact_updated",
-			"event_id":       uuid.NewString(),
-			"contact_id":     contactID.String(),
-			"owner_user_id":  contact.OwnerID.String(),
-			"target_user_id": currentUserID.String(),
-			"status":         model.ContactStatusAccepted,
-			"timestamp":      time.Now().UnixMilli(),
+			"type":          "contact_updated",
+			"eventId":       uuid.NewString(),
+			"contactId":     contactID.String(),
+			"ownerUserId":   contact.OwnerID.String(),
+			"targetUserId":  currentUserID.String(),
+			"status":        model.ContactStatusAccepted,
+			"timestamp":     time.Now().UnixMilli(),
 		})); err != nil {
 			s.logger.Warn("contact event publication failed after accepting contact request",
 				"current_user_id", currentUserID.String(),

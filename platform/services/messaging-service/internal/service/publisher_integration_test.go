@@ -85,15 +85,18 @@ func TestContactsServiceUsesInjectedPublisherForContactEvents(t *testing.T) {
 	if payload["type"] != "contact_updated" {
 		t.Fatalf("expected event type contact_updated, got %v", payload["type"])
 	}
-	if payload["source_service"] != "messaging-service" {
-		t.Fatalf("expected source_service messaging-service, got %v", payload["source_service"])
+	if payload["sourceService"] != "messaging-service" {
+		t.Fatalf("expected sourceService messaging-service, got %v", payload["sourceService"])
 	}
 
-	targetUsers, ok := payload["target_user_ids"].([]string)
+	targetUsers, ok := payload["targetUserIds"].([]string)
 	if !ok || len(targetUsers) != 2 {
-		t.Fatalf("expected 2 target users, got %#v", payload["target_user_ids"])
+		t.Fatalf("expected 2 target users, got %#v", payload["targetUserIds"])
 	}
 	if targetUsers[0] != ownerID.String() && targetUsers[1] != ownerID.String() {
 		t.Fatalf("expected owner user to be included in fan-out, got %#v", targetUsers)
+	}
+	if _, exists := payload["target_user_ids"]; exists {
+		t.Fatal("legacy target_user_ids key must not exist")
 	}
 }

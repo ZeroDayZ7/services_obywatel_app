@@ -54,11 +54,11 @@ func TestMessagingServicePublishesSelfConversationMessagesToTheOwner(t *testing.
 		t.Fatal("expected publisher to receive an event")
 	}
 
-	targetUsers, ok := publisher.event["target_user_ids"].([]string)
+	targetUsers, ok := publisher.event["targetUserIds"].([]string)
 	if !ok {
-		t.Fatalf("expected target_user_ids to be []string, got %T", publisher.event["target_user_ids"])
+		t.Fatalf("expected targetUserIds to be []string, got %T", publisher.event["targetUserIds"])
 	}
 	if len(targetUsers) != 1 || targetUsers[0] != userID.String() {
-		t.Fatalf("expected self user %s in target_user_ids, got %v", userID.String(), targetUsers)
+		t.Fatalf("expected self user %s in targetUserIds, got %v", userID.String(), targetUsers)
 	}
 }

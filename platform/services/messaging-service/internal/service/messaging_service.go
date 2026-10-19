@@ -360,11 +360,11 @@ func (s *messagingService) publishMessageEvent(ctx context.Context, msg *model.M
 
 	if err := s.publisher.Publish(ctx, pub.NewEvent(targetUsers, map[string]any{
 		"type":            "new_message",
-		"event_id":        uuid.NewString(),
-		"conversation_id": msg.ConversationID.String(),
-		"sender_user_id":  msg.SenderID.String(),
-		"message_id":      msg.ID.String(),
-		"message_version": msg.Version,
+		"eventId":         uuid.NewString(),
+		"conversationId":  msg.ConversationID.String(),
+		"senderUserId":    msg.SenderID.String(),
+		"messageId":       msg.ID.String(),
+		"messageVersion":  msg.Version,
 		"timestamp":       time.Now().UnixMilli(),
 	})); err != nil {
 		s.logger.Warn("websocket event publication failed",
@@ -511,12 +511,9 @@ func (s *messagingService) MarkAsRead(ctx context.Context, userID uuid.UUID, con
 	if s.publisher != nil {
 		readReceipt := map[string]any{
 			"type":            "conversation_read",
-			"eventType":       "conversation_read",
 			"eventId":         uuid.NewString(),
 			"conversationId":  convID.String(),
-			"conversation_id": convID.String(),
 			"userId":          userID.String(),
-			"user_id":         userID.String(),
 			"lastReadSequence": conv.LastSequence,
 			"timestamp":       time.Now().UnixMilli(),
 		}

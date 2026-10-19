@@ -94,7 +94,7 @@ func (h *Handler) HandleInternalBroadcast(c fiber.Ctx) error {
 	}
 
 	var req struct {
-		UserID  string `json:"user_id"`
+		UserID  string `json:"userId"`
 		Channel string `json:"channel"`
 		Message string `json:"message"`
 	}
@@ -113,7 +113,7 @@ func (h *Handler) HandleInternalBroadcast(c fiber.Ctx) error {
 		h.hub.BroadcastToChannel(req.Channel, payload)
 	}
 
-	return c.JSON(fiber.Map{"ok": true, "user_id": req.UserID, "channel": req.Channel})
+	return c.JSON(fiber.Map{"ok": true, "userId": req.UserID, "channel": req.Channel})
 }
 
 func trustedUserIDFromSignedContext(encodedCtx, signature, secret, fallbackUserID string) (string, error) {

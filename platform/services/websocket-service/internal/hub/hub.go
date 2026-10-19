@@ -144,25 +144,19 @@ func (h *Hub) handleRedisEvent(payload []byte) {
 		return
 	}
 
-	for _, key := range []string{"target_user_ids", "targetUserIds"} {
-		if targetUserIDs, ok := event[key].([]any); ok {
-			users := make([]string, 0, len(targetUserIDs))
-			for _, item := range targetUserIDs {
-				if userID, ok := item.(string); ok && strings.TrimSpace(userID) != "" {
-					users = append(users, userID)
-				}
+	if targetUserIDs, ok := event["targetUserIds"].([]any); ok {
+		users := make([]string, 0, len(targetUserIDs))
+		for _, item := range targetUserIDs {
+			if userID, ok := item.(string); ok && strings.TrimSpace(userID) != "" {
+				users = append(users, userID)
 			}
-			if len(users) > 0 {
-				h.BroadcastToUsers(users, body)
-				return
-			}
+		}
+		if len(users) > 0 {
+			h.BroadcastToUsers(users, body)
+			return
 		}
 	}
 
-	if userID, ok := event["user_id"].(string); ok && strings.TrimSpace(userID) != "" {
-		h.BroadcastToUser(userID, body)
-		return
-	}
 	if userID, ok := event["userId"].(string); ok && strings.TrimSpace(userID) != "" {
 		h.BroadcastToUser(userID, body)
 	}
