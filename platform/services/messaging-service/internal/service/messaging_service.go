@@ -504,7 +504,31 @@ func (s *messagingService) MarkAsRead(ctx context.Context, userID uuid.UUID, con
 		return err
 	}
 
-	return s.repo.UpdateLastReadSequence(ctx, userID, convID, conv.LastSequence)
+	if err := s.repo.UpdateLastReadSequence(ctx, userID, convID, conv.LastSequence); err != nil {
+		return err
+	}
+
+	if s.publisher != nil {
+		readReceipt := map[string]any{
+			"type":            "conversation_read",
+			"eventType":       "conversation_read",
+			"eventId":         uuid.NewString(),
+			"conversationId":  convID.String(),
+			"conversation_id": convID.String(),
+			"userId":          userID.String(),
+			"user_id":         userID.String(),
+			"lastReadSequence": conv.LastSequence,
+			"timestamp":       time.Now().UnixMilli(),
+		}
+		if err := s.publisher.Publish(ctx, pub.NewEvent([]uuid.UUID{userID}, readReceipt)); err != nil {
+			s.logger.Warn("read receipt publication failed",
+				"conversation_id", convID.String(),
+				"user_id", userID.String(),
+				"error", err,
+			)
+		}
+	}
+	return nil
 }
 
 // #endregion
