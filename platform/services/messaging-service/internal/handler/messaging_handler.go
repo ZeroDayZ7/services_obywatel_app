@@ -2,7 +2,6 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
 	"strconv"
 	"strings"
 	"time"
@@ -84,18 +83,17 @@ func (h *MessagingHandler) ProcessOutbox(c *fiber.Ctx) error {
 			)
 			return apperr.SendAppError(c, apperr.ErrValidationFailed.WithMeta("detail", "plaintext content is rejected; ciphertext is required"))
 		}
-		if len(msg.Payload) > 0 {
-			var payload map[string]any
-			if err := json.Unmarshal(msg.Payload, &payload); err == nil {
-				if rawContent, ok := payload["content"].(string); ok && strings.TrimSpace(rawContent) != "" {
-					shared.GetLogger().Warn("[OUTBOX_DEBUG] rejected plaintext in wrapped payload",
-						"user_id", rc.UserID.String(),
-						"index", i,
-						"event_id", msg.EventID,
-					)
-					return apperr.SendAppError(c, apperr.ErrValidationFailed.WithMeta("detail", "plaintext content is rejected; ciphertext is required"))
-				}
-			}
+		if msg.EventID == uuid.Nil {
+			return apperr.SendAppError(c, apperr.ErrValidationFailed.WithMeta("detail", "eventId is required"))
+		}
+		if msg.ConversationID == nil || *msg.ConversationID == uuid.Nil {
+			return apperr.SendAppError(c, apperr.ErrValidationFailed.WithMeta("detail", "conversationId is required"))
+		}
+		if strings.TrimSpace(msg.Ciphertext) == "" {
+			return apperr.SendAppError(c, apperr.ErrValidationFailed.WithMeta("detail", "ciphertext is required"))
+		}
+		if msg.Type == 0 {
+			return apperr.SendAppError(c, apperr.ErrValidationFailed.WithMeta("detail", "type is required"))
 		}
 		shared.GetLogger().Info("[OUTBOX_DEBUG] message item",
 			"index", i,

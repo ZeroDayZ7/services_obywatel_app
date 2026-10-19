@@ -3,7 +3,6 @@ package service
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -203,119 +202,53 @@ func buildMessageFromOutboxEvent(userID uuid.UUID, evt model.OutboxEventPayload)
 		)
 		return nil, false, nil
 	}
-
-	conversationID := evt.ConversationID
-	ciphertext := strings.TrimSpace(evt.Ciphertext)
-	idempotencyKey := strings.TrimSpace(evt.IdempotencyKey)
-	resolvedSignalType := evt.Type
-	messageType := model.MessageTypeText
-	if resolvedSignalType != 0 {
-		messageType = model.MessageType(strconv.Itoa(int(resolvedSignalType)))
+	if evt.EventID == uuid.Nil {
+		return nil, false, apperr.ErrValidationFailed.WithMeta("detail", "eventId is required")
 	}
-
-	if conversationID == nil && len(evt.Payload) > 0 {
-		var payload map[string]any
-		if err := json.Unmarshal(evt.Payload, &payload); err == nil {
-			if rawConversationID, ok := payload["conversation_id"].(string); ok && rawConversationID != "" {
-				parsed, err := uuid.Parse(rawConversationID)
-				if err == nil {
-					conversationID = &parsed
-				}
-			}
-			if conversationID == nil {
-				if rawConversationID, ok := payload["conversationId"].(string); ok && rawConversationID != "" {
-					parsed, err := uuid.Parse(rawConversationID)
-					if err == nil {
-						conversationID = &parsed
-					}
-				}
-			}
-			if ciphertext == "" {
-				if rawCiphertext, ok := payload["ciphertext"].(string); ok {
-					ciphertext = strings.TrimSpace(rawCiphertext)
-				}
-			}
-			if evt.AttachmentID == nil {
-				if rawAttachmentID, ok := payload["attachmentId"].(string); ok && rawAttachmentID != "" {
-					if parsed, err := uuid.Parse(rawAttachmentID); err == nil {
-						evt.AttachmentID = &parsed
-					}
-				}
-			}
-			if evt.AttachmentID == nil {
-				if rawAttachmentID, ok := payload["attachment_id"].(string); ok && rawAttachmentID != "" {
-					if parsed, err := uuid.Parse(rawAttachmentID); err == nil {
-						evt.AttachmentID = &parsed
-					}
-				}
-			}
-			if idempotencyKey == "" {
-				if rawKey, ok := payload["idempotency_key"].(string); ok {
-					idempotencyKey = strings.TrimSpace(rawKey)
-				}
-			}
-		}
-	}
-
-	if evt.EventType == "" && ciphertext != "" {
-		evt.EventType = "SEND_MESSAGE"
-	}
-	if evt.EventType == "" && evt.EventID != uuid.Nil {
-		evt.EventType = "SEND_MESSAGE"
-	}
-	if evt.EventType == "" {
-		shared.GetLogger().Warn("[OUTBOX-BUILD-1.2] missing event type, skipping",
-			"user_id", userID.String(),
-			"event_id", evt.EventID,
-		)
-		return nil, false, nil
-	}
-	if conversationID == nil || *conversationID == uuid.Nil {
-		shared.GetLogger().Warn("[OUTBOX-BUILD-1.3] missing conversation id, skipping",
-			"user_id", userID.String(),
-			"event_id", evt.EventID,
-		)
-		return nil, false, nil
+	if evt.ConversationID == nil || *evt.ConversationID == uuid.Nil {
+		return nil, false, apperr.ErrValidationFailed.WithMeta("detail", "conversationId is required")
 	}
 	if strings.TrimSpace(evt.Content) != "" {
-		shared.GetLogger().Warn("[OUTBOX-BUILD-1.4] plaintext content rejected as ciphertext",
-			"user_id", userID.String(),
-			"event_id", evt.EventID,
-		)
 		return nil, false, apperr.ErrValidationFailed.WithMeta("detail", "ciphertext is required; plaintext content is rejected")
 	}
-	if ciphertext == "" {
-		shared.GetLogger().Warn("[OUTBOX-BUILD-1.5] empty ciphertext rejected",
-			"user_id", userID.String(),
-			"event_id", evt.EventID,
-		)
+	if strings.TrimSpace(evt.Ciphertext) == "" {
 		return nil, false, apperr.ErrValidationFailed.WithMeta("detail", "ciphertext is required")
 	}
-	if idempotencyKey == "" && evt.EventID != uuid.Nil {
-		idempotencyKey = evt.EventID.String()
+	if evt.Type == 0 {
+		return nil, false, apperr.ErrValidationFailed.WithMeta("detail", "type is required")
 	}
-	if idempotencyKey == "" {
-		idempotencyKey = uuid.NewString()
+	if evt.EventType == "" {
+		evt.EventType = "SEND_MESSAGE"
+	}
+	if strings.TrimSpace(evt.IdempotencyKey) == "" {
+		evt.IdempotencyKey = evt.EventID.String()
 	}
 	if evt.SenderDeviceID == "" {
 		evt.SenderDeviceID = "unknown-device"
 	}
 
+	messageType := model.MessageTypeText
+	if evt.Type != 0 {
+		messageType = model.MessageType(strconv.Itoa(int(evt.Type)))
+	}
+
 	msg := &model.Message{
-		ConversationID:   *conversationID,
+		ID:               evt.EventID,
+		ConversationID:   *evt.ConversationID,
 		SenderID:         userID,
 		SenderDeviceID:   evt.SenderDeviceID,
 		AttachmentID:     evt.AttachmentID,
 		Type:             messageType,
-		EncryptedPayload: []byte(ciphertext),
-		IdempotencyKey:   idempotencyKey,
+		EncryptedPayload: []byte(strings.TrimSpace(evt.Ciphertext)),
+		IdempotencyKey:   strings.TrimSpace(evt.IdempotencyKey),
 	}
 	shared.GetLogger().Info("[OUTBOX-BUILD-1.6] message built from outbox event",
 		"user_id", userID.String(),
+		"message_id", msg.ID.String(),
 		"conversation_id", msg.ConversationID.String(),
 		"signal_type", string(msg.Type),
-		"ciphertext_len", len(ciphertext),
-		"idempotency_key_present", idempotencyKey != "",
+		"ciphertext_len", len(msg.EncryptedPayload),
+		"idempotency_key_present", msg.IdempotencyKey != "",
 	)
 	return msg, true, nil
 }

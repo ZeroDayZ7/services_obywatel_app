@@ -66,6 +66,30 @@ func TestMessageJSONUsesCamelCaseOnly(t *testing.T) {
 	}
 }
 
+func TestOutboxEventPayloadUsesEventIdAsCanonicalIdentifier(t *testing.T) {
+	eventID := uuid.New()
+	payload := OutboxEventPayload{
+		EventID:        eventID,
+		IdempotencyKey: eventID.String(),
+		EventType:      "SEND_MESSAGE",
+		ConversationID: func() *uuid.UUID { v := uuid.New(); return &v }(),
+		Ciphertext:     "ciphertext",
+		Type:           2,
+	}
+
+	jsonText, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal outbox payload: %v", err)
+	}
+
+	if strings.Contains(string(jsonText), "\"messageId\"") {
+		t.Fatalf("messageId should not be serialized in canonical outbox contract; got %s", jsonText)
+	}
+	if !strings.Contains(string(jsonText), "\"eventId\":\""+eventID.String()+"\"") {
+		t.Fatalf("expected eventId to be serialized as canonical identifier; got %s", jsonText)
+	}
+}
+
 func TestMessageEnvelopeJSONUsesCamelCaseOnly(t *testing.T) {
 	envelope := MessageEnvelope{
 		MessageID:         uuid.NewString(),
