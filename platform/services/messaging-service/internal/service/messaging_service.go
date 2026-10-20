@@ -715,6 +715,7 @@ func BuildPreKeyBundle(identity *model.UserDeviceIdentity, oneTimePreKey *model.
 	bundle := &model.PreKeyBundleDto{
 		RegistrationID:        identity.RegistrationID,
 		DeviceID:              "",
+		AppDeviceID:           identity.DeviceID,
 		SignedPreKeyID:        identity.SignedPreKeyID,
 		SignedPreKeyPublic:    identity.SignedPreKey,
 		SignedPreKeySignature: identity.SignedPreKeySig,

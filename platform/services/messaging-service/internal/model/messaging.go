@@ -347,6 +347,7 @@ type UploadDeviceKeysRequest struct {
 type PreKeyBundleDto struct {
 	RegistrationID        uint32  `json:"registrationId"`
 	DeviceID              string  `json:"deviceId"`
+	AppDeviceID           string  `json:"appDeviceId,omitempty"`
 	PreKeyID              *uint32 `json:"preKeyId,omitempty"`
 	PreKeyPublic          []byte  `json:"preKeyPublic,omitempty"`
 	SignedPreKeyID        uint32  `json:"signedPreKeyId"`
