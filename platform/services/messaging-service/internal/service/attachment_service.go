@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/zerodayz7/platform/pkg/storage"
 	"github.com/zerodayz7/platform/services/messaging-service/internal/model"
 	"github.com/zerodayz7/platform/services/messaging-service/internal/repository"
+	"gorm.io/gorm"
 )
 
 const (
@@ -200,6 +202,53 @@ func (s *attachmentService) FinalizeUpload(ctx context.Context, userID uuid.UUID
 	return attachment, nil
 }
 
+func (s *attachmentService) userHasAttachmentAccess(ctx context.Context, userID uuid.UUID, attachment *model.Attachment) (bool, error) {
+	if attachment == nil {
+		return false, nil
+	}
+	if attachment.UserID == userID {
+		return true, nil
+	}
+
+	candidateConversationIDs := make([]uuid.UUID, 0, 2)
+	if attachment.ConversationID != nil && *attachment.ConversationID != uuid.Nil {
+		candidateConversationIDs = append(candidateConversationIDs, *attachment.ConversationID)
+	}
+	if attachment.MessageID != nil && *attachment.MessageID != uuid.Nil {
+		message, err := s.repo.GetMessageByID(ctx, *attachment.MessageID)
+		if err != nil {
+			return false, err
+		}
+		if message != nil && message.ConversationID != uuid.Nil {
+			candidateConversationIDs = append(candidateConversationIDs, message.ConversationID)
+		}
+	}
+
+	seen := make(map[uuid.UUID]struct{}, len(candidateConversationIDs))
+	for _, conversationID := range candidateConversationIDs {
+		if conversationID == uuid.Nil {
+			continue
+		}
+		if _, ok := seen[conversationID]; ok {
+			continue
+		}
+		seen[conversationID] = struct{}{}
+
+		conv, err := s.repo.GetConversationByID(ctx, userID, conversationID)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				continue
+			}
+			return false, err
+		}
+		if conv != nil {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
 func (s *attachmentService) GetAttachment(ctx context.Context, userID uuid.UUID, attachmentID uuid.UUID) (*model.Attachment, error) {
 	log := shared.GetLogger()
 
@@ -234,14 +283,26 @@ func (s *attachmentService) GetAttachment(ctx context.Context, userID uuid.UUID,
 		return nil, apperr.ErrNotFound
 	}
 
-	if attachment.UserID != userID {
+	allowed, err := s.userHasAttachmentAccess(ctx, userID, attachment)
+	if err != nil {
+		log.Error(
+			"[ATTACHMENT-GET-5] błąd weryfikacji dostępu do załącznika",
+			"user_id", userID.String(),
+			"attachment_id", attachmentID.String(),
+			"error", err,
+		)
+		return nil, err
+	}
+	if !allowed {
 		log.Warn(
-			"[ATTACHMENT-GET-5] odmowa dostępu do obcego załącznika",
+			"[ATTACHMENT-GET-6] odmowa dostępu do załącznika poza właścicielem lub konwersacją",
 			"user_id", userID.String(),
 			"attachment_id", attachmentID.String(),
 			"owner_id", attachment.UserID.String(),
+			"conversation_id", attachment.ConversationID,
+			"message_id", attachment.MessageID,
 		)
-		return nil, apperr.ErrUnauthorized.WithMeta("detail", "attachment does not belong to this user")
+		return nil, apperr.ErrForbidden.WithMeta("detail", "attachment is not available in this conversation")
 	}
 
 	log.Info(
@@ -287,14 +348,26 @@ func (s *attachmentService) GetAttachmentDownloadURL(ctx context.Context, userID
 		return nil, apperr.ErrNotFound
 	}
 
-	if attachment.UserID != userID {
+	allowed, err := s.userHasAttachmentAccess(ctx, userID, attachment)
+	if err != nil {
+		log.Error(
+			"[ATTACHMENT-URL-5] błąd weryfikacji dostępu do załącznika",
+			"user_id", userID.String(),
+			"attachment_id", attachmentID.String(),
+			"error", err,
+		)
+		return nil, err
+	}
+	if !allowed {
 		log.Warn(
 			"[ATTACHMENT-URL-5] odmowa dostępu do obcego załącznika podczas pobierania",
 			"user_id", userID.String(),
 			"attachment_id", attachmentID.String(),
 			"owner_id", attachment.UserID.String(),
+			"conversation_id", attachment.ConversationID,
+			"message_id", attachment.MessageID,
 		)
-		return nil, apperr.ErrUnauthorized.WithMeta("detail", "attachment does not belong to this user")
+		return nil, apperr.ErrForbidden.WithMeta("detail", "attachment is not available in this conversation")
 	}
 
 	if attachment.Status == model.AttachmentStatusDeleted {

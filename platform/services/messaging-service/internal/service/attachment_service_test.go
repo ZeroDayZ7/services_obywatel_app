@@ -165,9 +165,9 @@ func TestAttachmentServicePrepareUpload_UsesMessengerObjectKeyPrefix(t *testing.
 
 	prepareResp, err := service.PrepareUpload(context.Background(), userID, model.AttachmentUploadRequest{
 		ConversationID: &conversationID,
-		FileName:      "invoice.pdf",
-		ContentType:   "application/pdf",
-		Size:          128,
+		FileName:       "invoice.pdf",
+		ContentType:    "application/pdf",
+		Size:           128,
 	})
 	if err != nil {
 		t.Fatalf("prepare upload: %v", err)
@@ -191,13 +191,53 @@ func TestAttachmentServicePrepareUpload_UsesMessengerObjectKeyPrefix(t *testing.
 	}
 }
 
-func TestAttachmentServiceGetDownloadURL_RequiresOwnership(t *testing.T) {
+func setupAttachmentPermissionTestDB(t *testing.T) (*gorm.DB, repository.MessagingRepository, *fakeStorage) {
+	t.Helper()
+
 	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
 	if err := db.Exec(`
 		DROP TABLE IF EXISTS attachments;
+		DROP TABLE IF EXISTS messages;
+		DROP TABLE IF EXISTS conversation_members;
+		DROP TABLE IF EXISTS conversations;
+		CREATE TABLE conversations (
+			id TEXT PRIMARY KEY,
+			type TEXT NOT NULL DEFAULT 'direct',
+			title TEXT,
+			last_sequence INTEGER NOT NULL DEFAULT 0,
+			created_at DATETIME,
+			updated_at DATETIME,
+			deleted_at DATETIME
+		);
+		CREATE TABLE conversation_members (
+			id TEXT PRIMARY KEY,
+			conversation_id TEXT NOT NULL,
+			user_id TEXT NOT NULL,
+			role TEXT DEFAULT 'member',
+			last_read_sequence INTEGER NOT NULL DEFAULT 0,
+			created_at DATETIME,
+			updated_at DATETIME,
+			deleted_at DATETIME
+		);
+		CREATE TABLE messages (
+			id TEXT PRIMARY KEY,
+			idempotency_key TEXT NOT NULL DEFAULT '',
+			conversation_id TEXT NOT NULL,
+			sender_id TEXT NOT NULL,
+			sender_device_id TEXT NOT NULL,
+			attachment_id TEXT,
+			type TEXT NOT NULL DEFAULT 'text',
+			sequence INTEGER NOT NULL DEFAULT 0,
+			encrypted_payload BLOB NOT NULL,
+			media_header BLOB,
+			version INTEGER NOT NULL DEFAULT 1,
+			created_at DATETIME,
+			updated_at DATETIME,
+			deleted_at DATETIME
+		);
 		CREATE TABLE attachments (
 			id TEXT PRIMARY KEY,
 			user_id TEXT NOT NULL,
@@ -215,33 +255,117 @@ func TestAttachmentServiceGetDownloadURL_RequiresOwnership(t *testing.T) {
 			deleted_at DATETIME
 		);
 	`).Error; err != nil {
-		t.Fatalf("migrate attachment schema: %v", err)
+		t.Fatalf("create sqlite schema: %v", err)
 	}
-
 	store := &fakeStorage{data: make(map[string][]byte)}
-	repo := repository.NewMessagingRepository(db)
+	return db, repository.NewMessagingRepository(db), store
+}
+
+func TestAttachmentServiceGetDownloadURL_AuthorizesConversationMembers(t *testing.T) {
+	db, repo, store := setupAttachmentPermissionTestDB(t)
 	service := NewAttachmentService(repo, store, nil, 25*1024*1024)
+
 	ownerID := uuid.New()
-	otherUserID := uuid.New()
+	memberID := uuid.New()
+	outsiderID := uuid.New()
+	conversationID := uuid.New()
+	messageID := uuid.New()
 	attachmentID := uuid.New()
 
+	if err := db.Create(&model.Conversation{
+		ID:   conversationID,
+		Type: model.ConversationTypeDirect,
+	}).Error; err != nil {
+		t.Fatalf("create conversation: %v", err)
+	}
+	for _, userID := range []uuid.UUID{ownerID, memberID} {
+		if err := db.Create(&model.ConversationMember{
+			ID:             uuid.New(),
+			ConversationID: conversationID,
+			UserID:         userID,
+			Role:           "member",
+		}).Error; err != nil {
+			t.Fatalf("create conversation member %s: %v", userID, err)
+		}
+	}
+	if err := db.Create(&model.Message{
+		ID:               messageID,
+		ConversationID:   conversationID,
+		SenderID:         ownerID,
+		SenderDeviceID:   "device-1",
+		Type:             model.MessageTypeMedia,
+		Sequence:         1,
+		EncryptedPayload: []byte("payload"),
+	}).Error; err != nil {
+		t.Fatalf("create message: %v", err)
+	}
 	if err := repo.CreateAttachment(context.Background(), &model.Attachment{
-		ID:           attachmentID,
-		UserID:       ownerID,
-		FileKey:      "messenger/attachments/test/attachment/file.pdf",
-		OriginalName: "test-file.txt",
-		ContentType:  "text/plain",
-		Size:         12,
-		Status:       model.AttachmentStatusUploaded,
+		ID:             attachmentID,
+		UserID:         ownerID,
+		ConversationID: &conversationID,
+		MessageID:      &messageID,
+		FileKey:        "messenger/attachments/test/attachment/file.pdf",
+		OriginalName:   "file.pdf",
+		ContentType:    "application/pdf",
+		Size:           128,
+		Status:         model.AttachmentStatusUploaded,
 	}); err != nil {
 		t.Fatalf("create attachment: %v", err)
 	}
 
-	download, err := service.GetAttachmentDownloadURL(context.Background(), otherUserID, attachmentID)
+	t.Run("owner can download", func(t *testing.T) {
+		download, err := service.GetAttachmentDownloadURL(context.Background(), ownerID, attachmentID)
+		if err != nil {
+			t.Fatalf("owner should be authorized: %v", err)
+		}
+		if download == nil || download.AttachmentID != attachmentID {
+			t.Fatalf("expected attachment download response for owner, got %#v", download)
+		}
+	})
+
+	t.Run("conversation member can download", func(t *testing.T) {
+		download, err := service.GetAttachmentDownloadURL(context.Background(), memberID, attachmentID)
+		if err != nil {
+			t.Fatalf("conversation member should be authorized: %v", err)
+		}
+		if download == nil || download.AttachmentID != attachmentID {
+			t.Fatalf("expected attachment download response for member, got %#v", download)
+		}
+	})
+
+	t.Run("outsider is forbidden", func(t *testing.T) {
+		download, err := service.GetAttachmentDownloadURL(context.Background(), outsiderID, attachmentID)
+		if err == nil {
+			t.Fatal("expected outsider to be denied")
+		}
+		if download != nil {
+			t.Fatalf("expected nil response for outsider, got %#v", download)
+		}
+	})
+
+	t.Run("user without membership is forbidden", func(t *testing.T) {
+		otherUserID := uuid.New()
+		download, err := service.GetAttachmentDownloadURL(context.Background(), otherUserID, attachmentID)
+		if err == nil {
+			t.Fatal("expected non-member to be denied")
+		}
+		if download != nil {
+			t.Fatalf("expected nil response for non-member, got %#v", download)
+		}
+	})
+}
+
+func TestAttachmentServiceGetAttachment_RejectsMissingAttachmentForUnauthorizedUser(t *testing.T) {
+	_, repo, store := setupAttachmentPermissionTestDB(t)
+	service := NewAttachmentService(repo, store, nil, 25*1024*1024)
+
+	userID := uuid.New()
+	missingID := uuid.New()
+	attachment, err := service.GetAttachment(context.Background(), userID, missingID)
 	if err == nil {
-		t.Fatal("expected ownership check to fail")
+		t.Fatal("expected not found for missing attachment")
 	}
-	if download != nil {
-		t.Fatal("expected nil download response on unauthorized access")
+	if attachment != nil {
+		t.Fatalf("expected nil attachment for missing resource, got %#v", attachment)
 	}
 }

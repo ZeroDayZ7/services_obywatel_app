@@ -5,7 +5,7 @@ import (
 )
 
 // SendAppError teraz przyjmuje interfejs error, co rozwiązuje błędy kompilacji w handlerach
-//#region SendAppError
+// #region SendAppError
 func SendAppError(c *fiber.Ctx, err error) error {
 	// 1. Sprawdzamy czy błąd jest typu *AppError (Type Assertion)
 	appErr, ok := err.(*AppError)
@@ -26,6 +26,7 @@ func SendAppError(c *fiber.Ctx, err error) error {
 	statusMap := map[ErrorType]int{
 		Validation:   fiber.StatusBadRequest,
 		Unauthorized: fiber.StatusUnauthorized,
+		Forbidden:    fiber.StatusForbidden,
 		NotFound:     fiber.StatusNotFound,
 		Internal:     fiber.StatusInternalServerError,
 		BadRequest:   fiber.StatusBadRequest,

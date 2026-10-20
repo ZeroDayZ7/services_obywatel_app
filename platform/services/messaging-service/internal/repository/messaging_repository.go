@@ -21,6 +21,7 @@ type MessagingRepository interface {
 	CreateMessage(ctx context.Context, msg *model.Message) error
 	GetMessageByIdempotencyKey(ctx context.Context, idempotencyKey string) (*model.Message, error)
 	GetMessagesByConversation(ctx context.Context, userID uuid.UUID, conversationID uuid.UUID, limit, offset int) ([]model.Message, error)
+	GetMessageByID(ctx context.Context, messageID uuid.UUID) (*model.Message, error)
 	GetConversations(ctx context.Context, userID uuid.UUID) ([]model.Conversation, error)
 	GetConversationByID(ctx context.Context, userID, conversationID uuid.UUID) (*model.Conversation, error)
 	FindDirectConversationByUsers(ctx context.Context, userA, userB uuid.UUID) (*model.Conversation, error)
@@ -155,6 +156,21 @@ func (r *messagingRepository) GetMessagesByConversation(ctx context.Context, use
 		Offset(offset).
 		Find(&messages).Error
 	return messages, err
+}
+
+func (r *messagingRepository) GetMessageByID(ctx context.Context, messageID uuid.UUID) (*model.Message, error) {
+	if messageID == uuid.Nil {
+		return nil, nil
+	}
+
+	var message model.Message
+	if err := r.db.WithContext(ctx).Where("id = ?", messageID).First(&message).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &message, nil
 }
 
 func (r *messagingRepository) GetConversations(ctx context.Context, userID uuid.UUID) ([]model.Conversation, error) {
