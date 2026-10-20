@@ -93,50 +93,10 @@ func (s *stubMessagingService) GetUserPreKeys(ctx context.Context, targetUserID 
 	return nil, nil
 }
 
-func TestMessagingHandlerProcessOutbox_AcceptsWrappedMessagesPayload(t *testing.T) {
-	userID := uuid.New()
-	service := &stubMessagingService{
-		processOutbox: func(ctx context.Context, gotUserID uuid.UUID, req model.OutboxBatchRequest) (*model.OutboxBatchResponse, error) {
-			if gotUserID != userID {
-				t.Fatalf("expected userID %s, got %s", userID, gotUserID)
-			}
-			if len(req.Messages) != 1 {
-				t.Fatalf("expected 1 messages, got %d", len(req.Messages))
-			}
-			return &model.OutboxBatchResponse{ProcessedCount: 1}, nil
-		},
-	}
-
-	handler := NewMessagingHandler(service)
-	app := fiber.New()
-	app.Use(func(c *fiber.Ctx) error {
-		c.Locals(reqctx.FiberRequestContextKey, &reqctx.RequestContext{UserID: &userID})
-		return c.Next()
-	})
-	app.Post("/sync/outbox", handler.ProcessOutbox)
-
-	payload := fmt.Sprintf(`{"messages":[{"event_id":"%s","event_type":"SEND_MESSAGE","idempotency_key":"%s","conversation_id":"%s","payload":{"message_id":"msg-1"}}]}`,
-		uuid.NewString(),
-		uuid.NewString(),
-		uuid.NewString(),
-	)
-
-	req := httptest.NewRequest(http.MethodPost, "/sync/outbox", bytes.NewBufferString(payload))
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := app.Test(req)
-	if err != nil {
-		t.Fatalf("app test: %v", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
-	}
-}
-
-func TestMessagingHandlerProcessOutbox_AcceptsDirectMessageEnvelopePayload(t *testing.T) {
+func TestMessagingHandlerProcessOutbox_AcceptsValidMessageEnvelope(t *testing.T) {
 	userID := uuid.New()
 	conversationID := uuid.New()
-	key := uuid.NewString()
+	eventID := uuid.New()
 	service := &stubMessagingService{
 		processOutbox: func(ctx context.Context, gotUserID uuid.UUID, req model.OutboxBatchRequest) (*model.OutboxBatchResponse, error) {
 			if gotUserID != userID {
@@ -145,8 +105,11 @@ func TestMessagingHandlerProcessOutbox_AcceptsDirectMessageEnvelopePayload(t *te
 			if len(req.Messages) != 1 {
 				t.Fatalf("expected 1 messages, got %d", len(req.Messages))
 			}
-			if req.Messages[0].Ciphertext == "" {
-				t.Fatal("expected ciphertext in direct outbox envelope")
+			if req.Messages[0].EventID != eventID {
+				t.Fatalf("expected eventId %s, got %s", eventID, req.Messages[0].EventID)
+			}
+			if req.Messages[0].SenderDeviceID != "device-1" {
+				t.Fatalf("expected senderDeviceId device-1, got %q", req.Messages[0].SenderDeviceID)
 			}
 			if req.Messages[0].ConversationID == nil || req.Messages[0].ConversationID.String() != conversationID.String() {
 				t.Fatalf("expected conversation %s, got %v", conversationID, req.Messages[0].ConversationID)
@@ -163,9 +126,10 @@ func TestMessagingHandlerProcessOutbox_AcceptsDirectMessageEnvelopePayload(t *te
 	})
 	app.Post("/sync/outbox", handler.ProcessOutbox)
 
-	payload := fmt.Sprintf(`{"messages":[{"conversation_id":"%s","sender_device_id":"device-1","ciphertext":"Zm9v","type":1,"idempotency_key":"%s"}]}`,
+	payload := fmt.Sprintf(`{"messages":[{"eventId":"%s","eventType":"SEND_MESSAGE","idempotencyKey":"%s","conversationId":"%s","senderDeviceId":"device-1","ciphertext":"Zm9v","type":1}]}`,
+		eventID,
+		uuid.NewString(),
 		conversationID,
-		key,
 	)
 	req := httptest.NewRequest(http.MethodPost, "/sync/outbox", bytes.NewBufferString(payload))
 	req.Header.Set("Content-Type", "application/json")
@@ -179,24 +143,9 @@ func TestMessagingHandlerProcessOutbox_AcceptsDirectMessageEnvelopePayload(t *te
 	}
 }
 
-func TestMessagingHandlerProcessOutbox_IgnoresEmptyConversationID(t *testing.T) {
+func TestMessagingHandlerProcessOutbox_RejectsMissingSenderDeviceID(t *testing.T) {
 	userID := uuid.New()
-	service := &stubMessagingService{
-		processOutbox: func(ctx context.Context, gotUserID uuid.UUID, req model.OutboxBatchRequest) (*model.OutboxBatchResponse, error) {
-			if gotUserID != userID {
-				t.Fatalf("expected userID %s, got %s", userID, gotUserID)
-			}
-			if len(req.Messages) != 1 {
-				t.Fatalf("expected 1 messages, got %d", len(req.Messages))
-			}
-			if req.Messages[0].ConversationID != nil {
-				t.Fatalf("expected empty conversation_id to be ignored, got %v", req.Messages[0].ConversationID)
-			}
-			return &model.OutboxBatchResponse{ProcessedCount: 0}, nil
-		},
-	}
-
-	handler := NewMessagingHandler(service)
+	handler := NewMessagingHandler(&stubMessagingService{})
 	app := fiber.New()
 	app.Use(func(c *fiber.Ctx) error {
 		c.Locals(reqctx.FiberRequestContextKey, &reqctx.RequestContext{UserID: &userID})
@@ -204,7 +153,11 @@ func TestMessagingHandlerProcessOutbox_IgnoresEmptyConversationID(t *testing.T) 
 	})
 	app.Post("/sync/outbox", handler.ProcessOutbox)
 
-	payload := `{"messages":[{"event_id":"01a1221b-0a84-71be-9f4f-14afafc0b841","idempotency_key":"01a1221b-0a84-71be-9f4f-14afafc0b841","message_id":"01a1221b-0a84-71be-9f4f-14afafc0b841","event_type":"SEND_MESSAGE","conversation_id":"","sender_device_id":"8e681e7c-6ccc-4854-8fc6-b6dd5074f39e","ciphertext":"","type":1,"content":"","created_at":"2026-10-09T19:19:19.933148Z","outbox_event_id":"01a1221b-0a84-71be-9f4f-14afafc0b841"}]}`
+	payload := fmt.Sprintf(`{"messages":[{"eventId":"%s","eventType":"SEND_MESSAGE","conversationId":"%s","ciphertext":"Zm9v","type":1,"idempotencyKey":"%s"}]}`,
+		uuid.NewString(),
+		uuid.NewString(),
+		uuid.NewString(),
+	)
 	req := httptest.NewRequest(http.MethodPost, "/sync/outbox", bytes.NewBufferString(payload))
 	req.Header.Set("Content-Type", "application/json")
 
@@ -212,8 +165,34 @@ func TestMessagingHandlerProcessOutbox_IgnoresEmptyConversationID(t *testing.T) 
 	if err != nil {
 		t.Fatalf("app test: %v", err)
 	}
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestMessagingHandlerProcessOutbox_RejectsEmptyConversationID(t *testing.T) {
+	userID := uuid.New()
+	handler := NewMessagingHandler(&stubMessagingService{})
+	app := fiber.New()
+	app.Use(func(c *fiber.Ctx) error {
+		c.Locals(reqctx.FiberRequestContextKey, &reqctx.RequestContext{UserID: &userID})
+		return c.Next()
+	})
+	app.Post("/sync/outbox", handler.ProcessOutbox)
+
+	payload := fmt.Sprintf(`{"messages":[{"eventId":"%s","eventType":"SEND_MESSAGE","conversationId":"","senderDeviceId":"device-42","ciphertext":"Zm9v","type":1,"idempotencyKey":"%s"}]}`,
+		uuid.NewString(),
+		uuid.NewString(),
+	)
+	req := httptest.NewRequest(http.MethodPost, "/sync/outbox", bytes.NewBufferString(payload))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("app test: %v", err)
+	}
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.StatusCode)
 	}
 }
 
@@ -227,7 +206,7 @@ func TestMessagingHandlerProcessOutbox_RejectsPlaintextContentAsCiphertext(t *te
 	})
 	app.Post("/sync/outbox", handler.ProcessOutbox)
 
-	payload := fmt.Sprintf(`{"messages":[{"event_id":"%s","event_type":"SEND_MESSAGE","idempotency_key":"%s","conversation_id":"%s","sender_device_id":"device-1","ciphertext":"","content":"hello plaintext","type":1}]}`,
+	payload := fmt.Sprintf(`{"messages":[{"eventId":"%s","eventType":"SEND_MESSAGE","idempotencyKey":"%s","conversationId":"%s","senderDeviceId":"device-1","ciphertext":"","content":"hello plaintext","type":1}]}`,
 		uuid.NewString(),
 		uuid.NewString(),
 		uuid.NewString(),
@@ -255,7 +234,7 @@ func TestMessagingHandlerSendMessage_RejectsPlaintextContentInput(t *testing.T) 
 	})
 	app.Post("/conversations/:id/messages", handler.SendMessage)
 
-	payload := fmt.Sprintf(`{"conversation_id":"%s","sender_device_id":"device-1","content":"hello plaintext","type":1,"idempotency_key":"%s"}`,
+	payload := fmt.Sprintf(`{"conversationId":"%s","senderDeviceId":"device-1","content":"hello plaintext","type":1,"idempotencyKey":"%s"}`,
 		conversationID,
 		uuid.NewString(),
 	)
@@ -293,7 +272,7 @@ func TestMessagingHandlerSendMessage_PreservesSignalTypeFromRequest(t *testing.T
 	})
 	app.Post("/conversations/:id/messages", handler.SendMessage)
 
-	payload := fmt.Sprintf(`{"conversation_id":"%s","sender_device_id":"device-1","ciphertext":"Zm9v","signal_message_type":3,"idempotency_key":"%s"}`,
+	payload := fmt.Sprintf(`{"conversationId":"%s","senderDeviceId":"device-1","ciphertext":"Zm9v","type":3,"idempotencyKey":"%s"}`,
 		conversationID,
 		uuid.NewString(),
 	)
@@ -340,7 +319,7 @@ func TestMessagingHandlerSyncDelta_AcceptsPostPayload(t *testing.T) {
 	})
 	app.Post("/sync/delta", handler.SyncDelta)
 
-	payload := `{"last_known_contact_version":7,"last_known_message_version":42}`
+	payload := `{"lastKnownContactVersion":7,"lastKnownMessageVersion":42}`
 	req := httptest.NewRequest(http.MethodPost, "/sync/delta", bytes.NewBufferString(payload))
 	req.Header.Set("Content-Type", "application/json")
 

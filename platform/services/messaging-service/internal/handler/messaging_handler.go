@@ -92,6 +92,9 @@ func (h *MessagingHandler) ProcessOutbox(c *fiber.Ctx) error {
 		if strings.TrimSpace(msg.Ciphertext) == "" {
 			return apperr.SendAppError(c, apperr.ErrValidationFailed.WithMeta("detail", "ciphertext is required"))
 		}
+		if strings.TrimSpace(msg.SenderDeviceID) == "" {
+			return apperr.SendAppError(c, apperr.ErrValidationFailed.WithMeta("detail", "senderDeviceId is required"))
+		}
 		if msg.Type == 0 {
 			return apperr.SendAppError(c, apperr.ErrValidationFailed.WithMeta("detail", "type is required"))
 		}
@@ -166,6 +169,9 @@ func (h *MessagingHandler) SendMessage(c *fiber.Ctx) error {
 	}
 	if req.ConversationID == nil {
 		return apperr.SendAppError(c, apperr.ErrInvalidRequestBody)
+	}
+	if strings.TrimSpace(req.SenderDeviceID) == "" {
+		return apperr.SendAppError(c, apperr.ErrValidationFailed.WithMeta("detail", "senderDeviceId is required"))
 	}
 
 	logger.Info("[MESSAGE_RECEIVE_REQUEST] inbound message request",

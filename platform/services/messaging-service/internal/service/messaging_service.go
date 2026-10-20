@@ -162,6 +162,16 @@ func (s *messagingService) ProcessOutbox(ctx context.Context, userID uuid.UUID, 
 			}
 		}
 
+		if err := s.ValidateSenderDeviceOwnership(ctx, userID, msg.SenderDeviceID); err != nil {
+			s.logger.Error("[OUTBOX-1.5a] sender device ownership rejected for outbox message",
+				"user_id", userID.String(),
+				"conversation_id", msg.ConversationID.String(),
+				"sender_device_id", msg.SenderDeviceID,
+				"error", err.Error(),
+			)
+			return nil, err
+		}
+
 		if err := s.repo.CreateMessage(ctx, msg); err == nil {
 			processed++
 			s.logger.Info("[OUTBOX-1.6] message persisted from outbox",
@@ -223,8 +233,8 @@ func buildMessageFromOutboxEvent(userID uuid.UUID, evt model.OutboxEventPayload)
 	if strings.TrimSpace(evt.IdempotencyKey) == "" {
 		evt.IdempotencyKey = evt.EventID.String()
 	}
-	if evt.SenderDeviceID == "" {
-		evt.SenderDeviceID = "unknown-device"
+	if err := validateAppDeviceID(evt.SenderDeviceID); err != nil {
+		return nil, false, apperr.ErrValidationFailed.WithMeta("detail", "senderDeviceId is required and must be an app-device identity, not a signal device id")
 	}
 
 	messageType := model.MessageTypeText
@@ -269,6 +279,9 @@ func (s *messagingService) SendMessage(ctx context.Context, senderID uuid.UUID, 
 	)
 	if strings.TrimSpace(msg.IdempotencyKey) == "" {
 		msg.IdempotencyKey = uuid.NewString()
+	}
+	if err := validateAppDeviceID(msg.SenderDeviceID); err != nil {
+		return ErrInvalidSession
 	}
 	if existing, err := s.repo.GetMessageByIdempotencyKey(ctx, msg.IdempotencyKey); err != nil {
 		return err
@@ -359,13 +372,13 @@ func (s *messagingService) publishMessageEvent(ctx context.Context, msg *model.M
 	}
 
 	if err := s.publisher.Publish(ctx, pub.NewEvent(targetUsers, map[string]any{
-		"type":            "new_message",
-		"eventId":         uuid.NewString(),
-		"conversationId":  msg.ConversationID.String(),
-		"senderUserId":    msg.SenderID.String(),
-		"messageId":       msg.ID.String(),
-		"messageVersion":  msg.Version,
-		"timestamp":       time.Now().UnixMilli(),
+		"type":           "new_message",
+		"eventId":        uuid.NewString(),
+		"conversationId": msg.ConversationID.String(),
+		"senderUserId":   msg.SenderID.String(),
+		"messageId":      msg.ID.String(),
+		"messageVersion": msg.Version,
+		"timestamp":      time.Now().UnixMilli(),
 	})); err != nil {
 		s.logger.Warn("websocket event publication failed",
 			"conversation_id", msg.ConversationID.String(),
@@ -510,12 +523,12 @@ func (s *messagingService) MarkAsRead(ctx context.Context, userID uuid.UUID, con
 
 	if s.publisher != nil {
 		readReceipt := map[string]any{
-			"type":            "conversation_read",
-			"eventId":         uuid.NewString(),
-			"conversationId":  convID.String(),
-			"userId":          userID.String(),
+			"type":             "conversation_read",
+			"eventId":          uuid.NewString(),
+			"conversationId":   convID.String(),
+			"userId":           userID.String(),
 			"lastReadSequence": conv.LastSequence,
-			"timestamp":       time.Now().UnixMilli(),
+			"timestamp":        time.Now().UnixMilli(),
 		}
 		if err := s.publisher.Publish(ctx, pub.NewEvent([]uuid.UUID{userID}, readReceipt)); err != nil {
 			s.logger.Warn("read receipt publication failed",
@@ -718,13 +731,24 @@ func BuildPreKeyBundle(identity *model.UserDeviceIdentity, oneTimePreKey *model.
 	return bundle
 }
 
+func validateAppDeviceID(deviceID string) error {
+	trimmed := strings.TrimSpace(deviceID)
+	if trimmed == "" {
+		return ErrInvalidSession
+	}
+	if _, err := strconv.ParseUint(trimmed, 10, 32); err == nil {
+		return fmt.Errorf("device_id must be an app-device identifier, not a signal device number")
+	}
+	return nil
+}
+
 func ValidateSenderDeviceBinding(userID uuid.UUID, deviceID string, trustedDevices []string) error {
 	if userID == uuid.Nil {
 		return ErrInvalidSession
 	}
 	deviceID = strings.TrimSpace(deviceID)
-	if deviceID == "" {
-		return ErrInvalidSession
+	if err := validateAppDeviceID(deviceID); err != nil {
+		return err
 	}
 	for _, trustedDeviceID := range trustedDevices {
 		if strings.EqualFold(strings.TrimSpace(trustedDeviceID), deviceID) {
@@ -739,12 +763,20 @@ func (s *messagingService) ValidateSenderDeviceOwnership(ctx context.Context, us
 		"user_id", userID.String(),
 		"device_id", deviceID,
 	)
-	if userID == uuid.Nil || strings.TrimSpace(deviceID) == "" {
+	if userID == uuid.Nil {
 		s.logger.Error("[DEVICE-OWNERSHIP-1.1] missing user or device id",
 			"user_id", userID.String(),
 			"device_id", deviceID,
 		)
 		return ErrInvalidSession
+	}
+	if err := validateAppDeviceID(deviceID); err != nil {
+		s.logger.Error("[DEVICE-OWNERSHIP-1.1a] invalid app-device identifier",
+			"user_id", userID.String(),
+			"device_id", deviceID,
+			"error", err.Error(),
+		)
+		return err
 	}
 	identity, err := s.repo.GetDeviceIdentity(ctx, userID, deviceID)
 	if err != nil || identity == nil {

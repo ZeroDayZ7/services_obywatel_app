@@ -2,11 +2,15 @@ package service
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/zerodayz7/platform/pkg/shared"
 	"github.com/zerodayz7/platform/services/messaging-service/internal/model"
+	"github.com/zerodayz7/platform/services/messaging-service/internal/repository"
+	"gorm.io/gorm"
 )
 
 func TestUploadDeviceKeysRequestAcceptsSignalStyleFields(t *testing.T) {
@@ -228,4 +232,123 @@ func TestValidateSenderDeviceBindingRejectsUnknownDevice(t *testing.T) {
 	if err := ValidateSenderDeviceBinding(userID, "device-999", []string{"device-42", "device-77"}); err == nil {
 		t.Fatal("expected mismatch to be rejected")
 	}
+}
+
+func TestValidateAppDeviceIDRejectsSignalDeviceNumberStyle(t *testing.T) {
+	if err := validateAppDeviceID("9"); err == nil {
+		t.Fatal("expected numeric app device id to be rejected")
+	}
+	if err := validateAppDeviceID("device-9"); err != nil {
+		t.Fatalf("expected device-9 to remain valid app device id, got %v", err)
+	}
+}
+
+func TestMessagingServiceSendMessageAcceptsValidDeviceID(t *testing.T) {
+	userID := uuid.New()
+	deviceID := "device-42"
+	repo := &fakeDeviceIdentityRepo{
+		identities: map[string]*model.UserDeviceIdentity{
+			userID.String() + ":" + deviceID: {
+				UserID:   userID,
+				DeviceID: deviceID,
+			},
+		},
+	}
+	service := &messagingService{
+		repo:   repo,
+		logger: shared.InitLogger("development", false),
+	}
+	msg := &model.Message{
+		ConversationID:   uuid.New(),
+		SenderDeviceID:   deviceID,
+		EncryptedPayload: []byte("ciphertext"),
+		IdempotencyKey:   uuid.NewString(),
+	}
+
+	if err := service.SendMessage(context.Background(), userID, msg); err != nil {
+		t.Fatalf("expected valid device id to be accepted, got %v", err)
+	}
+	if !repo.created {
+		t.Fatal("expected message to be created")
+	}
+	if msg.SenderID != userID {
+		t.Fatalf("expected sender id %s, got %s", userID, msg.SenderID)
+	}
+}
+
+func TestMessagingServiceSendMessageRejectsEmptySenderDeviceID(t *testing.T) {
+	service := &messagingService{logger: shared.InitLogger("development", false)}
+	msg := &model.Message{
+		ConversationID:   uuid.New(),
+		SenderDeviceID:   "",
+		EncryptedPayload: []byte("ciphertext"),
+		IdempotencyKey:   uuid.NewString(),
+	}
+	if err := service.SendMessage(context.Background(), uuid.New(), msg); err == nil {
+		t.Fatal("expected empty sender device id to be rejected")
+	}
+}
+
+func TestMessagingServiceSendMessageRejectsDeviceBelongingToAnotherUser(t *testing.T) {
+	userID := uuid.New()
+	repo := &fakeDeviceIdentityRepo{}
+	service := &messagingService{
+		repo:   repo,
+		logger: shared.InitLogger("development", false),
+	}
+	msg := &model.Message{
+		ConversationID:   uuid.New(),
+		SenderDeviceID:   "device-999",
+		EncryptedPayload: []byte("ciphertext"),
+		IdempotencyKey:   uuid.NewString(),
+	}
+	if err := service.SendMessage(context.Background(), userID, msg); err == nil {
+		t.Fatal("expected other user's device id to be rejected")
+	}
+}
+
+func TestBuildMessageFromOutboxEventRejectsMissingSenderDeviceID(t *testing.T) {
+	conversationID := uuid.New()
+	msg, ok, err := buildMessageFromOutboxEvent(uuid.New(), model.OutboxEventPayload{
+		EventID:        uuid.New(),
+		ConversationID: &conversationID,
+		Ciphertext:     "Zm9v",
+		Type:           1,
+		IdempotencyKey: uuid.NewString(),
+		SenderDeviceID: "",
+	})
+	if err == nil {
+		t.Fatal("expected missing sender device id to be rejected")
+	}
+	if ok {
+		t.Fatal("expected invalid outbox event not to be accepted")
+	}
+	if msg != nil {
+		t.Fatal("expected nil message when validation fails")
+	}
+}
+
+type fakeDeviceIdentityRepo struct {
+	repository.MessagingRepository
+	identities map[string]*model.UserDeviceIdentity
+	created    bool
+}
+
+func (r *fakeDeviceIdentityRepo) GetDeviceIdentity(_ context.Context, userID uuid.UUID, deviceID string) (*model.UserDeviceIdentity, error) {
+	if r.identities == nil {
+		return nil, gorm.ErrRecordNotFound
+	}
+	if identity, ok := r.identities[userID.String()+":"+deviceID]; ok {
+		return identity, nil
+	}
+	return nil, gorm.ErrRecordNotFound
+}
+
+func (r *fakeDeviceIdentityRepo) GetMessageByIdempotencyKey(_ context.Context, idempotencyKey string) (*model.Message, error) {
+	return nil, nil
+}
+
+func (r *fakeDeviceIdentityRepo) CreateMessage(_ context.Context, msg *model.Message) error {
+	r.created = true
+	return nil
 }
