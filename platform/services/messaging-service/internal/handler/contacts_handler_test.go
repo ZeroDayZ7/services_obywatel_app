@@ -37,6 +37,10 @@ func (s *stubContactsService) RespondToRequest(ctx context.Context, currentUserI
 	return nil
 }
 
+func (s *stubContactsService) CancelRequest(ctx context.Context, currentUserID, contactID uuid.UUID) error {
+	return nil
+}
+
 func TestRequestContactUsesAuthenticatedUserID(t *testing.T) {
 	ownerID := uuid.New()
 	targetID := uuid.New()

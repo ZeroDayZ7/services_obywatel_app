@@ -63,6 +63,10 @@ func (r *stubContactsRepo) UpdateContactStatus(ctx context.Context, contactID uu
 	return nil
 }
 
+func (r *stubContactsRepo) CancelOutgoingRequest(ctx context.Context, ownerID, contactID uuid.UUID) error {
+	return nil
+}
+
 func (r *stubContactsRepo) CreateSymmetricContact(ctx context.Context, ownerID, targetID uuid.UUID, status model.ContactStatus) error {
 	return nil
 }

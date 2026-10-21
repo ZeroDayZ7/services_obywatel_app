@@ -129,3 +129,38 @@ func (h *ContactsHandler) RespondToRequest(c *fiber.Ctx) error {
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{"status": "ok"})
 }
+
+// DELETE /contacts/request/:id - anulowanie własnego oczekującego zaproszenia
+func (h *ContactsHandler) CancelRequest(c *fiber.Ctx) error {
+	ctx, cancel := context.WithTimeout(c.UserContext(), 5*time.Second)
+	defer cancel()
+
+	requestID := c.Get("X-Request-ID")
+	if requestID == "" {
+		requestID = uuid.NewString()
+	}
+
+	rc := reqctx.MustFromFiber(c)
+	if rc.UserID == nil {
+		return apperr.SendAppError(c, apperr.ErrUnauthorized)
+	}
+
+	paramID := c.Params("id")
+	contactID, err := uuid.Parse(paramID)
+	if err != nil {
+		return apperr.SendAppError(c, apperr.ErrInvalidRequestBody)
+	}
+
+	if err := h.contactsSvc.CancelRequest(ctx, *rc.UserID, contactID); err != nil {
+		log := shared.GetLogger()
+		log.Error("[CONTACTS-CANCEL-ERROR] cancel failed",
+			"request_id", requestID,
+			"user_id", rc.UserID.String(),
+			"contact_id", contactID.String(),
+			"error", err,
+		)
+		return apperr.SendAppError(c, err)
+	}
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{"status": "cancelled"})
+}

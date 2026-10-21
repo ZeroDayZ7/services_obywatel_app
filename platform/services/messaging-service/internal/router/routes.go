@@ -19,6 +19,7 @@ func SetupMessagingRoutes(app *fiber.App, container *di.Container) {
 	contacts.Get("", contactsH.GetContacts)
 	contacts.Post("/request", contactsH.RequestContact)
 	contacts.Put("/request/:id/respond", contactsH.RespondToRequest)
+	contacts.Delete("/request/:id", contactsH.CancelRequest)
 
 	// --- CONVERSATIONS & MESSAGES ---
 	convs := api.Group("/conversations")

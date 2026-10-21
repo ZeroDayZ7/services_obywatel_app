@@ -30,6 +30,7 @@ type ContactsService interface {
 	GetContacts(ctx context.Context, userID uuid.UUID) ([]model.Contact, error)
 	SendRequest(ctx context.Context, ownerID, targetID uuid.UUID) (*model.Contact, error)
 	RespondToRequest(ctx context.Context, currentUserID, contactID uuid.UUID, accept bool) error
+	CancelRequest(ctx context.Context, currentUserID, contactID uuid.UUID) error
 }
 
 type contactsService struct {
@@ -145,14 +146,14 @@ func (s *contactsService) SendRequest(ctx context.Context, ownerID, targetID uui
 
 	if s.publisher != nil {
 		if err := s.publisher.Publish(ctx, pub.NewEvent([]uuid.UUID{ownerID, targetID}, map[string]any{
-			"type":          "contact_updated",
-			"eventId":       uuid.NewString(),
-			"contactId":     newContact.ID.String(),
-			"ownerUserId":   ownerID.String(),
-			"targetUserId":  targetID.String(),
-			"status":        string(newContact.Status),
-			"direction":     string(newContact.Direction),
-			"timestamp":     time.Now().UnixMilli(),
+			"type":         "contact_updated",
+			"eventId":      uuid.NewString(),
+			"contactId":    newContact.ID.String(),
+			"ownerUserId":  ownerID.String(),
+			"targetUserId": targetID.String(),
+			"status":       string(newContact.Status),
+			"direction":    string(newContact.Direction),
+			"timestamp":    time.Now().UnixMilli(),
 		})); err != nil {
 			s.logger.Warn("contact event publication failed after persisting contact request",
 				"owner_id", ownerID.String(),
@@ -202,18 +203,71 @@ func (s *contactsService) RespondToRequest(ctx context.Context, currentUserID, c
 
 	if s.publisher != nil {
 		if err := s.publisher.Publish(ctx, pub.NewEvent([]uuid.UUID{contact.OwnerID, currentUserID}, map[string]any{
-			"type":          "contact_updated",
-			"eventId":       uuid.NewString(),
-			"contactId":     contactID.String(),
-			"ownerUserId":   contact.OwnerID.String(),
-			"targetUserId":  currentUserID.String(),
-			"status":        model.ContactStatusAccepted,
-			"timestamp":     time.Now().UnixMilli(),
+			"type":         "contact_updated",
+			"eventId":      uuid.NewString(),
+			"contactId":    contactID.String(),
+			"ownerUserId":  contact.OwnerID.String(),
+			"targetUserId": currentUserID.String(),
+			"status":       model.ContactStatusAccepted,
+			"timestamp":    time.Now().UnixMilli(),
 		})); err != nil {
 			s.logger.Warn("contact event publication failed after accepting contact request",
 				"current_user_id", currentUserID.String(),
 				"contact_id", contactID.String(),
 				"owner_id", contact.OwnerID.String(),
+				"error", err,
+			)
+		}
+	}
+
+	return nil
+}
+
+func (s *contactsService) CancelRequest(ctx context.Context, currentUserID, contactID uuid.UUID) error {
+	if currentUserID == uuid.Nil || contactID == uuid.Nil {
+		return apperr.ErrValidationFailed.WithMeta("detail", "invalid user identifiers")
+	}
+
+	contact, err := s.repo.GetContactByID(ctx, contactID)
+	if err != nil {
+		s.logger.Error("failed to fetch contact for cancel request", "current_user_id", currentUserID.String(), "contact_id", contactID.String(), "error", err)
+		return err
+	}
+	if contact == nil {
+		s.logger.Warn("contact request not found for cancellation", "current_user_id", currentUserID.String(), "contact_id", contactID.String())
+		return ErrContactNotFound
+	}
+
+	if contact.OwnerID != currentUserID {
+		s.logger.Warn("unauthorized cancel attempt", "current_user_id", currentUserID.String(), "contact_id", contactID.String(), "owner_id", contact.OwnerID.String())
+		return ErrUnauthorizedAction
+	}
+	if contact.Status != model.ContactStatusPending || contact.Direction != model.ContactDirectionOutgoing {
+		s.logger.Warn("cancel rejected for non-pending outgoing request", "current_user_id", currentUserID.String(), "contact_id", contactID.String(), "status", contact.Status, "direction", contact.Direction)
+		return apperr.ErrValidationFailed.WithMeta("detail", "only a pending outgoing invitation can be cancelled")
+	}
+
+	if err := s.repo.CancelOutgoingRequest(ctx, currentUserID, contactID); err != nil {
+		s.logger.Error("failed to cancel outgoing contact request", "current_user_id", currentUserID.String(), "contact_id", contactID.String(), "error", err)
+		return err
+	}
+
+	if s.publisher != nil {
+		if err := s.publisher.Publish(ctx, pub.NewEvent([]uuid.UUID{currentUserID, contact.ContactID}, map[string]any{
+			"type":         "contact_updated",
+			"eventId":      uuid.NewString(),
+			"contactId":    contactID.String(),
+			"ownerUserId":  currentUserID.String(),
+			"targetUserId": contact.ContactID.String(),
+			"status":       "cancelled",
+			"direction":    string(model.ContactDirectionOutgoing),
+			"action":       "CANCEL",
+			"timestamp":    time.Now().UnixMilli(),
+		})); err != nil {
+			s.logger.Warn("contact event publication failed after cancelling contact request",
+				"current_user_id", currentUserID.String(),
+				"contact_id", contactID.String(),
+				"target_user_id", contact.ContactID.String(),
 				"error", err,
 			)
 		}

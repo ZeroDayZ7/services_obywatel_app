@@ -257,3 +257,72 @@ func TestContactsServiceSendRequest_RejectsExistingInvitationInEitherDirection(t
 		t.Fatalf("expected one row to remain after duplicate rejection, got %d", count)
 	}
 }
+
+func TestContactsServiceCancelRequest_AllowsOwnerToCancelPendingOutgoingRequest(t *testing.T) {
+	contactsRepo, messagingRepo, publisher, db := newContactsServiceTestDeps(t)
+	ownerID := uuid.New()
+	targetID := uuid.New()
+	seedActiveTarget(t, db, targetID)
+
+	contact := &model.Contact{
+		OwnerID:   ownerID,
+		ContactID: targetID,
+		Status:    model.ContactStatusPending,
+		Direction: model.ContactDirectionOutgoing,
+		Version:   1,
+	}
+	if err := contactsRepo.CreateContact(context.Background(), contact); err != nil {
+		t.Fatalf("seed outgoing invitation: %v", err)
+	}
+
+	svc := NewContactsService(contactsRepo, messagingRepo, shared.GetLogger(), publisher)
+	if err := svc.CancelRequest(context.Background(), ownerID, contact.ID); err != nil {
+		t.Fatalf("CancelRequest returned error for owner's pending outgoing request: %v", err)
+	}
+
+	stored, err := contactsRepo.GetContactByID(context.Background(), contact.ID)
+	if err != nil {
+		t.Fatalf("fetch cancelled contact: %v", err)
+	}
+	if stored != nil {
+		t.Fatalf("expected cancelled contact to be soft-deleted, got %#v", stored)
+	}
+
+	if publisher.event == nil {
+		t.Fatal("expected contact_updated event for cancelled request")
+	}
+}
+
+func TestContactsServiceCancelRequest_RejectsNonOwnerAndNonPending(t *testing.T) {
+	contactsRepo, messagingRepo, publisher, db := newContactsServiceTestDeps(t)
+	ownerID := uuid.New()
+	targetID := uuid.New()
+	seedActiveTarget(t, db, targetID)
+
+	contact := &model.Contact{
+		OwnerID:   ownerID,
+		ContactID: targetID,
+		Status:    model.ContactStatusPending,
+		Direction: model.ContactDirectionOutgoing,
+		Version:   1,
+	}
+	if err := contactsRepo.CreateContact(context.Background(), contact); err != nil {
+		t.Fatalf("seed outgoing invitation: %v", err)
+	}
+
+	svc := NewContactsService(contactsRepo, messagingRepo, shared.GetLogger(), publisher)
+	if err := svc.CancelRequest(context.Background(), uuid.New(), contact.ID); err == nil {
+		t.Fatal("expected non-owner cancel to be rejected")
+	}
+
+	if err := db.Model(&model.Contact{}).Where("id = ?", contact.ID).Update("status", model.ContactStatusAccepted).Error; err != nil {
+		t.Fatalf("update contact status to accepted: %v", err)
+	}
+	if err := svc.CancelRequest(context.Background(), ownerID, contact.ID); err == nil {
+		t.Fatal("expected cancellation of accepted request to be rejected")
+	}
+
+	if publisher.event != nil {
+		t.Fatal("expected no event to be published for rejected cancellation")
+	}
+}

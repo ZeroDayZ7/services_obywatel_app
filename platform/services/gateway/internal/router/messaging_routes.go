@@ -23,6 +23,9 @@ func RegisterMessagingRoutes(app *fiber.App, container *di.Container) {
 	contacts.Put("/request/:id/respond",
 		// gwMiddleware.RequirePermissions("contacts.write"),
 		ReverseProxySecure(container, ServiceMessaging, target))
+	contacts.Delete("/request/:id",
+		// gwMiddleware.RequirePermissions("contacts.write"),
+		ReverseProxySecure(container, ServiceMessaging, target))
 
 	// --- CONVERSATIONS & MESSAGES ---
 	convs := app.Group("/conversations")
