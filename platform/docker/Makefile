@@ -1,5 +1,5 @@
 # --- DB TEST RESET ---
-.PHONY:  redis-users rs start-services st logs res
+.PHONY:  redis-users rs start-services st logs res rev
 
 redis-users:
 	@echo "Lista użytkowników Redis ACL:"
@@ -12,6 +12,14 @@ start-services:
 	docker compose logs -f gateway auth-service messaging-service websocket-service --tail 100
 
 st: start-services
+
+rev: 
+	adb -s 5200d78bfa479449 reverse tcp:8080 tcp:8080
+	adb -s 5200d78bfa479449 reverse tcp:9000 tcp:9000
+	adb -s 5200d78bfa479449 reverse tcp:9001 tcp:9001
+	adb -s 5200d78bfa479449 reverse --list
+
+
 
 logs: 
 	docker compose logs -f gateway auth-service messaging-service websocket-service --tail 100
