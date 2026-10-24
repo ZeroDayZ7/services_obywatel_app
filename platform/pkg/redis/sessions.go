@@ -4,9 +4,12 @@ package redis
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	goredis "github.com/redis/go-redis/v9"
 
 	"github.com/zerodayz7/platform/pkg/constants"
 )
@@ -49,9 +52,33 @@ type UserSession struct {
 
 // --- Metody dla Sesji Głównej ---
 
+func userSessionIndexKey(userID string) string {
+	return constants.UserSessionIndexPrefix + userID
+}
+
+func (c *Cache) registerSessionIndex(ctx context.Context, userID string, sid uuid.UUID, ttl time.Duration) error {
+	if strings.TrimSpace(userID) == "" || sid == uuid.Nil {
+		return nil
+	}
+
+	if err := c.client.SAdd(ctx, userSessionIndexKey(userID), sid.String()).Err(); err != nil {
+		return err
+	}
+
+	return c.client.Expire(ctx, userSessionIndexKey(userID), ttl).Err()
+}
+
 // #region SetSession
 func (c *Cache) SetSession(ctx context.Context, sid uuid.UUID, session *UserSession, ttl time.Duration) error {
-	return SetJSON(c, ctx, constants.SessionPrefix+sid.String(), session, ttl)
+	if err := SetJSON(c, ctx, constants.SessionPrefix+sid.String(), session, ttl); err != nil {
+		return err
+	}
+
+	if session == nil {
+		return nil
+	}
+
+	return c.registerSessionIndex(ctx, session.UserID, sid, ttl)
 }
 
 // #region GetSession
@@ -61,7 +88,42 @@ func (c *Cache) GetSession(ctx context.Context, sid uuid.UUID) (*UserSession, er
 
 // #region DeleteSession
 func (c *Cache) DeleteSession(ctx context.Context, sid uuid.UUID) error {
+	if sid == uuid.Nil {
+		return nil
+	}
+
+	userSession, err := c.GetSession(ctx, sid)
+	if err == nil && userSession != nil && strings.TrimSpace(userSession.UserID) != "" {
+		if remErr := c.client.SRem(ctx, userSessionIndexKey(userSession.UserID), sid.String()).Err(); remErr != nil {
+			return remErr
+		}
+	}
+
 	return c.Del(ctx, constants.SessionPrefix+sid.String())
+}
+
+// #region RevokeAllUserSessions
+func (c *Cache) RevokeAllUserSessions(ctx context.Context, userID string) error {
+	if strings.TrimSpace(userID) == "" {
+		return nil
+	}
+
+	members, err := c.client.SMembers(ctx, userSessionIndexKey(userID)).Result()
+	if err != nil && !errors.Is(err, goredis.Nil) {
+		return err
+	}
+
+	for _, member := range members {
+		sid, parseErr := uuid.Parse(member)
+		if parseErr != nil {
+			continue
+		}
+		if delErr := c.DeleteSession(ctx, sid); delErr != nil {
+			return delErr
+		}
+	}
+
+	return c.client.Del(ctx, userSessionIndexKey(userID)).Err()
 }
 
 // #region UpdateSession

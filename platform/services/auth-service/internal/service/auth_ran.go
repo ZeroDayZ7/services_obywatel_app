@@ -83,6 +83,12 @@ func (s *authService) ChangePassword(ctx context.Context, userID uuid.UUID, curr
 		return err
 	}
 
+	if s.cache != nil {
+		if err := s.cache.RevokeAllUserSessions(ctx, userID.String()); err != nil {
+			return errors.ErrInternal
+		}
+	}
+
 	return nil
 }
 
