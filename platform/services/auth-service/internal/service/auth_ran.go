@@ -41,6 +41,51 @@ func (s *authService) UpdatePassword(ctx context.Context, userID uuid.UUID, newP
 	return nil
 }
 
+// #region ChangePassword
+func (s *authService) ChangePassword(ctx context.Context, userID uuid.UUID, currentPassword string, newPassword string) error {
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil || user == nil {
+		return errors.ErrUserNotFound
+	}
+
+	if strings.TrimSpace(currentPassword) == "" || strings.TrimSpace(newPassword) == "" {
+		return errors.ErrInvalidRequest
+	}
+
+	valid, err := security.VerifyPassword([]byte(currentPassword), user.Password, nil)
+	if err != nil || !valid {
+		return errors.ErrInvalidCredentials
+	}
+
+	if currentPassword == newPassword {
+		return errors.ErrInvalidRequest
+	}
+
+	passBytes := []byte(newPassword)
+	defer clear(passBytes)
+
+	hashed, err := security.HashPassword(passBytes, nil)
+	if err != nil {
+		return errors.ErrInternal
+	}
+
+	now := time.Now()
+	user.Password = hashed
+	user.PasswordChangedAt = &now
+	user.FailedLoginAttempts = 0
+	user.LockedUntil = nil
+
+	if err := s.userRepo.Update(ctx, user); err != nil {
+		return err
+	}
+
+	if err := s.refreshRepo.RevokeAllUserTokens(ctx, userID); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // region Register
 // #region Register
 func (s *authService) Register(username, email, rawPassword string) (*model.User, error) {
@@ -131,10 +176,10 @@ func (s *authService) Logout(ctx context.Context, userID uuid.UUID, sessionID uu
 	if trimmedDeviceID != "" {
 		if err := s.refreshRepo.RevokeByFingerprint(ctx, userID, trimmedDeviceID); err != nil {
 			log.WarnMap("Logout: failed to revoke device refresh tokens", map[string]any{
-				"user_id":   userID,
+				"user_id":    userID,
 				"session_id": sessionID,
-				"device_id": trimmedDeviceID,
-				"err":       err,
+				"device_id":  trimmedDeviceID,
+				"err":        err,
 			})
 		}
 	}
@@ -156,10 +201,10 @@ func (s *authService) Logout(ctx context.Context, userID uuid.UUID, sessionID uu
 		clientIP = session.IP
 	}
 	log.InfoMap("Logout successful", map[string]any{
-		"user_id":    userID,
-		"session_id": sessionID,
-		"device_id":  trimmedDeviceID,
-		"client_ip":  clientIP,
+		"user_id":     userID,
+		"session_id":  sessionID,
+		"device_id":   trimmedDeviceID,
+		"client_ip":   clientIP,
 		"refresh_req": refreshToken != "",
 	})
 

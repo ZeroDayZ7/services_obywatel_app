@@ -242,6 +242,24 @@ func (h *AuthHandler) RefreshToken(c *fiber.Ctx) error {
 	return c.JSON(response)
 }
 
+// #region ChangePassword
+func (h *AuthHandler) ChangePassword(c *fiber.Ctx) error {
+	log := shared.GetLogger()
+	body := c.Locals("validatedBody").(schemas.ChangePasswordRequest)
+	rc := reqctx.MustFromFiber(c)
+
+	if rc.UserID == nil {
+		return apperr.SendAppError(c, apperr.ErrUnauthorized)
+	}
+
+	if err := h.authService.ChangePassword(c.Context(), *rc.UserID, body.CurrentPassword, body.NewPassword); err != nil {
+		log.WarnObj("Password change failed", map[string]any{"user_id": rc.UserID.String(), "err": err.Error()})
+		return apperr.SendAppError(c, err)
+	}
+
+	return c.JSON(fiber.Map{"success": true, "message": "Password changed successfully"})
+}
+
 // #region Logout
 func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 	log := shared.GetLogger()

@@ -10,7 +10,7 @@ import (
 
 const ServiceAuth = "auth-service"
 
-//#region RegisterAuthRoutes
+// #region RegisterAuthRoutes
 func RegisterAuthRoutes(app *fiber.App, container *di.Container) {
 	target := container.Config.Services.Auth
 
@@ -32,6 +32,7 @@ func RegisterAuthRoutes(app *fiber.App, container *di.Container) {
 	authSecure.Post("/unpair-device", ReverseProxySecure(container, ServiceAuth, target))
 	authSecure.Post("/register-device", pkgMiddleware.ValidateBody[schemas.RegisterDeviceRequest](), ReverseProxySecure(container, ServiceAuth, target))
 	authSecure.Post("/temporary-session", ReverseProxySecure(container, ServiceAuth, target))
+	authSecure.Post("/change-password", pkgMiddleware.ValidateBody[schemas.ChangePasswordRequest](), ReverseProxySecure(container, ServiceAuth, target))
 	authSecure.Post("/logout", pkgMiddleware.ValidateBody[schemas.RefreshTokenRequest](), ReverseProxySecure(container, ServiceAuth, target))
 
 	// Kontekst użytkownika (przekierowany do Auth)

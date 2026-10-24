@@ -25,6 +25,7 @@ type AuthService interface {
 	AttemptLogin(ctx context.Context, email string, password []byte, fingerprint string) (*http.LoginResponse, error)
 	Register(username, email, rawPassword string) (*model.User, error)
 	UpdatePassword(ctx context.Context, userID uuid.UUID, newPassword string) error
+	ChangePassword(ctx context.Context, userID uuid.UUID, currentPassword string, newPassword string) error
 	Verify2FA(ctx context.Context, token uuid.UUID, code []byte, fingerprint string, ip string) (*http.LoginResponse, error)
 	Resend2FACode(ctx context.Context, email string, token uuid.UUID) error
 	Logout(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID, deviceID string, refreshToken string) error

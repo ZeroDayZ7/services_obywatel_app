@@ -66,6 +66,11 @@ type ResetPasswordFinalRequest struct {
 	PublicKey   string `json:"public_key"`
 }
 
+type ChangePasswordRequest struct {
+	CurrentPassword string `json:"current_password" validate:"required,min=8"`
+	NewPassword     string `json:"new_password" validate:"required,passwd"`
+}
+
 type RegisterDeviceRequest struct {
 	PublicKey           string `json:"public_key" validate:"required"`
 	Signature           string `json:"signature" validate:"required"`

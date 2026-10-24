@@ -10,7 +10,7 @@ import (
 	"github.com/zerodayz7/platform/services/auth-service/internal/middleware"
 )
 
-//#region SetupAuthRoutes
+// #region SetupAuthRoutes
 func SetupAuthRoutes(
 	app *fiber.App,
 	h *handler.AuthHandler,
@@ -39,6 +39,11 @@ func SetupAuthRoutes(
 	auth.Post("/2fa-resend",
 		middleware.ValidateBody[schemas.ResendTwoFARequest](),
 		h.Resend2FA,
+	)
+
+	auth.Post("/change-password",
+		middleware.ValidateBody[schemas.ChangePasswordRequest](),
+		h.ChangePassword,
 	)
 
 	auth.Post("/register",
