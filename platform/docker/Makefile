@@ -7,7 +7,7 @@ redis-users:
 
 rs: redis-users
 
-start-services:
+start-services: rev
 	docker compose up -d gateway auth-service messaging-service websocket-service minio
 	docker compose logs -f gateway auth-service messaging-service websocket-service --tail 100
 
