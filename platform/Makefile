@@ -22,7 +22,7 @@ help:
 # --- SECTION: GO MANAGEMENT ---
 
 updatedeps:
-	@echo "🔄 Upgrading dependency versions across all microservices..."
+	@echo "Upgrading dependency versions across all microservices..."
 	@for service in $(SERVICES); do \
 		if [ -d "$(SERVICES_DIR)/$$service" ]; then \
 			echo "--------------------------------------------------"; \
@@ -37,23 +37,23 @@ updatedeps:
 	done
 	@if [ -d "$(PKG_DIR)" ]; then \
 		echo "--------------------------------------------------"; \
-		echo "🚀 Upgrading shared package: $(PKG_DIR)"; \
+		echo "Upgrading shared package: $(PKG_DIR)"; \
 		cd $(PKG_DIR) && go get -u ./... && go mod tidy && cd - > /dev/null; \
 	fi
 	@if [ -f "go.work" ]; then \
 		echo "--------------------------------------------------"; \
-		echo "🔄 Syncing Go Workspace..."; \
+		echo "Syncing Go Workspace..."; \
 		go work sync; \
 	fi
-	@echo "✅ All microservices updated successfully!"
+	@echo "All microservices updated successfully!"
 
 deps-sync:
-	@echo "🔄 Synchronizing Go workspace..."
+	@echo "Synchronizing Go workspace..."
 	go work sync
 	@$(MAKE) deps-tidy
 
 deps-upgrade:
-	@echo "⬆️ Upgrading external dependencies (safe mode)..."
+	@echo "⬆Upgrading external dependencies (safe mode)..."
 	@for service in $(SERVICES); do \
 		echo "Upgrading $$service..."; \
 		cd $(SERVICES_DIR)/$$service && \
@@ -64,7 +64,7 @@ deps-upgrade:
 	@echo "Upgrading pkg dependencies..."
 	@cd $(PKG_DIR) && go get -u $$(go list -f '{{if not .Indirect}}{{.Path}}{{end}}' -m all | grep -v "github.com/zerodayz7/platform") || true && go mod tidy && cd - > /dev/null
 	@go work sync
-	@echo "✅ Upgrade finished successfully."
+	@echo "Upgrade finished successfully."
 
 deps-tidy:
 	@echo "🧹 Tidying Go modules..."
@@ -80,7 +80,7 @@ deps-tidy:
 # --- SECTION: DOCKER MANAGEMENT ---
 
 build:
-	@echo "🚀 Building Docker images..."
+	@echo "Building Docker images..."
 	@for service in $(SERVICES); do \
 		docker build -t $(REGISTRY)/$$service:$(TAG) $(SERVICES_DIR)/$$service; \
 	done
